@@ -1,0 +1,60 @@
+rules_version = '2';
+// Reglas de seguridad de CONTROL · NUMMEROS (proyecto control--nummeros).
+// - Solo entra el equipo, con su cuenta de Google.
+// - Los dueños (lista de abajo) siempre son administradores.
+// - El resto del equipo se da de alta en la colección "usuarios" (documento = correo).
+//   Roles: admin (todo), operador (trabaja el día a día), lectura (solo mira).
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function conGoogle() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.firebase.sign_in_provider == 'google.com';
+    }
+    function correo() { return request.auth.token.email.lower(); }
+    function esDueno() {
+      return conGoogle() && correo() in ['info@contaxbolivia.com', 'jhonnymenacho04@gmail.com'];
+    }
+    function miUsuario() { return get(/databases/$(database)/documents/usuarios/$(correo())).data; }
+    function tieneUsuario() {
+      return conGoogle() && exists(/databases/$(database)/documents/usuarios/$(correo()))
+        && miUsuario().activo == true;
+    }
+    function esEquipo() { return esDueno() || tieneUsuario(); }
+    function puedeEditar() { return esDueno() || (tieneUsuario() && miUsuario().rol in ['admin', 'operador']); }
+    function esAdmin() { return esDueno() || (tieneUsuario() && miUsuario().rol == 'admin'); }
+
+    // Equipo y roles: lo ven todos los del equipo, lo cambian solo los administradores
+    match /usuarios/{email} {
+      allow read: if esEquipo() || (conGoogle() && correo() == email);
+      allow write: if esAdmin();
+    }
+
+    // Clientes CONTAX (repartidores que facturan con CONTAX), con sus accesos
+    match /clientes/{id} {
+      allow read: if esEquipo();
+      allow write: if puedeEditar();
+    }
+
+    // Excepciones de pago, notas por repartidor, cruces con Impuestos, cierres de pago
+    match /excepciones/{id} { allow read: if esEquipo(); allow write: if puedeEditar(); }
+    match /notas/{id} { allow read: if esEquipo(); allow write: if puedeEditar(); }
+    match /cruces/{id} { allow read: if esEquipo(); allow write: if puedeEditar(); }
+    match /pagos/{id} { allow read: if esEquipo(); allow write: if puedeEditar(); }
+
+    // Ajustes generales del panel
+    match /config/{doc} { allow read: if esEquipo(); allow write: if esAdmin(); }
+
+    // Bitácora: cualquiera del equipo agrega, nadie la edita ni la borra
+    match /bitacora/{id} {
+      allow read: if esEquipo();
+      allow create: if esEquipo() && request.resource.data.quien == correo();
+      allow update, delete: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

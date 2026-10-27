@@ -1,0 +1,97 @@
+/* NUMMEROS — colores, tipografía y espacios para los sistemas.
+   Uso: <link rel="stylesheet" href="nummeros-tokens.css"> en el <head>.
+   Regla: el logo va en verde principal (#235347) sobre fondo claro; el verde oscuro es solo para el modo oscuro.
+   Tema oscuro: <html data-theme="oscuro">. Sin atributo, sigue la preferencia del dispositivo. */
+@import url("https://fonts.googleapis.com/css2?family=Akshar:wght@400;600;700&family=Questrial&display=swap");
+
+:root {
+  --verde-950: #051F20;
+  --verde-900: #0B2B26;
+  --verde-800: #163832;
+  --verde-700: #235347;
+  --verde-300: #8EB69B;
+  --verde-100: #DAF1DE;
+  --blanco: #FFFFFF;
+  --negro: #000000;
+  --fondo: #F4FAF5;
+  --superficie: var(--blanco);
+  --campo: #EEF7F0;
+  --borde: var(--verde-100);
+  --borde-control: #6F9A7D;
+  --texto: var(--verde-800);
+  --texto-suave: #557363;
+  --menu-fondo: var(--verde-100);
+  --menu-profundo: var(--verde-100);
+  --menu-texto: var(--verde-800);
+  --acento: var(--verde-700);
+  --sobre-acento: var(--blanco);
+  --error: #B42318;
+  --aviso: #93370D;
+  --espacio-1: 4px;
+  --espacio-2: 8px;
+  --espacio-3: 12px;
+  --espacio-4: 16px;
+  --espacio-6: 24px;
+  --espacio-8: 32px;
+  --espacio-12: 48px;
+  --espacio-16: 64px;
+  --radio-sm: 6px;
+  --radio-md: 10px;
+  --radio-lg: 16px;
+  --radio-pill: 999px;
+  --sombra-tarjeta: 0 1px 2px rgba(5, 31, 32, 0.08);
+  --font-display: Akshar, "Arial Narrow", sans-serif;
+  --font-texto: "Century Gothic", Questrial, "Avenir Next", sans-serif;
+}
+
+[data-theme="oscuro"] {
+  --fondo: var(--verde-950);
+  --superficie: var(--verde-900);
+  --campo: var(--verde-800);
+  --borde: var(--verde-700);
+  --borde-control: var(--verde-300);
+  --texto: var(--verde-100);
+  --texto-suave: var(--verde-300);
+  --menu-fondo: var(--verde-900);
+  --menu-profundo: var(--verde-950);
+  --menu-texto: var(--verde-100);
+  --acento: var(--verde-300);
+  --sobre-acento: var(--verde-950);
+  --error: #F97066;
+  --aviso: #FDB022;
+  --sombra-tarjeta: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="claro"]) {
+    --fondo: var(--verde-950);
+    --superficie: var(--verde-900);
+    --campo: var(--verde-800);
+    --borde: var(--verde-700);
+    --borde-control: var(--verde-300);
+    --texto: var(--verde-100);
+    --texto-suave: var(--verde-300);
+  --menu-fondo: var(--verde-900);
+  --menu-profundo: var(--verde-950);
+  --menu-texto: var(--verde-100);
+    --acento: var(--verde-300);
+    --sobre-acento: var(--verde-950);
+    --error: #F97066;
+    --aviso: #FDB022;
+    --sombra-tarjeta: none;
+  }
+}
+
+body { background: var(--fondo); color: var(--texto); font-family: var(--font-texto); font-size: 16px; line-height: 24px; }
+h1, h2, h3, .cifra { font-family: var(--font-display); color: var(--texto); }
+h1 { font-size: 40px; line-height: 44px; font-weight: 700; }
+h2 { font-size: 28px; line-height: 32px; font-weight: 600; }
+h3 { font-size: 20px; line-height: 24px; font-weight: 600; }
+.cifra { font-size: 32px; line-height: 36px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.monto { font-variant-numeric: tabular-nums; text-align: right; }
+.texto-suave { color: var(--texto-suave); }
+.tarjeta { background: var(--superficie); border-radius: var(--radio-lg); padding: var(--espacio-6); box-shadow: var(--sombra-tarjeta); }
+.boton { background: var(--acento); color: var(--sobre-acento); border: 0; border-radius: var(--radio-md); padding: var(--espacio-3) var(--espacio-4); font-family: var(--font-display); font-weight: 600; font-size: 16px; cursor: pointer; }
+.campo { background: var(--campo); color: var(--texto); border: 1px solid var(--borde-control); border-radius: var(--radio-sm); padding: var(--espacio-3); font: inherit; }
+.menu { background: var(--menu-fondo); color: var(--menu-texto); }
+:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; }
