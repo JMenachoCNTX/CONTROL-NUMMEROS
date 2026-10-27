@@ -499,7 +499,7 @@
     if (/network-request-failed/.test(c)) return 'Sin conexión. Revisa tu internet.';
     if (/user-disabled/.test(c)) return 'Tu acceso está desactivado. Pide al administrador que lo revise en Panel → Usuarios.';
     if (/invalid-email/.test(c)) return 'Ese correo no es válido.';
-    return m && !/^Firebase/.test(m) ? m : 'No se pudo entrar. Intenta de nuevo.';
+    return m ? m.replace(/^Firebase:\s*/, '') : 'No se pudo entrar. Intenta de nuevo' + (c ? ' (' + c + ')' : '') + '.';
   }
   /* El puente (Apps Script del Panel) verifica al usuario y entrega su llave para CONTROL y el Portal */
   function pedirLlave(reponer) {
