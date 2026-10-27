@@ -192,64 +192,45 @@
     }
   });
 
-  /* ══════════ EQUIPO ══════════ */
-  var EQ = { lista: null };
-  var ROLES = [['admin', 'Administrador · todo, incluido el equipo'], ['operador', 'Operador · revisa facturas, pagos y contenido'], ['lectura', 'Solo lectura · mira, no cambia nada']];
+  /* ══════════ EQUIPO (los usuarios vienen del Panel NUMMEROS) ══════════ */
+  var EQ = { lista: null, error: '' };
+  var CTRL_DEF = { admin: 'admin', supervisor: 'admin', editor: 'operador', cajero: 'lectura', lector: 'lectura' };
+  var CTRL_TXT = { admin: 'Administrador', operador: 'Operador', lectura: 'Solo lectura' };
+  var ROL_PANEL = { admin: 'Admin', supervisor: 'Supervisor', editor: 'Editor', cajero: 'Cajero', lector: 'Lector', agent: 'Agente (extensión)' };
+  function rolControl(u) {
+    if (!u || u.active !== true) return '';
+    var s = u.sistemas && u.sistemas.control;
+    if (s === 'ninguno') return '';
+    if (s === 'admin' || s === 'operador' || s === 'lectura') return s;
+    return CTRL_DEF[u.role] || '';
+  }
   X.pagina('equipo', {
     t: 'Equipo', i: 'equipo', sec: 'Sistema', soloAdmin: true,
     render: function () {
-      var cab = X.titulo('Equipo', 'Quiénes entran a CONTROL. Cada persona entra con su propia cuenta de Google.', '<button class="btn" id="nuevoEq">' + ic('mas') + 'Agregar persona</button>');
-      if (!EQ.lista) return cab + X.cargaBarra('Equipo', 'Trayendo…');
-      var duenos = (C.duenos || []).map(function (e) { return { _id: e, nombre: 'Dueño', rol: 'admin', activo: true, dueno: true }; });
-      var l = duenos.concat(EQ.lista.filter(function (u) { return (C.duenos || []).indexOf(u._id) < 0; }));
-      return cab +
-        '<div class="rejilla r2 mb"><div class="card"><div class="corte"><img class="relieve" src="marca/graficos/rel-seguridad-' + (S.oscuro ? 'oscuro' : 'claro') + '.png" alt="">' +
-          '<div><b>Acceso con Google</b><p class="muted" style="margin:4px 0 0">Nadie necesita una contraseña nueva. Si alguien deja el equipo, ponlo como inactivo y ya no podrá entrar ni ver datos.</p></div></div></div>' +
-          '<figure class="card" style="margin:0;padding:0;overflow:hidden;position:relative"><img src="marca/colaboracion/los-cuatro-oscuro.jpg" alt="Los tres clásicos y el Contador Virtual" style="display:block;width:100%;height:180px;object-fit:cover"><figcaption class="insignia" style="position:absolute;left:12px;bottom:12px"><i><img src="marca/logos/nummeros-isotipo-blanco.svg" alt=""></i>Pitágoras, Euclides y Arquímedes<span>con el Contador Virtual</span></figcaption></figure></div>' +
-        '<div class="card">' + X.tabla([
-          { t: 'Persona', html: function (u) { return '<b>' + esc(u.nombre || u._id) + '</b><span class="sub">' + esc(u._id) + '</span>'; } },
-          { t: 'Rol', html: function (u) { return esc((ROLES.filter(function (r) { return r[0] === u.rol; })[0] || [0, u.rol])[1].split(' · ')[0]); } },
-          { t: 'Estado', html: function (u) { return u.dueno ? X.chip('ok', 'Dueño') : u.activo ? X.chip('ok', 'Activo') : X.chip('neutro', 'Inactivo'); } },
-          { t: 'Portal', html: function (u) { return u.dueno ? X.chip('ok', 'Acceso total') : u.portal === 'ok' ? X.chip('ok', 'Autorizado') : X.chip('pend', 'Falta autorizar'); } },
-          { t: '', html: function (u) { return u.dueno ? '' : '<button class="icono-btn" data-ed="' + esc(u._id) + '" aria-label="Editar">' + ic('editar') + '</button>'; } }
-        ], l, { tam: 200 }) + '</div>' +
-        (X.esDueno() ? '' : '<div class="aviso-caja" style="margin-top:16px">' + ic('ayuda') + '<div><b>Autorizar en el portal</b>Solo un dueño puede dar acceso al Portal de repartidores. Si ves «Falta autorizar», pide a un dueño que abra y guarde a esa persona.</div></div>');
+      var cab = X.titulo('Equipo', 'Los usuarios son los mismos del Panel NUMMEROS (y del CRM). Se crean, se desactivan y se les da permiso en CONTROL desde el Panel.',
+        '<a class="btn" href="' + esc(C.panelUrl) + '" target="_blank" rel="noopener">' + ic('equipo') + 'Abrir Panel → Usuarios</a>');
+      var intro = '<div class="rejilla r2 mb"><div class="card"><div class="corte"><img class="relieve" src="marca/graficos/rel-seguridad-' + (S.oscuro ? 'oscuro' : 'claro') + '.png" alt="">' +
+          '<div><b style="font:600 18px var(--display)">Un solo usuario para todo</b><p class="muted" style="margin:4px 0 0">Cada persona entra al Panel, al CRM y a CONTROL con el mismo correo y contraseña. En Panel → Usuarios, la columna <b>CONTROL</b> define si entra como Administrador, Operador, Solo lectura o sin acceso. Si se desactiva en el Panel, también deja de entrar aquí.</p></div></div></div>' +
+        '<figure class="card" style="margin:0;padding:0;overflow:hidden;position:relative"><img src="marca/colaboracion/los-cuatro-oscuro.jpg" alt="Los tres clásicos y el Contador Virtual" style="display:block;width:100%;height:190px;object-fit:cover"><figcaption class="insignia" style="position:absolute;left:12px;bottom:12px"><i><img src="marca/logos/nummeros-isotipo-blanco.svg" alt=""></i>Pitágoras, Euclides y Arquímedes<span>con el Contador Virtual</span></figcaption></figure></div>';
+      if (EQ.error) return cab + intro + '<div class="card">' + X.vacio('No se pudo leer la lista del Panel', esc(EQ.error)) + '</div>';
+      if (!EQ.lista) return cab + intro + X.cargaBarra('Usuarios del Panel', 'Trayendo…');
+      var l = EQ.lista.slice().sort(function (a, b) { return (rolControl(b) ? 1 : 0) - (rolControl(a) ? 1 : 0) || String(a.name || '').localeCompare(String(b.name || '')); });
+      return cab + intro + '<div class="card">' + X.tabla([
+        { t: 'Persona', html: function (u) { return '<b>' + esc(u.name || u.email) + '</b><span class="sub">' + esc(u.email || '') + '</span>'; } },
+        { t: 'Rol en el Panel', html: function (u) { return esc(ROL_PANEL[u.role] || u.role || '—'); } },
+        { t: 'En CONTROL', html: function (u) { var r = rolControl(u); return r ? X.chip(r === 'lectura' ? 'neutro' : 'ok', CTRL_TXT[r]) + ((u.sistemas && u.sistemas.control) ? '' : '<span class="sub">Automático por su rol</span>') : X.chip('neutro', 'Sin acceso'); } },
+        { t: 'Estado', html: function (u) { return u.active ? X.chip('ok', 'Activo') : X.chip('neutro', 'Inactivo'); } }
+      ], l, { tam: 200 }) + '</div>';
     },
-    despues: function (el) {
-      if (!EQ.lista) cargarEquipo();
-      var n = el.querySelector('#nuevoEq'); if (n) n.addEventListener('click', function () { editarUsuario(null); });
-      el.querySelectorAll('[data-ed]').forEach(function (b) { b.addEventListener('click', function () { editarUsuario(EQ.lista.filter(function (u) { return u._id === b.getAttribute('data-ed'); })[0]); }); });
+    despues: function () {
+      if (EQ.lista || EQ.error) return;
+      if (!X.authPn.currentUser) { EQ.error = 'Sal y vuelve a entrar con tu usuario del Panel para ver la lista.'; X.refrescar(); return; }
+      X.dbPn.collection('users').get().then(function (q) {
+        EQ.lista = []; q.forEach(function (d) { var x = d.data(); x.uid = d.id; EQ.lista.push(x); });
+        if (S.pagina === 'equipo') X.refrescar();
+      }, function (e) { console.error(e); EQ.error = 'Tu rol del Panel no permite ver la lista de usuarios.'; if (S.pagina === 'equipo') X.refrescar(); });
     }
   });
-  function cargarEquipo() {
-    X.dbC.collection('usuarios').get().then(function (q) {
-      var l = []; q.forEach(function (d) { var x = d.data(); x._id = d.id; l.push(x); });
-      if (!S.portalUsuario) { EQ.lista = l; X.refrescar(); return; }
-      return X.dbP.collection('equipo').get().then(function (p) {
-        var ok = {}; p.forEach(function (d) { if (d.data().activo) ok[d.id] = 1; });
-        l.forEach(function (u) { u.portal = ok[u._id] ? 'ok' : ''; }); EQ.lista = l; if (S.pagina === 'equipo') X.refrescar();
-      }, function () { EQ.lista = l; if (S.pagina === 'equipo') X.refrescar(); });
-    }, function (e) { console.error(e); EQ.lista = []; X.refrescar(); });
-  }
-  function editarUsuario(u) {
-    var nuevo = !u; u = u ? Object.assign({}, u, { correo: u._id }) : { rol: 'operador', activo: true };
-    X.formulario(nuevo ? 'Agregar persona' : 'Editar persona', 'Escribe su correo de Google (Gmail o de la empresa).', [
-      { k: 'correo', t: 'Correo de Google', tipo: 'email', max: 120, obligatorio: true },
-      { k: 'nombre', t: 'Nombre', max: 80, obligatorio: true },
-      { k: 'rol', t: 'Rol', tipo: 'select', opciones: ROLES },
-      { k: 'activo', t: 'Puede entrar', tipo: 'switch' }
-    ], u, function (v) {
-      var correo = String(v.correo || '').trim().toLowerCase();
-      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(correo)) throw new Error('Ese correo no es válido.');
-      if (!nuevo && correo !== u._id) throw new Error('Para cambiar el correo, agrega a la persona de nuevo y desactiva el anterior.');
-      var d = { nombre: v.nombre, rol: v.rol, activo: !!v.activo, actualizado: X.servidor(), quien: S.usuario.email };
-      return X.dbC.collection('usuarios').doc(correo).set(d, { merge: true }).then(function () {
-        X.bitacora(nuevo ? 'Agregó al equipo' : 'Editó al equipo', correo + ' · ' + v.rol + (v.activo ? '' : ' · inactivo'));
-        if (!S.portalUsuario || !X.esDueno()) return;
-        return X.dbP.collection('equipo').doc(correo).set({ nombre: v.nombre, rol: v.rol, activo: !!v.activo, actualizado: X.servidor() }, { merge: true });
-      }).then(function () { EQ.lista = null; X.refrescar(); });
-    });
-  }
 
   /* ══════════ BITÁCORA ══════════ */
   var BI = { lista: null };

@@ -4,7 +4,7 @@ Panel del equipo para manejar todo lo del **Portal de repartidores** (Portal CON
 El portal es para los repartidores (como un "portal de clientes"); **CONTROL es el sistema interno**: ellos nunca lo ven.
 
 - **Página:** https://jmenachocntx.github.io/CONTROL-NUMMEROS/ (y, cuando se configure el DNS, https://controlnummeros.contaxbolivia.com)
-- **Acceso:** con cuenta de Google. Los dueños (`info@contaxbolivia.com` y `jhonnymenacho04@gmail.com`) entran siempre como administradores; al resto se le da acceso en **Sistema → Equipo**.
+- **Acceso:** con el **mismo correo y contraseña del Panel NUMMEROS** (los mismos del CRM). El Panel es la fuente de usuarios de todos los sistemas internos: en **Panel → Usuarios**, la columna **CONTROL** define si cada persona entra como Administrador, Operador, Solo lectura o sin acceso («Automático» lo deduce de su rol: Admin y Supervisor → Administrador, Editor → Operador, Cajero y Lector → Solo lectura, Agente → sin acceso).
 - **Datos:** dos proyectos de Firebase
   - `control--nummeros` → lo interno: equipo, clientes CONTAX (con sus accesos), excepciones, notas, planillas generadas, cruces con Impuestos y bitácora.
   - `portal-nummeros` → lo que ven los repartidores: pagos, facturas que suben, anuncios, avisos, preguntas, notificaciones.
@@ -31,7 +31,7 @@ Google Sheets ──cada 15 min──▶ Portal (portal-nummeros) ◀───�
 | **Chats del asistente** | Lo que preguntan al asistente con IA. |
 | **Clientes CONTAX** | Repartidores a quienes CONTAX emite la factura, con NIT y contraseñas (botón copiar). Se puede importar desde Excel (BDYANGO, columna CONTADOR = CONTAX). |
 | **Excepciones** | Pagos que se liberan aunque falte la factura. |
-| **Equipo** | Quién entra y con qué rol: Administrador, Operador o Solo lectura. |
+| **Equipo** | Lista de usuarios del Panel y con qué permiso entra cada uno a CONTROL (se cambia en el Panel). |
 | **Bitácora** | Quién hizo qué y cuándo. No se puede editar ni borrar. |
 
 ## Archivos
@@ -56,3 +56,9 @@ En `config.js`, `reglaPago: 'todo'` (se retiene todo si falta una factura) o `'s
 2. En GitHub → este repositorio → **Settings → Pages → Custom domain**: `controlnummeros.contaxbolivia.com` → Save → luego **Enforce HTTPS**.
 
 El dominio ya está autorizado en Firebase (en los dos proyectos).
+
+## Cómo funcionan los accesos únicos
+1. La persona escribe su correo y contraseña del Panel. CONTROL entra al proyecto del Panel (`crm-contax`) para verificarla.
+2. El puente del Panel (Apps Script «PUENTE RECIBOS NUMMEROS», acción `admin_ctrl_sesion`) revisa que esté activa y su permiso en CONTROL, y crea o actualiza su **cuenta espejo** en `control--nummeros` y en `portal-nummeros` con ese permiso.
+3. La cuenta espejo usa una llave al azar que nadie conoce (guardada en `ctrlLlaves`, que ninguna página puede leer).
+4. Al cambiar rol, estado o acceso en Panel → Usuarios, el Panel avisa al puente (`admin_ctrl_sync`) y el permiso cambia al instante; si se desactiva, la cuenta espejo se apaga.

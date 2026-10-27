@@ -5,7 +5,7 @@
    en la página. La seguridad la dan las reglas (firestore.rules).
    ══════════════════════════════════════════════════════════ */
 window.CONTROL = {
-  version: '1.0',
+  version: '1.1',
 
   /* Proyecto propio de CONTROL (equipo, clientes CONTAX, excepciones, bitácora) */
   firebaseControl: {
@@ -27,9 +27,20 @@ window.CONTROL = {
     appId: '1:924886635369:web:48f940d324d4dfb518e3f8'
   },
 
-  /* Dueños: siempre entran como administradores. Deben ser iguales
-     a los de firestore.rules (de CONTROL y del Portal). */
-  duenos: ['info@contaxbolivia.com', 'jhonnymenacho04@gmail.com'],
+  /* El PANEL NUMMEROS es la fuente de usuarios de todos los sistemas internos.
+     Se entra a CONTROL con el mismo correo y contraseña del Panel (y del CRM).
+     El permiso en CONTROL se elige en Panel → Usuarios → columna CONTROL. */
+  firebasePanel: {
+    apiKey: 'AIzaSyBPUgVMi3IQCow6pJiQwaC-WsH_mMf_arI',
+    authDomain: 'crm-contax.firebaseapp.com',
+    projectId: 'crm-contax',
+    storageBucket: 'crm-contax.firebasestorage.app',
+    messagingSenderId: '954647268749',
+    appId: '1:954647268749:web:247ec1c576ddd2a50181c4'
+  },
+  panelUrl: 'https://nummerospanel.contaxbolivia.com',
+  /* Puente seguro (Apps Script "PUENTE RECIBOS NUMMEROS", el mismo del Panel) */
+  puenteUrl: 'https://script.google.com/macros/s/AKfycbz5vQn78Hmcw_NwIIg0c33WEsmrXrYRgARwlmrJqOjM_h-yz-whXbAeoaqWCdI_3TqK2A/exec',
 
   portalUrl: 'https://portalnummeros.contaxbolivia.com',
 

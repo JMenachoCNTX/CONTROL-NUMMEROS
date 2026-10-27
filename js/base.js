@@ -30,7 +30,7 @@
     usuarios: null
   };
 
-  var appC, appP, authC, authP, dbC, dbP;
+  var appC, appP, appPn, authC, authP, authPn, dbC, dbP, dbPn;
 
   /* ══════════ AYUDANTES ══════════ */
   function leer(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
@@ -112,7 +112,7 @@
   function servidor() { return firebase.firestore.FieldValue.serverTimestamp(); }
   function puedeEditar() { return S.rol === 'admin' || S.rol === 'operador'; }
   function esAdmin() { return S.rol === 'admin'; }
-  function esDueno() { return S.usuario && (C.duenos || []).indexOf(String(S.usuario.email || '').toLowerCase()) >= 0; }
+  function esDueno() { return esAdmin(); }
 
   /* ── Íconos de línea (la marca no usa emojis) ── */
   var T = 'fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"';
@@ -467,75 +467,80 @@
     { f: 'pitagoras-saludo-oscuro', n: 'Pitágoras', s: 'saluda al Contador Virtual', pos: '50% 35%' },
     { f: 'arquimedes-saludo-claro', n: 'Arquímedes', s: 'saluda al Contador Virtual', pos: '50% 35%' }
   ];
-  function pintarLogin(error) {
+  function pintarLogin(error, correo) {
     var c = FOTOS_LOGIN[Math.floor(Math.random() * FOTOS_LOGIN.length)];
     raiz.innerHTML = '<main class="login">' +
       '<section class="login-panel"><div class="patron" aria-hidden="true"></div><div class="login-caja">' +
         '<img class="login-logo" src="marca/logos/nummeros-logotipo-apilado-' + (S.oscuro ? 'claro' : 'principal') + '.svg" alt="NUMMEROS">' +
         '<span class="etiqueta"><i><img src="marca/logos/nummeros-isotipo-blanco.svg" alt=""></i>Solo para el equipo</span>' +
         '<h1>CONTROL<em>Portal de repartidores</em></h1>' +
-        '<p class="texto">Pagos, facturas, trámites y todo lo que ven los repartidores en el Portal CONTAX, en un solo lugar.</p>' +
-        '<button class="btn-google" id="btnGoogle"><svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.6-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.6-.4-3.5z"/></svg>Entrar con Google</button>' +
+        '<p class="texto">Entra con <b>el mismo correo y contraseña del Panel NUMMEROS</b> (los mismos del CRM).</p>' +
+        '<form class="fm" id="fmLogin" novalidate>' +
+          '<div class="fila"><label for="lgCorreo">Correo</label><input id="lgCorreo" type="email" autocomplete="username" value="' + esc(correo || leer('ctrl_ultimo_correo') || '') + '" required></div>' +
+          '<div class="fila"><label for="lgClave">Contraseña</label><input id="lgClave" type="password" autocomplete="current-password" required></div>' +
+          '<button class="btn ancho" type="submit" id="btnEntrar" style="min-height:48px;font-size:17px">' + ic('candado') + 'Entrar</button>' +
+        '</form>' +
         '<p class="login-err" id="loginErr" role="alert">' + esc(error || '') + '</p>' +
+        '<p class="muted" style="font-size:13px;margin:0">¿Olvidaste tu contraseña? Pide al administrador que la restablezca en <a href="' + esc(C.panelUrl) + '" target="_blank" rel="noopener">Panel → Usuarios</a>.</p>' +
         '<div class="login-pie"><img src="marca/logos/nummeros-logotipo-firma-' + (S.oscuro ? 'claro' : 'principal') + '.svg" alt="NUMMEROS by CONTAX"><span>Santa Cruz de la Sierra, Bolivia · v' + esc(C.version) + '</span></div>' +
       '</div></section>' +
       '<figure class="login-foto"><div class="fondo-foto" style="background-image:url(marca/colaboracion/' + c.f + '.jpg)"></div><img class="foto" src="marca/colaboracion/' + c.f + '.jpg" alt="' + esc(c.n + ' ' + c.s) + '">' +
         '<figcaption><div class="insignia"><i><img src="marca/logos/nummeros-isotipo-blanco.svg" alt=""></i>' + esc(c.n) + '<span>' + esc(c.s) + '</span></div>' +
         '<div class="alianza"><img src="marca/logos/nummeros-logotipo-horizontal-principal.svg" alt="NUMMEROS"><b>×</b><img src="marca/logos/contax-logo.png" alt="CONTAX"></div></figcaption>' +
       '</figure></main>';
-    document.getElementById('btnGoogle').addEventListener('click', entrar);
+    var fm = document.getElementById('fmLogin');
+    fm.addEventListener('submit', function (e) { e.preventDefault(); entrar(); });
+    var f = document.getElementById(document.getElementById('lgCorreo').value ? 'lgClave' : 'lgCorreo'); if (f) f.focus();
   }
-  function proveedor(correo) {
-    var p = new firebase.auth.GoogleAuthProvider();
-    p.addScope('email');
-    p.setCustomParameters(correo ? { login_hint: correo, prompt: 'select_account' } : { prompt: 'select_account' });
-    return p;
+  function traducirError(e) {
+    var c = (e && e.code) || '', m = (e && e.message) || '';
+    if (/invalid-credential|wrong-password|user-not-found|invalid-login/.test(c)) return 'Correo o contraseña incorrectos (son los mismos del Panel).';
+    if (/too-many-requests/.test(c)) return 'Demasiados intentos. Espera unos minutos o pide que te restablezcan la contraseña en el Panel.';
+    if (/network-request-failed/.test(c)) return 'Sin conexión. Revisa tu internet.';
+    if (/user-disabled/.test(c)) return 'Tu acceso está desactivado. Pide al administrador que lo revise en Panel → Usuarios.';
+    if (/invalid-email/.test(c)) return 'Ese correo no es válido.';
+    return m && !/^Firebase/.test(m) ? m : 'No se pudo entrar. Intenta de nuevo.';
   }
-  function entrar() {
-    var btn = document.getElementById('btnGoogle'), err = document.getElementById('loginErr');
-    btn.disabled = true; btn.innerHTML = anilloBoton() + 'Abriendo Google…'; err.textContent = '';
-    authC.signInWithPopup(proveedor()).then(function (r) {
-      // Con el mismo permiso de Google se abre también la sesión del Portal
-      var tok = r.credential && r.credential.accessToken;
-      if (tok) return authP.signInWithCredential(firebase.auth.GoogleAuthProvider.credential(null, tok)).catch(function (e) { console.warn('Portal (token):', e && e.code); });
-    }).catch(function (e) {
-      console.error(e);
-      pintarLogin(/popup-closed|cancelled-popup/.test(e && e.code) ? '' : /popup-blocked/.test(e && e.code) ? 'Tu navegador bloqueó la ventana de Google. Permite ventanas emergentes para este sitio.' :
-        /unauthorized-domain/.test(e && e.code) ? 'Este dominio todavía no está autorizado en Firebase.' : 'No se pudo entrar. Intenta de nuevo.');
+  /* El puente (Apps Script del Panel) verifica al usuario y entrega su llave para CONTROL y el Portal */
+  function pedirLlave(reponer) {
+    return authPn.currentUser.getIdToken(true).then(function (idToken) {
+      return fetch(C.puenteUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'admin_ctrl_sesion', idToken: idToken, reponer: !!reponer }) });
+    }).then(function (r) { return r.json(); }).then(function (r) {
+      if (!r || !r.ok) throw new Error((r && r.error) || 'El Panel no respondió. Intenta de nuevo.');
+      return r;
     });
   }
-  function conectarPortal() {
-    return authP.signInWithPopup(proveedor(S.usuario.email)).then(function (r) {
-      if (String(r.user.email).toLowerCase() !== String(S.usuario.email).toLowerCase()) {
-        return authP.signOut().then(function () { throw new Error('Elige la misma cuenta de Google con la que entraste a CONTROL (' + S.usuario.email + ').'); });
-      }
+  function abrirEspejos(r) {
+    return Promise.all([authC.signInWithEmailAndPassword(r.correo, r.llave), authP.signInWithEmailAndPassword(r.correo, r.llave)]);
+  }
+  function entrar() {
+    var btn = document.getElementById('btnEntrar'), err = document.getElementById('loginErr');
+    var correo = document.getElementById('lgCorreo').value.trim().toLowerCase(), clave = document.getElementById('lgClave').value;
+    if (!correo || !clave) { err.textContent = 'Escribe tu correo y tu contraseña.'; return; }
+    btn.disabled = true; btn.innerHTML = anilloBoton() + 'Verificando con el Panel…'; err.textContent = '';
+    guardarLocal('ctrl_ultimo_correo', correo);
+    entrando = true;
+    authPn.signInWithEmailAndPassword(correo, clave).then(function () { return pedirLlave(false); }).then(function (r) {
+      btn.innerHTML = anilloBoton() + 'Abriendo CONTROL…';
+      return abrirEspejos(r).catch(function () { return pedirLlave(true).then(abrirEspejos); });
+    }).then(function () { entrando = false; revisarSesion(); }).catch(function (e) {
+      console.error(e); entrando = false;
+      Promise.all([authPn.signOut(), authC.signOut(), authP.signOut()]).catch(function () { }).then(function () { pintarLogin(traducirError(e), correo); });
     });
   }
   function salir() {
     if (D.escuchaFacturas) { D.escuchaFacturas(); D.escuchaFacturas = null; }
-    Promise.all([authC.signOut(), authP.signOut()]).then(function () { location.hash = ''; location.reload(); });
+    Promise.all([authC.signOut(), authP.signOut(), authPn.signOut()]).then(function () { location.hash = ''; location.reload(); });
   }
 
-  /* ¿Esta cuenta tiene acceso a CONTROL? */
+  /* ¿Esta sesión tiene permiso en CONTROL? (el permiso viaja en la cuenta, lo pone el Panel) */
   function verificarAcceso(u) {
-    var correo = String(u.email || '').toLowerCase();
-    if ((C.duenos || []).indexOf(correo) >= 0) return Promise.resolve({ rol: 'admin', nombre: u.displayName || correo, dueno: true });
-    return dbC.collection('usuarios').doc(correo).get().then(function (d) {
-      if (d.exists && d.data().activo) return { rol: d.data().rol || 'lectura', nombre: d.data().nombre || u.displayName || correo };
+    return u.getIdTokenResult(true).then(function (t) {
+      var c = t.claims || {};
+      if (c.nm === true && /^(admin|operador|lectura)$/.test(c.rol || '')) return { rol: c.rol, nombre: u.displayName || u.email };
       return null;
-    }, function () { return null; });
+    }, function (e) { console.warn('Acceso:', e && e.code); return null; });
   }
-  function pintarSinAcceso(u) {
-    raiz.innerHTML = '<main class="login"><section class="login-panel"><div class="patron"></div><div class="login-caja">' +
-      '<img class="login-logo" src="marca/logos/nummeros-logotipo-apilado-' + (S.oscuro ? 'claro' : 'principal') + '.svg" alt="NUMMEROS">' +
-      '<span class="etiqueta"><i><img src="marca/logos/nummeros-isotipo-blanco.svg" alt=""></i>Sin acceso</span>' +
-      '<h1>Todavía no<em>tienes acceso a CONTROL</em></h1>' +
-      '<p class="texto">Entraste como <b>' + esc(u.email) + '</b>. Pide a un administrador que te agregue en <b>Sistema → Equipo</b> y vuelve a entrar.</p>' +
-      '<button class="btn sec" id="btnSalir">' + ic('salir') + 'Usar otra cuenta</button></div></section>' +
-      '<figure class="login-foto"><div class="fondo-foto" style="background-image:url(marca/colaboracion/apreton-manos-claro.jpg)"></div><img class="foto" src="marca/colaboracion/apreton-manos-claro.jpg" alt="Apretón de manos NUMMEROS × CONTAX"><figcaption><div class="insignia"><i><img src="marca/logos/nummeros-isotipo-blanco.svg" alt=""></i>NUMMEROS × CONTAX<span>trabajamos en equipo</span></div></figcaption></figure></main>';
-    document.getElementById('btnSalir').addEventListener('click', salir);
-  }
-
   /* ══════════ ARMADO DEL PANEL ══════════ */
   function pintarApp() {
     var u = S.usuario, foto = u.photoURL;
@@ -560,12 +565,8 @@
     var el = document.getElementById('avisoPortal'); if (!el) return;
     if (S.portalUsuario) { el.innerHTML = ''; return; }
     el.innerHTML = '<div class="contenido" style="padding-bottom:0"><div class="aviso-caja alerta">' + ic('candado') +
-      '<div style="flex:1"><b>Falta conectar el Portal de repartidores</b>Para ver pagos, facturas y trámites, autoriza tu misma cuenta de Google en el proyecto del Portal (una sola vez).</div>' +
-      '<button class="btn" id="btnConectarPortal">Conectar</button></div></div>';
-    document.getElementById('btnConectarPortal').addEventListener('click', function (e) {
-      var b = e.currentTarget; b.disabled = true; b.innerHTML = anilloBoton() + 'Conectando';
-      conectarPortal().catch(function (ex) { console.error(ex); aviso(ex.message && !/popup-closed/.test(ex.code || '') ? ex.message : 'No se conectó.'); b.disabled = false; b.textContent = 'Conectar'; });
-    });
+      '<div style="flex:1"><b>Falta la conexión con el Portal de repartidores</b>Sal y vuelve a entrar con tu usuario del Panel.</div>' +
+      '<button class="btn" data-accion="salir">Volver a entrar</button></div></div>';
   }
 
   document.addEventListener('click', function (e) {
@@ -654,36 +655,43 @@
   }
 
   /* ══════════ ARRANQUE ══════════ */
+  var entrando = false, arrancado = false, listos = { c: false, p: false, pn: false };
+  function revisarSesion() {
+    if (entrando || !listos.c || !listos.p || !listos.pn) return;
+    var u = S.usuario;
+    if (!u) { arrancado = false; S.rol = null; pintarLogin(); return; }
+    if (S.portalUsuario && String(S.portalUsuario.email).toLowerCase() !== String(u.email).toLowerCase()) { authP.signOut(); return; }
+    if (arrancado) { avisoPortal(); if (S.portalUsuario && !D.cargadoEn) recargarTodo(); return; }
+    arrancado = true;
+    verificarAcceso(u).then(function (acc) {
+      if (!acc) {
+        arrancado = false;
+        Promise.all([authC.signOut(), authP.signOut(), authPn.signOut()]).catch(function () { }).then(function () {
+          pintarLogin('Tu usuario ya no tiene acceso a CONTROL. Pide al administrador que lo revise en Panel → Usuarios.');
+        });
+        return;
+      }
+      S.rol = acc.rol; S.nombre = acc.nombre;
+      pintarApp(); avisoPortal();
+      var h = (location.hash || '').replace('#/', '').split('?')[0];
+      S.pagina = PAG[h] ? h : 'tablero';
+      document.getElementById('pagina').innerHTML = esqueleto(6);
+      if (!sessionStorage.getItem('ctrl_bitacora_entrada')) { try { sessionStorage.setItem('ctrl_bitacora_entrada', '1'); } catch (e) { } bitacora('Entró a CONTROL', ''); }
+      recargarTodo();
+    });
+  }
   function iniciar() {
     aplicarTema();
     if (!window.firebase) { raiz.innerHTML = '<div class="contenido">' + vacio('No se pudo cargar el sistema', 'Revisa tu conexión a internet y recarga la página.') + '</div>'; return; }
     appC = firebase.initializeApp(C.firebaseControl);
     appP = firebase.initializeApp(C.firebasePortal, 'portal');
-    authC = appC.auth(); authP = appP.auth(); dbC = appC.firestore(); dbP = appP.firestore();
-    CTRL.dbC = dbC; CTRL.dbP = dbP;
+    appPn = firebase.initializeApp(C.firebasePanel, 'panel');
+    authC = appC.auth(); authP = appP.auth(); authPn = appPn.auth(); dbC = appC.firestore(); dbP = appP.firestore(); dbPn = appPn.firestore();
+    CTRL.dbC = dbC; CTRL.dbP = dbP; CTRL.dbPn = dbPn; CTRL.authPn = authPn;
     raiz.innerHTML = cargaN('CONTROL', 'Abriendo el panel…');
-    var listoC = false, listoP = false, arrancado = false;
-    var revisar = function () {
-      if (!listoC || !listoP) return;
-      var u = S.usuario;
-      if (!u) { arrancado = false; S.rol = null; pintarLogin(); return; }
-      // La sesión del portal debe ser de la misma persona
-      if (S.portalUsuario && String(S.portalUsuario.email).toLowerCase() !== String(u.email).toLowerCase()) { authP.signOut(); return; }
-      if (arrancado) { avisoPortal(); if (S.portalUsuario && !D.cargadoEn) recargarTodo(); return; }
-      arrancado = true;
-      verificarAcceso(u).then(function (acc) {
-        if (!acc) { arrancado = false; pintarSinAcceso(u); return; }
-        S.rol = acc.rol; S.nombre = acc.nombre;
-        pintarApp(); avisoPortal();
-        var h = (location.hash || '').replace('#/', '').split('?')[0];
-        S.pagina = PAG[h] ? h : 'tablero';
-        document.getElementById('pagina').innerHTML = esqueleto(6);
-        if (!sessionStorage.getItem('ctrl_bitacora_entrada')) { try { sessionStorage.setItem('ctrl_bitacora_entrada', '1'); } catch (e) { } bitacora('Entró a CONTROL', ''); }
-        recargarTodo();
-      });
-    };
-    authC.onAuthStateChanged(function (u) { S.usuario = u; listoC = true; revisar(); });
-    authP.onAuthStateChanged(function (u) { S.portalUsuario = u; listoP = true; if (u) { D.cargadoEn = null; } revisar(); });
+    authC.onAuthStateChanged(function (u) { S.usuario = u; listos.c = true; revisarSesion(); });
+    authP.onAuthStateChanged(function (u) { S.portalUsuario = u; listos.p = true; if (u) D.cargadoEn = null; revisarSesion(); });
+    authPn.onAuthStateChanged(function (u) { S.panelUsuario = u; listos.pn = true; revisarSesion(); });
   }
 
   window.CTRL = {

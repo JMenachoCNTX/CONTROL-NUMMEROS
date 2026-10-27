@@ -1,35 +1,19 @@
 rules_version = '2';
 // Reglas de seguridad de CONTROL · NUMMEROS (proyecto control--nummeros).
-// - Solo entra el equipo, con su cuenta de Google.
-// - Los dueños (lista de abajo) siempre son administradores.
-// - El resto del equipo se da de alta en la colección "usuarios" (documento = correo).
+// - Solo entra el equipo, con su usuario del Panel NUMMEROS (el mismo del CRM).
+// - El rol en CONTROL se elige en Panel → Usuarios → columna CONTROL.
 //   Roles: admin (todo), operador (trabaja el día a día), lectura (solo mira).
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    function conGoogle() {
-      return request.auth != null
-        && request.auth.token.email_verified == true
-        && request.auth.token.firebase.sign_in_provider == 'google.com';
-    }
+    // El permiso lo pone el Panel NUMMEROS (fuente de usuarios) en la cuenta de cada persona:
+    // nm = es del equipo, rol = admin | operador | lectura. Nadie lo puede poner desde el navegador.
+    function equipo() { return request.auth != null && request.auth.token.get('nm', false) == true; }
+    function rol() { return request.auth.token.get('rol', ''); }
     function correo() { return request.auth.token.email.lower(); }
-    function esDueno() {
-      return conGoogle() && correo() in ['info@contaxbolivia.com', 'jhonnymenacho04@gmail.com'];
-    }
-    function miUsuario() { return get(/databases/$(database)/documents/usuarios/$(correo())).data; }
-    function tieneUsuario() {
-      return conGoogle() && exists(/databases/$(database)/documents/usuarios/$(correo()))
-        && miUsuario().activo == true;
-    }
-    function esEquipo() { return esDueno() || tieneUsuario(); }
-    function puedeEditar() { return esDueno() || (tieneUsuario() && miUsuario().rol in ['admin', 'operador']); }
-    function esAdmin() { return esDueno() || (tieneUsuario() && miUsuario().rol == 'admin'); }
-
-    // Equipo y roles: lo ven todos los del equipo, lo cambian solo los administradores
-    match /usuarios/{email} {
-      allow read: if esEquipo() || (conGoogle() && correo() == email);
-      allow write: if esAdmin();
-    }
+    function esEquipo() { return equipo() && rol() in ['admin', 'operador', 'lectura']; }
+    function puedeEditar() { return equipo() && rol() in ['admin', 'operador']; }
+    function esAdmin() { return equipo() && rol() == 'admin'; }
 
     // Clientes CONTAX (repartidores que facturan con CONTAX), con sus accesos
     match /clientes/{id} {
