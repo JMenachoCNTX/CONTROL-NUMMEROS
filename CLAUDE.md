@@ -1,0 +1,52 @@
+# CONTROL · NUMMEROS
+
+## Para qué sirve
+Panel **interno** del equipo de CONTAX para manejar el **Portal de repartidores** (repo `PortalNUMMEROS`).
+Los repartidores nunca lo ven. Desde aquí se revisan las facturas que suben, se arma la planilla de pago,
+se publican anuncios/avisos/preguntas y notificaciones, y se ven los chats del asistente con IA.
+
+Secciones: Tablero, Facturas (incluye cruce con el Excel de Impuestos Nacionales), Pagos, Historial de pagos,
+Repartidores, Trámites, Anuncios / Avisos / Preguntas, Notificaciones, Chats del asistente,
+Clientes CONTAX, Excepciones, Equipo y Bitácora. El detalle de cada una está en `README.md`.
+
+## Para qué empresa
+CONTAX (sistema NUMMEROS by CONTAX). Los pagos a repartidores (Yango) los hace **MILTHAGOR S.R.L.**
+(razón social y NIT en `config.js`). Corte semanal de facturas: jueves 18:00 (hora de Bolivia).
+
+## Cómo está armado (archivos principales)
+- `index.html` — la página y todo el diseño (marca NUMMEROS).
+- `config.js` — versión, datos de los 3 proyectos de Firebase, URL del puente, corte y regla de pago (`reglaPago: 'todo'` o `'semana'`).
+- `js/base.js` — inicio de sesión, menú, ventanas, Excel (SheetJS desde cdnjs) y carga de datos.
+- `js/operacion.js` — Tablero, Pagos, Historial, Repartidores, Trámites.
+- `js/facturas.js` — revisión de facturas y cruce con Impuestos.
+- `js/portal.js` — Anuncios, Avisos, Preguntas, Notificaciones, Chats.
+- `js/gestion.js` — Clientes CONTAX, Excepciones, Equipo, Bitácora, Ayuda.
+- `firestore.rules` — reglas del proyecto `control--nummeros`.
+- `marca/` — logos, íconos, fuentes y fotos de la marca (copia de la misma carpeta de los otros repos).
+- No hay paso de compilación: son archivos HTML/JS planos con Firebase "compat" 10.12 desde gstatic.
+
+## Dónde se guardan los datos
+Usa **tres** proyectos de Firebase a la vez:
+- `control--nummeros` (propio): colecciones `clientes`, `excepciones`, `notas`, `cruces`, `pagos` (planillas generadas), `config`, `bitacora` (no se edita ni borra).
+- `portal-nummeros` (el del Portal): lee `repartidores`, `publico/portal` y `publico/contenido`, `privado/estado`; revisa `facturas` y `facturasPdf`; escribe `imagenes`, `colaNotif`; lee `chats`, `notificaciones`.
+- `crm-contax` (Panel NUMMEROS): solo para **iniciar sesión** y leer la lista `users` (sección Equipo).
+
+## Cómo se entra (accesos únicos)
+Se entra con el **mismo correo y contraseña del Panel NUMMEROS** (repo `NUMMEROS_CRM`).
+El puente de Apps Script del Panel (acción `admin_ctrl_sesion`, en `PASARELA.gs` de `NUMMEROS_CRM`) crea una
+"cuenta espejo" en `control--nummeros` y `portal-nummeros` con el permiso (`nm`, `rol` = admin / operador / lectura).
+El permiso se elige en **Panel → Usuarios → columna CONTROL**. Las reglas de este repo confían en ese permiso.
+
+## Cómo se publica
+- GitHub Pages desde la rama `main` (raíz): https://jmenachocntx.github.io/CONTROL-NUMMEROS/
+- Todavía **no hay archivo `CNAME`**. El dominio previsto es `controlnummeros.contaxbolivia.com` (pasos en `README.md`).
+- `firestore.rules` **no se publica solo**: hay que copiarlo y pegarlo en la consola de Firebase del proyecto `control--nummeros` → Firestore → Reglas → Publicar.
+- Versiones: `version` en `config.js` (hoy 1.2) y el mensaje del commit dice la versión (ej. "... (v1.2)").
+
+## Cuidados importantes
+- **El repositorio es PÚBLICO.** Nunca subir contraseñas, archivos `.json` de cuentas de servicio ni datos de clientes.
+- Los datos de Firebase de `config.js` no son secretos (la seguridad la dan las reglas); no cambiarlos sin motivo.
+- La sección Clientes CONTAX guarda datos sensibles de repartidores (NIT y accesos). Ver aviso de seguridad.
+- Si cambias reglas que afectan al Portal, el archivo correcto es `firestore.rules` de `PortalNUMMEROS`, no este.
+- Este panel depende del puente del Panel NUMMEROS: si se cambia la URL `/exec` del puente, actualizar `puenteUrl` en `config.js`.
+- Agregar un `.gitignore` con `.DS_Store` antes de subir archivos desde la Mac.
