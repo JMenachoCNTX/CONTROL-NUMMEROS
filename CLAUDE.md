@@ -22,6 +22,7 @@ CONTAX (sistema NUMMEROS by CONTAX). Los pagos a repartidores (Yango) los hace *
 - `js/portal.js` — Anuncios, Avisos, Preguntas, Notificaciones, Chats.
 - `js/gestion.js` — Clientes CONTAX, Excepciones, Equipo, Bitácora, Ayuda.
 - `js/semanas.js` — semanas de pago: importar las 3 planillas semanales de Yango/MTG («Milthagor Santa Cruz 19.10.26-25.10.26.xlsx»: se paga la columna **Y «Importe total»**; con importe 0 = no habilitado, **se guardan todas las filas** con sus ganancias (W) e importe del periodo anterior (X) para que el repartidor vea cada semana), migración única desde Sheets, marcar semanas «en planilla», confirmar pago, anular planilla, deshacer importación y reporte con gráficos.
+- `js/documentos.js` — página Documentos: lo que suben los repartidores en «Mis documentos» (NIT, matrícula con vigencia, ROE, declaraciones mensuales, EEFF); filtros Por revisar / Incompletos / Matrícula vencida; aprobar u observar cada uno.
 - `js/banco.js` — cuentas bancarias de los repartidores, planilla de carga masiva del **Banco Ganadero** (una fila por semana pagada; glosa `Pago MTG - ID Rider: {id} Fact.Nro.{n} - SEM43G2026`; forma 1 = Ganadero, 3 = ACH con código de entidad), «Detalle Pagos {fecha}» en Excel (mismo formato que se manda a Milthagor) y conciliación con el extracto (ACEP/PROCESADO = pagado, VENCIDO u otro = rebotado y vuelve a pendientes).
 - `firestore.rules` — reglas del proyecto `control--nummeros`.
 - `marca/` — logos, íconos, fuentes y fotos de la marca (copia de la misma carpeta de los otros repos).
@@ -44,7 +45,7 @@ El permiso se elige en **Panel → Usuarios → columna CONTROL**. Las reglas de
 - GitHub Pages desde la rama `main` (raíz): https://jmenachocntx.github.io/CONTROL-NUMMEROS/
 - Todavía **no hay archivo `CNAME`**. El dominio previsto es `controlnummeros.contaxbolivia.com` (pasos en `README.md`).
 - `firestore.rules` **no se publica solo**: hay que copiarlo y pegarlo en la consola de Firebase del proyecto `control--nummeros` → Firestore → Reglas → Publicar.
-- Versiones: `version` en `config.js` (hoy 1.6), el `?v=` de los scripts en `index.html` y el mensaje del commit dice la versión (ej. "... (v1.4)").
+- Versiones: `version` en `config.js` (hoy 1.7), el `?v=` de los scripts en `index.html` y el mensaje del commit dice la versión (ej. "... (v1.4)").
 
 ## Cuidados importantes
 - **El repositorio es PÚBLICO.** Nunca subir contraseñas, archivos `.json` de cuentas de servicio ni datos de clientes.
