@@ -160,7 +160,8 @@
     ['nombre', 'Nombre', [/^NOMBRE COMPLETO/, /^NOMBRE/, /REPARTIDOR|CONDUCTOR|DRIVER/], false],
     ['celular', 'Celular', [/CELULAR|TELEFONO|PHONE/], false],
     ['importe', 'Importe a pagar', [/^IMPORTE TOTAL$/, /A PAGAR/, /^IMPORTE TOTAL/, /^IMPORTE/, /^MONTO/], true],
-    ['ganancias', 'Ganancias de la semana (para saber si trabajó)', [/^GANANCIAS TOTALES/, /^GANANCIAS/], false],
+    ['ganancias', 'Ganancias de la semana', [/^GANANCIAS TOTALES/, /^GANANCIAS/], false],
+    ['anterior', 'Importe del periodo anterior', [/^IMPORTE DEL PERIODO ANTERIOR/, /PERIODO ANTERIOR/], false],
     ['ciudad', 'Ciudad (para revisar)', [/^CIUDAD$/], false],
     ['semana', 'Semana (si viene en una columna)', [/^SEMANA/, /^SEM\b/, /WEEK/], false],
     ['rango', 'Rango de fechas (si viene en una columna)', [/^RANGO/, /^PERIODO/], false]
@@ -208,8 +209,10 @@
       if (!id) { res.errores.push({ fila: fila, motivo: 'Sin ID Yango' }); return; }
       if (imp === null) { res.errores.push({ fila: fila, id: id, motivo: 'Importe vacío o no numérico' }); return; }
       if (imp < 0) imp = 0;
-      // Sin importe y sin ganancias en la semana = no trabajó: no se guarda (no es un «no habilitado»)
-      if (imp === 0 && o.mapa.ganancias >= 0 && !((X.numero(f[o.mapa.ganancias]) || 0) > 0)) { res.sinActividad++; return; }
+      // Todas las filas se guardan (también las de Bs 0) para que el repartidor vea cada semana en su historial
+      var gan = o.mapa.ganancias >= 0 ? X.redondear(X.numero(f[o.mapa.ganancias]) || 0) : 0;
+      var antP = o.mapa.anterior >= 0 ? X.redondear(X.numero(f[o.mapa.anterior]) || 0) : 0;
+      if (imp === 0 && o.mapa.ganancias >= 0 && !(gan > 0)) res.sinActividad++;
       if (o.mapa.ciudad >= 0 && o.ciudad && ciudadDeArchivo(f[o.mapa.ciudad]) && ciudadDeArchivo(f[o.mapa.ciudad]) !== o.ciudad) res.otraCiudad++;
       var n = o.semanaFija, anio = o.anioFijo;
       if (o.mapa.semana >= 0 && String(f[o.mapa.semana]).trim()) {
@@ -218,9 +221,9 @@
       if (!n || !anio) { res.errores.push({ fila: fila, id: id, motivo: 'No se reconoce la semana' }); return; }
       var uid = X.idSeguro(id), k = idDoc(uid, anio, n);
       var r = porDoc[k];
-      if (r) { r.importe = X.redondear(r.importe + imp); r.repetido = (r.repetido || 1) + 1; return; }
+      if (r) { r.importe = X.redondear(r.importe + imp); r.ganancias = X.redondear(r.ganancias + gan); r.importeAnterior = X.redondear(r.importeAnterior + antP); r.repetido = (r.repetido || 1) + 1; return; }
       porDoc[k] = r = {
-        doc: k, id: id, uid: uid, n: n, anio: anio, orden: anio * 100 + n, importe: X.redondear(imp),
+        doc: k, id: id, uid: uid, n: n, anio: anio, orden: anio * 100 + n, importe: X.redondear(imp), ganancias: gan, importeAnterior: antP,
         nombre: o.mapa.nombre >= 0 ? String(f[o.mapa.nombre]).trim() : '', celular: o.mapa.celular >= 0 ? String(f[o.mapa.celular]).replace(/\D/g, '') : '',
         rango: o.mapa.rango >= 0 && String(f[o.mapa.rango]).trim() ? String(f[o.mapa.rango]).trim() : o.rangoFijo
       };
@@ -331,7 +334,7 @@
       '</div>' +
       '<div class="aviso-caja">' + ic('ayuda') + '<div><b>Se guardará como semana «' + esc(semTxt) + '»</b>Es el mismo texto que usan las facturas del Portal. ' +
         (res.sinCuenta ? entero(res.sinCuenta) + ' repartidores todavía no tienen cuenta en el Portal: sus semanas quedan guardadas y las verán cuando se cree su cuenta. ' : '') +
-        (res.sinActividad ? entero(res.sinActividad) + ' filas sin importe ni ganancias (no trabajaron) no se guardan.' : '') + '</div></div>' +
+        (res.sinActividad ? entero(res.sinActividad) + ' repartidores no tuvieron actividad: se guardan como «no habilitado» para que la semana quede en su historial.' : '') + '</div></div>' +
       (res.otraCiudad ? '<div class="aviso-caja mb">' + ic('excepcion') + '<div><b>' + entero(res.otraCiudad) + ' filas dicen otra ciudad</b>Revisa que hayas elegido la ciudad correcta antes de guardar.</div></div>' : '') +
       (res.errores.length ? '<div class="card mb"><div class="h2">Filas que no se pueden leer <small>' + entero(res.errores.length) + '</small></div>' +
         X.tabla([{ t: 'Fila', k: 'fila' }, { t: 'ID', k: 'id' }, { t: 'Motivo', k: 'motivo' }], res.errores.slice(0, 50)) + '</div>' : '') +
@@ -351,7 +354,7 @@
           ok.disabled = true; ok.innerHTML = X.anilloBoton() + 'Guardando';
           var lote = 'imp-' + X.nuevoId(), quien = S.usuario.email;
           var ops = aGuardar.map(function (r) {
-            var d = { id: r.id, uid: r.uid, nombre: r.nombre, celular: r.celular, ciudad: info.ciudad, anio: r.anio, orden: r.orden,
+            var d = { id: r.id, uid: r.uid, nombre: r.nombre, celular: r.celular, ciudad: info.ciudad, anio: r.anio, orden: r.orden, ganancias: r.ganancias, importeAnterior: r.importeAnterior,
               rango: r.rango || (r.ant && r.ant.rango) || '', importe: r.importe, estado: r.estadoNuevo, lote: lote, actualizado: X.servidor(), quien: quien };
             if (r.accion === 'nuevo') { d.semana = r.texto; d.origen = 'excel'; d.loteCreado = lote; d.creado = X.servidor(); d.planilla = null; d.fechaPago = null; }
             else d.anterior = { importe: Number(r.ant.importe) || 0, estado: r.ant.estado, lote: r.ant.lote || '' };
@@ -475,7 +478,14 @@
   /* ══════════ PLANILLA, CONFIRMACIÓN Y ANULACIÓN ══════════ */
   function marcarEnPlanilla(planillaId, docs) {
     if (!modoControl() || !docs.length) return Promise.resolve();
-    return escribir(docs.map(function (k) { return { tipo: 'update', ref: col().doc(k), datos: { estado: 'en_planilla', planilla: planillaId, actualizado: X.servidor(), quien: S.usuario.email } }; }));
+    return escribir(docs.map(function (k) { return { tipo: 'update', ref: col().doc(k), datos: { estado: 'en_planilla', planilla: planillaId, fueraDePlanilla: null, actualizado: X.servidor(), quien: S.usuario.email } }; }));
+  }
+  /* Semanas listas que no entraron a la planilla del banco: el repartidor ve el motivo en su portal */
+  function marcarFuera(planillaId, sinCuenta) {
+    if (!modoControl()) return Promise.resolve();
+    var ops = [], hoy = X.hoyISO();
+    (sinCuenta || []).forEach(function (x) { (x.docs || []).forEach(function (k) { ops.push({ tipo: 'update', ref: col().doc(k), datos: { fueraDePlanilla: { motivo: x.motivo, fecha: hoy, planilla: planillaId }, actualizado: X.servidor(), quien: S.usuario.email } }); }); });
+    return escribir(ops);
   }
   function docsDe(p) { var l = []; (p.filas || []).forEach(function (f) { (f.docs || []).forEach(function (d) { l.push(d); }); }); return l; }
   function confirmarPago(p, alTerminar) {
@@ -585,7 +595,7 @@
 
   X.semanas = {
     modoControl: modoControl, cargar: cargar, aplicar: aplicar, importar: importar, verImportaciones: verImportaciones, migrar: migrar,
-    marcarEnPlanilla: marcarEnPlanilla, confirmarPago: confirmarPago, anularPlanilla: anularPlanilla, porConfirmar: porConfirmar, reporte: reporte,
+    marcarEnPlanilla: marcarEnPlanilla, marcarFuera: marcarFuera, confirmarPago: confirmarPago, anularPlanilla: anularPlanilla, porConfirmar: porConfirmar, reporte: reporte,
     // piezas que usa js/banco.js
     leerLibro: leerLibro, escribir: escribir, encolarNotif: encolarNotif, CIUDADES: CIUDADES, fechaISO: fechaISO,
     // lógica pura (para pruebas)

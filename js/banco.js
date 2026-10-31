@@ -59,6 +59,16 @@
     return colC().get().then(function (q) { D.cuentas = new Map(); q.forEach(function (d) { var x = d.data(); x._id = d.id; D.cuentas.set(d.id, x); }); },
       function (e) { console.warn('Cuentas:', e); D.cuentas = new Map(); });
   }
+  /* Qué le falta a una cuenta para entrar a la planilla del banco (se le muestra al repartidor) */
+  function faltaEnCuenta(c) {
+    if (!c) return ['no tenemos tus datos bancarios'];
+    var f = [];
+    if (!String(c.nombre || '').trim()) f.push('falta tu nombre completo');
+    if (!String(c.ci || '').trim()) f.push('falta tu número de carnet');
+    if (Number(c.forma) !== 1 && !Number(c.entidad)) f.push('falta el nombre de tu banco');
+    if (!/^\d{4,20}$/.test(String(c.cuenta || '').trim())) f.push('falta tu número de cuenta');
+    return f;
+  }
   function cuentaDe(id) { return D.cuentas ? D.cuentas.get(X.idSeguro(id)) || null : null; }
   function escribirC(ops, progreso) {
     var i = 0;
@@ -133,13 +143,14 @@
       var b = X.normal(CB.buscar), l = Array.from((D.cuentas || new Map()).values())
         .filter(function (x) { return !b || (X.normal(x.nombre) + ' ' + x.id + ' ' + x.ci + ' ' + x.cuenta).indexOf(b) >= 0; })
         .sort(function (a, z) { return X.normal(a.nombre).localeCompare(X.normal(z.nombre)); });
-      c.cuerpo.innerHTML = '<div class="fila-acc mb">' + (X.puedeEditar() ? '<button class="btn sec chico" id="cbImp">' + ic('subir') + 'Importar desde planilla del banco</button><button class="btn sec chico" id="cbNueva">' + ic('mas') + 'Agregar</button>' : '') + '</div>' +
+      // Los datos bancarios se toman de BDYango (datos actualizados de Yango), no de planillas anteriores del banco
+      c.cuerpo.innerHTML = '<div class="fila-acc mb">' + (X.puedeEditar() ? '<button class="btn sec chico" id="cbNueva">' + ic('mas') + 'Agregar</button>' : '') + '</div>' +
         '<div class="herr"><div class="buscar">' + ic('buscar') + '<input type="search" id="cbBuscar" placeholder="Buscar por nombre, ID, CI o cuenta" value="' + esc(CB.buscar) + '"></div></div>' +
         (l.length ? X.tabla([
           { t: 'Repartidor', html: function (x) { return '<b>' + esc(x.nombre) + '</b><span class="sub num">ID ' + esc(x.id) + ' · CI ' + esc(x.ci) + '</span>'; } },
           { t: 'Banco', html: function (x) { return esc(nombreBanco(x)) + '<span class="sub num">' + esc(x.cuenta) + '</span>'; } },
           { t: '', html: function (x) { return X.puedeEditar() ? '<button class="btn sec chico" data-editar="' + esc(x._id || X.idSeguro(x.id)) + '">' + ic('editar') + 'Editar</button>' : ''; } }
-        ], l, { pag: CB.pag }) : X.vacio(D.cuentas && D.cuentas.size ? 'Nada con esa búsqueda' : 'Todavía no hay cuentas', 'Importa la última planilla que se cargó al banco.', 'marca/graficos/ilu-factura-recibo.png'));
+        ], l, { pag: CB.pag }) : X.vacio(D.cuentas && D.cuentas.size ? 'Nada con esa búsqueda' : 'Todavía no hay cuentas', 'Se cargarán desde BDYango.', 'marca/graficos/ilu-factura-recibo.png'));
       var bq = c.cuerpo.querySelector('#cbBuscar');
       bq.addEventListener('input', function () { CB.buscar = bq.value; CB.pag = 0; pintar(); var e = c.cuerpo.querySelector('#cbBuscar'); e.focus(); e.setSelectionRange(e.value.length, e.value.length); });
       c.cuerpo.querySelectorAll('[data-pag]').forEach(function (x) { x.addEventListener('click', function () { CB.pag = Number(x.getAttribute('data-pag')); pintar(); }); });
@@ -175,8 +186,12 @@
   function armar(listos) {
     var lineas = [], sinCuenta = [], pagan = [];
     listos.forEach(function (e) {
-      var oks = e.semanas.filter(function (s) { return s.ok; }), c = cuentaDe(e.r.id);
-      if (!c || !c.cuenta) { sinCuenta.push({ id: String(e.r.id), nombre: e.r.nombre || '', importe: e.totalPagar, semanas: oks.map(function (s) { return s.p.semana; }) }); return; }
+      var oks = e.semanas.filter(function (s) { return s.ok; }), c = cuentaDe(e.r.id), falta = faltaEnCuenta(c);
+      if (falta.length) {
+        var m = falta.join(', ');
+        sinCuenta.push({ id: String(e.r.id), nombre: e.r.nombre || '', importe: e.totalPagar, motivo: m.charAt(0).toUpperCase() + m.slice(1), semanas: oks.map(function (s) { return s.p.semana; }), docs: oks.map(function (s) { return s.p._doc; }).filter(Boolean) });
+        return;
+      }
       pagan.push(e);
       oks.forEach(function (s) {
         var f = s.f;
@@ -365,7 +380,7 @@
   }
 
   X.banco = {
-    cargar: cargar, cuentaDe: cuentaDe, nombreBanco: nombreBanco, verCuentas: verCuentas, importarCuentas: importarCuentas,
+    cargar: cargar, cuentaDe: cuentaDe, faltaEnCuenta: faltaEnCuenta, nombreBanco: nombreBanco, verCuentas: verCuentas, importarCuentas: importarCuentas,
     armar: armar, descargarBanco: descargarBanco, semanaPrincipal: semanaPrincipal, detalleExcel: detalleExcel, conciliar: conciliar,
     _puro: { leerGlosa: leerGlosa, glosa: glosa, semBanco: semBanco, serialExcel: serialExcel, rangoLargo: rangoLargo, numOTexto: numOTexto, cuentasDePlanilla: cuentasDePlanilla, filasBanco: filasBanco, leerExtracto: leerExtracto, cruzar: cruzar, ENC_BANCO: ENC_BANCO }
   };

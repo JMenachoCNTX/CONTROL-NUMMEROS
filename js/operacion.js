@@ -45,14 +45,18 @@
     revision: ['pend', 'Factura en revisión'],
     observada: ['mal', 'Factura observada'],
     porEmitir: ['contax', 'CONTAX debe emitir'],
+    tarde: ['pend', 'Factura después del corte (va a la próxima planilla)'],
     falta: ['mal', 'Falta factura']
   };
   function evaluar(r) {
     var fs = facturasPorSemana(r.uid), cli = X.clienteDe(r);
     var semanas = (r.pendientes || []).map(function (p) {
       var f = fs[p.semana], ex = excepcionDe(r, p.semana), e;
-      if (f && f.estado === 'aprobada') e = f.origen === 'contax' ? 'contax' : 'lista';
+      // Corte: solo entran a la planilla las facturas subidas hasta el último jueves 18:00 (las de CONTAX no tienen corte)
+      var tarde = f && f.origen !== 'contax' && f.subidoF && f.subidoF.getTime() > ultimoCorte();
+      if (f && f.estado === 'aprobada' && !tarde) e = f.origen === 'contax' ? 'contax' : 'lista';
       else if (ex) e = 'excepcion';
+      else if (f && f.estado === 'aprobada') e = 'tarde';
       else if (f && f.estado === 'recibida') e = 'revision';
       else if (f && (f.estado === 'observada' || f.estado === 'rechazada')) e = 'observada';
       else if (cli) e = 'porEmitir';
@@ -84,6 +88,8 @@
     return { fecha: c, ms: ms, texto: (h >= 24 ? Math.floor(h / 24) + ' d ' + (h % 24) + ' h' : h + ' h ' + String(m).padStart(2, '0') + ' min'),
       dia: dias[c.getUTCDay()] + ' ' + String(c.getUTCDate()).padStart(2, '0') + '/' + String(c.getUTCMonth() + 1).padStart(2, '0') };
   }
+  /* Último corte ya pasado (instante real): el próximo corte menos 7 días */
+  function ultimoCorte() { return corte().fecha.getTime() + 4 * 3600e3 - 7 * 864e5; }
   function tramiteAbierto(t) {
     var e = X.normal(t.estado + ' ' + t.resolucion);
     return !/RESUELT|APROBAD|VIGENTE|CERRAD|PAGAD|FINALIZ|RECHAZ|ATENDID|COMPLETAD/.test(e);
@@ -196,7 +202,10 @@
         (f.length ? X.tabla([
           { t: 'Repartidor', html: function (e) { return '<b>' + esc(e.r.nombre) + '</b><span class="sub num">ID ' + esc(e.r.id) + (e.cliente ? ' · ' : '') + '</span>' + (e.cliente ? X.chip('contax', 'Cliente CONTAX') : ''); } },
           { t: 'Semanas', html: function (e) { return e.semanas.map(function (s) { return '<div style="margin:2px 0"><span class="num">' + esc(semanaCorta(s.p.semana)) + '</span> ' + chipSemana(s.estado) + (s.p.rebote ? ' ' + X.chip('mal', 'Rebotó en el banco') : '') + '</div>'; }).join(''); } },
-          { t: 'Estado', html: function (e) { return e.listo ? X.chip('ok', e.parcial ? 'Pago parcial' : 'Listo para pagar') : X.chip('mal', 'Retenido'); } },
+          { t: 'Estado', html: function (e) {
+            var falta = e.listo && X.banco ? X.banco.faltaEnCuenta(X.banco.cuentaDe(e.r.id)) : [];
+            return (e.listo ? X.chip('ok', e.parcial ? 'Pago parcial' : 'Listo para pagar') : X.chip('mal', 'Retenido')) + (falta.length ? '<span class="sub">' + X.chip('pend', 'No entra al banco') + ' ' + esc(falta.join(', ')) + '</span>' : '');
+          } },
           { t: 'Pendiente', clase: 'monto', html: function (e) { return bs(e.total); } },
           { t: 'A pagar', clase: 'monto', html: function (e) { return '<b>' + bs(e.totalPagar) + '</b>'; } }
         ], f, { clic: true, pag: P.pag, pie: '<td colspan="3">Total (' + entero(f.length) + ')</td><td class="monto">' + bs(tot(f, 'total')) + '</td><td class="monto">' + bs(tot(f, 'totalPagar')) + '</td>' })
@@ -247,7 +256,8 @@
       '<div class="rejilla r3 mb"><div class="dato"><small>Repartidores a pagar</small><b class="num">' + entero(a.pagan.length) + '</b></div>' +
         '<div class="dato"><small>Filas para el banco</small><b class="num">' + entero(a.lineas.length) + '</b></div>' +
         '<div class="dato"><small>Total a pagar</small><b class="num">' + bs(a.total) + '</b></div></div>' +
-      (a.sinCuenta.length ? '<div class="aviso-caja mb">' + ic('excepcion') + '<div><b>' + entero(a.sinCuenta.length) + ' repartidores listos no tienen cuenta bancaria · ' + bs(totSin) + '</b>Quedan fuera de esta planilla. Agrégalas en «Cuentas bancarias» y vuelve a generar. <button class="btn sec chico" id="plCuentas" type="button">Ver cuentas</button></div></div>' : '') +
+      (a.sinCuenta.length ? '<div class="aviso-caja mb">' + ic('excepcion') + '<div><b>' + entero(a.sinCuenta.length) + ' repartidores listos no entran al banco · ' + bs(totSin) + '</b>Les faltan datos bancarios. Quedan fuera de esta planilla y en su portal verán el motivo. <button class="btn sec chico" id="plCuentas" type="button">Ver cuentas</button></div></div>' +
+        '<div class="card mb">' + X.tabla([{ t: 'Repartidor', html: function (x) { return '<b>' + esc(x.nombre) + '</b><span class="sub num">ID ' + esc(x.id) + '</span>'; } }, { t: 'Motivo', k: 'motivo' }, { t: 'Importe', clase: 'monto', html: function (x) { return bs(x.importe); } }], a.sinCuenta, { tam: 8 }) + '</div>' : '') +
       '<div class="fm"><div class="dos"><div class="fila"><label for="plFecha">Fecha de pago</label><input id="plFecha" type="date" value="' + X.hoyISO() + '"></div>' +
         '<div class="fila"><label for="plNombre">Nombre del archivo</label><input id="plNombre" value="' + esc((sem ? sem.replace(/G\d{4}$/, '') + ' ' : '') + 'Planilla Banco') + '"></div></div></div>' +
       (mc
@@ -278,7 +288,7 @@
               filas: filas, lineas: a.lineas, sinCuenta: a.sinCuenta,
               retenidosDet: ret.map(function (e) { return { id: String(e.r.id), nombre: e.r.nombre, importe: e.total, motivo: e.motivo }; })
             }).then(function (ref) {
-              return mc ? X.semanas.marcarEnPlanilla(ref.id, docs).then(function () { X.recargarTodo(); }) : null;
+              return mc ? X.semanas.marcarEnPlanilla(ref.id, docs).then(function () { return X.semanas.marcarFuera(ref.id, a.sinCuenta); }).then(function () { X.recargarTodo(); }) : null;
             });
           }).then(function () { cerrar(); X.aviso('Planilla del banco descargada'); }, function (e) { console.error(e); btn.disabled = false; btn.textContent = 'Descargar planilla del banco'; X.aviso(e.message || 'No se pudo generar el Excel.'); });
         });
