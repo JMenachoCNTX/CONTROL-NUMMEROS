@@ -162,7 +162,8 @@
       '</div>' +
       '<div class="datos">' +
         '<div class="dato"><small>N.º de factura</small><b class="num">' + esc(f.numero) + '</b></div>' +
-        '<div class="dato"><small>NIT del emisor</small><b class="num">' + esc(f.nitEmisor || '—') + '</b></div>' +
+        '<div class="dato"><small>NIT del emisor</small><b class="num">' + esc(f.nitEmisor || '—') + '</b>' + (f.razonEmisor ? '<span class="muted">' + esc(f.razonEmisor) + '</span>' : '') + '</div>' +
+        (f.autorizacion ? '<div class="dato"><small>Código de autorización</small><b class="num" style="word-break:break-all">' + esc(f.autorizacion) + '</b>' + (f.leidaIA ? '<span class="muted">Leída del PDF por IA</span>' : '') + '</div>' : '') +
         '<div class="dato"><small>Impuestos Nacionales</small><b>' + (f.verificacion ? X.chip('ok', 'Verificada') + '</b><span class="muted">' + X.fechaHora(f.verificacion.cuando) + ' · ' + esc(f.verificacion.archivo || '') + '</span>' : (f.origen === 'contax' ? X.chip('contax', 'Emitida por CONTAX') : X.chip('pend', 'Sin verificar')) + '</b>') + '</div>' +
         '<div class="dato"><small>Emisión</small><b>' + X.fecha(f.fechaEmision) + '</b></div>' +
         '<div class="dato"><small>Semanas</small><b>' + esc((f.semanas || []).join(', ')) + '</b></div>' +
@@ -280,15 +281,16 @@
     return comunes >= Math.min(2, pa.length, pb.length);
   }
   function indexarRCV(filas, cols) {
-    var porNum = {}, desde = '', hasta = '';
+    var porNum = {}, porAut = {}, desde = '', hasta = '';
     filas.forEach(function (f) {
       var k = limpiaNum(f[cols.num]); if (!k) return;
       var fila = { num: k, imp: X.numero(f[cols.imp]), nit: cols.nit >= 0 ? limpiaNum(f[cols.nit]) : '', nom: cols.nom >= 0 ? String(f[cols.nom]).trim() : '',
         est: cols.est >= 0 ? String(f[cols.est]) : '', fecha: cols.fecha >= 0 ? fechaRCV(f[cols.fecha]) : '', aut: cols.aut >= 0 ? String(f[cols.aut]).trim() : '' };
       (porNum[k] = porNum[k] || []).push(fila);
+      if (fila.aut) porAut[fila.aut.replace(/\s+/g, '').toUpperCase()] = fila;
       if (fila.fecha) { if (!desde || fila.fecha < desde) desde = fila.fecha; if (!hasta || fila.fecha > hasta) hasta = fila.fecha; }
     });
-    return { porNum: porNum, desde: desde, hasta: hasta };
+    return { porNum: porNum, porAut: porAut, desde: desde, hasta: hasta };
   }
   function evaluarRCV(f, ix) {
     var cands = ix.porNum[limpiaNum(f.numero)] || [], nitF = limpiaNum(f.nitEmisor), fechaF = fechaRCV(f.fechaEmision);
@@ -296,6 +298,13 @@
     var anulada = function (c) { return /ANULAD/.test(X.normal(c.est)); };
     var enPeriodo = !fechaF || !ix.desde || (fechaF >= ix.desde && fechaF <= ix.hasta);
     var res = function (r, fila, como) { return { f: f, r: r, fila: fila || null, como: como || '' }; };
+    // Si la factura trae su código de autorización (leído por la IA), se busca primero por él
+    var autF = String(f.autorizacion || '').replace(/\s+/g, '').toUpperCase();
+    if (autF && ix.porAut && ix.porAut[autF]) {
+      var fa = ix.porAut[autF];
+      if (nitF && fa.nit && fa.nit !== nitF) return res('otroEmisor', fa);
+      return igualImp(fa) ? res(anulada(fa) ? 'anulada' : 'coincide', fa, 'código de autorización') : res('importe', fa);
+    }
     if (nitF) {
       var mias = cands.filter(function (c) { return c.nit === nitF; });
       if (mias.length) { var ok = mias.filter(igualImp)[0]; return ok ? res(anulada(ok) ? 'anulada' : 'coincide', ok, 'NIT + N.º') : res('importe', mias[0]); }

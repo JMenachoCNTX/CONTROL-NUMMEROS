@@ -44,7 +44,7 @@ El permiso se elige en **Panel → Usuarios → columna CONTROL**. Las reglas de
 - GitHub Pages desde la rama `main` (raíz): https://jmenachocntx.github.io/CONTROL-NUMMEROS/
 - Todavía **no hay archivo `CNAME`**. El dominio previsto es `controlnummeros.contaxbolivia.com` (pasos en `README.md`).
 - `firestore.rules` **no se publica solo**: hay que copiarlo y pegarlo en la consola de Firebase del proyecto `control--nummeros` → Firestore → Reglas → Publicar.
-- Versiones: `version` en `config.js` (hoy 1.5), el `?v=` de los scripts en `index.html` y el mensaje del commit dice la versión (ej. "... (v1.4)").
+- Versiones: `version` en `config.js` (hoy 1.6), el `?v=` de los scripts en `index.html` y el mensaje del commit dice la versión (ej. "... (v1.4)").
 
 ## Cuidados importantes
 - **El repositorio es PÚBLICO.** Nunca subir contraseñas, archivos `.json` de cuentas de servicio ni datos de clientes.
@@ -54,6 +54,7 @@ El permiso se elige en **Panel → Usuarios → columna CONTROL**. Las reglas de
 - Este panel depende del puente del Panel NUMMEROS: si se cambia la URL `/exec` del puente, actualizar `puenteUrl` en `config.js`.
 - Agregar un `.gitignore` con `.DS_Store` antes de subir archivos desde la Mac.
 - **Cruce con Impuestos (Registro de Compras de MILTHAGOR, mejor en .xlsx):** una factura solo queda verificada si coinciden **NIT del emisor + N.º + importe** (los números se repiten entre repartidores). Sin NIT (facturas antiguas): N.º + importe + fecha + nombre del emisor; si no alcanza, «revisar a mano». Las de otro mes no se marcan como faltantes. Las verificadas guardan `verificacion` y aprobar a mano una sin verificar pide confirmación.
+- **NIT de cada repartidor** (`portal-nummeros/perfiles/{uid}`: `nit`, `razonSocial`): lo registra él una sola vez en el Portal; solo el equipo lo corrige (detalle del repartidor → «Corregir NIT»). Las facturas leídas por IA traen `autorizacion` (CUF), `razonEmisor` y `leidaIA`; el cruce busca primero por el código de autorización.
 - **Corte de facturas: jueves 18:00 (Bolivia).** Una factura aprobada subida después del último corte queda «después del corte» y entra a la planilla siguiente (las emitidas por CONTAX no tienen corte).
 - **Datos bancarios: salen de BDYango**, no de planillas anteriores del banco (importador pendiente). Si a un repartidor listo le falta nombre, carnet, banco o cuenta, no entra a la planilla y su semana guarda `fueraDePlanilla.motivo`, que el repartidor ve en su portal.
 - **No cambiar `fuentePagos` a `'control'`** hasta que: (1) estén publicadas las reglas de `semanas` en el Portal, (2) se haya hecho la migración desde Sheets, y (3) el Portal lea `semanas`. Ese mismo día el equipo deja de cargar PPendientes/HistPagosMTG y Control pasa a mandar los avisos «Semana N registrada» y «Recibiste tu pago».

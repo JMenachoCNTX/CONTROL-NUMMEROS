@@ -466,6 +466,7 @@
         (X.puedeEditar() ? '<button class="btn sec chico" id="btnNota">' + ic('editar') + (nota ? 'Editar nota' : 'Nota interna') + '</button><button class="btn sec chico" id="btnExc">' + ic('excepcion') + 'Excepción de pago</button>' : '') + '</div>' +
       (nota && nota.texto ? '<div class="nota-interna mb"><b>Nota interna:</b> ' + esc(nota.texto) + '<span class="sub">' + esc(nota.quien || '') + ' · ' + X.fechaHora(nota.cuando) + '</span></div>' : '') +
       (cli ? '<div class="card mb"><div class="h2">Cliente CONTAX ' + X.chip('contax', cli.estado || 'ACTIVO') + '</div>' + accesosCliente(cli) + '</div>' : '') +
+      '<div class="card mb" id="perfilNit"><div class="h2">NIT para facturar</div><p class="muted">Trayendo…</p></div>' +
       '<div class="card mb"><div class="h2">Pendientes <small>' + bs(e.total) + '</small></div>' +
         (e.semanas.length ? X.tabla([
           { t: 'Semana', html: function (s) { return '<b class="num">' + esc(s.p.semana) + '</b><span class="sub">' + esc(s.p.rango || '') + '</span>'; } },
@@ -495,6 +496,30 @@
           { t: 'Detalle', html: function (t) { return esc([t.asunto, t.detalle, t.comentario].filter(Boolean).join(' · ')); } }
         ], r.tramites, { tam: 50 }) : X.vacio('Sin trámites')) + '</div>';
     X.cajon(esc(r.nombre), 'Portal CONTAX · datos al ' + X.fechaHora(r.actualizado), html, function (c, cerrar) {
+      // NIT y razón social que registró el repartidor en el portal (solo el equipo los corrige)
+      var cajaNit = c.querySelector('#perfilNit');
+      var pintarNit = function (p) {
+        cajaNit.innerHTML = '<div class="h2">NIT para facturar</div>' + (p
+          ? '<div class="datos"><div class="dato"><small>NIT</small><b class="num">' + esc(p.nit) + '</b></div><div class="dato"><small>Razón social</small><b>' + esc(p.razonSocial) + '</b></div></div>' +
+            (p.editadoPor ? '<p class="muted">Corregido por ' + esc(p.editadoPor) + ' · ' + X.fechaHora(p.editado) + '</p>' : '')
+          : '<p class="muted">Todavía no lo registró en el portal. Se le pide al entrar.</p>') +
+          (X.puedeEditar() ? '<button class="btn sec chico" id="btnNit" style="margin-top:8px">' + ic('editar') + (p ? 'Corregir NIT' : 'Registrar NIT') + '</button>' : '');
+        var b = cajaNit.querySelector('#btnNit');
+        if (b) b.addEventListener('click', function () {
+          X.formulario(p ? 'Corregir NIT' : 'Registrar NIT', 'Con este NIT se revisan las facturas que sube el repartidor.', [
+            { k: 'nit', t: 'NIT', max: 15, obligatorio: true }, { k: 'razonSocial', t: 'Nombre o razón social', max: 160, obligatorio: true }
+          ], p || { razonSocial: r.nombre || '' }, function (v) {
+            var nit = String(v.nit).replace(/\D/g, '');
+            if (!/^\d{5,15}$/.test(nit)) throw new Error('El NIT debe tener solo números (5 a 15).');
+            var d = { nit: nit, razonSocial: v.razonSocial, editadoPor: S.usuario.email, editado: X.servidor() };
+            return X.dbP.collection('perfiles').doc(uid).set(d, { merge: true }).then(function () {
+              X.bitacora(p ? 'Corrigió NIT de repartidor' : 'Registró NIT de repartidor', r.id + ' · ' + nit + (p ? ' (antes ' + p.nit + ')' : ''));
+              pintarNit(Object.assign({}, p || {}, d, { editado: new Date() })); X.aviso('NIT guardado');
+            });
+          });
+        });
+      };
+      X.dbP.collection('perfiles').doc(uid).get().then(function (d) { pintarNit(d.exists ? d.data() : null); }, function (e) { console.error(e); cajaNit.innerHTML = '<div class="h2">NIT para facturar</div><p class="muted">No se pudo traer (revisa las reglas del Portal).</p>'; });
       c.querySelectorAll('tr[data-fila]').forEach(function (tr) { tr.addEventListener('click', function () { var f = facts[Number(tr.getAttribute('data-fila'))]; if (f && CTRL.abrirFactura) { cerrar(); CTRL.abrirFactura(f._id); } }); });
       var bn = c.querySelector('#btnNota');
       if (bn) bn.addEventListener('click', function () {
