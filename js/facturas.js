@@ -134,9 +134,11 @@
       X.bitacora('Factura ' + estado, f ? (f.id + ' · ' + f.nombre + ' · N.º ' + f.numero + (motivo ? ' · ' + motivo : '')) : id);
     });
   }
-  function aprobarVarias(ids) {
+  function aprobarVarias(ids, yaVerificadas) {
     if (!ids.length) return;
-    X.confirmar('Aprobar ' + ids.length + ' facturas', 'Los repartidores verán su factura como <b>Aprobada</b> en el portal.', function () {
+    var sinVerificar = yaVerificadas ? 0 : (D.facturas || []).filter(function (f) { return ids.indexOf(f._id) >= 0 && !f.verificacion && f.origen !== 'contax'; }).length;
+    X.confirmar('Aprobar ' + ids.length + ' facturas', 'Los repartidores verán su factura como <b>Aprobada</b> en el portal.' +
+      (sinVerificar ? '<br><br><b>' + sinVerificar + ' de ellas todavía no se cruzaron con Impuestos Nacionales.</b> Lo seguro es cruzarlas primero con «Cruzar con Impuestos».' : ''), function () {
       X.clasicos(true, 'Arquímedes está aprobando ' + ids.length + ' facturas…');
       var lote = X.dbP.batch();
       ids.forEach(function (id) { lote.update(X.dbP.collection('facturas').doc(id), { estado: 'aprobada', revisadoPor: S.usuario.email, revisado: X.servidor(), motivo: '' }); });
@@ -160,6 +162,8 @@
       '</div>' +
       '<div class="datos">' +
         '<div class="dato"><small>N.º de factura</small><b class="num">' + esc(f.numero) + '</b></div>' +
+        '<div class="dato"><small>NIT del emisor</small><b class="num">' + esc(f.nitEmisor || '—') + '</b></div>' +
+        '<div class="dato"><small>Impuestos Nacionales</small><b>' + (f.verificacion ? X.chip('ok', 'Verificada') + '</b><span class="muted">' + X.fechaHora(f.verificacion.cuando) + ' · ' + esc(f.verificacion.archivo || '') + '</span>' : (f.origen === 'contax' ? X.chip('contax', 'Emitida por CONTAX') : X.chip('pend', 'Sin verificar')) + '</b>') + '</div>' +
         '<div class="dato"><small>Emisión</small><b>' + X.fecha(f.fechaEmision) + '</b></div>' +
         '<div class="dato"><small>Semanas</small><b>' + esc((f.semanas || []).join(', ')) + '</b></div>' +
         '<div class="dato"><small>Subida</small><b>' + X.fechaHora(f.subidoF) + '</b>' + (f.fueraDeCorte ? X.chip('pend', 'Después del corte') : '') + '</div>' +
@@ -190,7 +194,11 @@
           if (a === 'repartidor') { cerrar(); X.detalleRepartidor(f.uid); return; }
           if (a === 'aprobar') {
             var go = function () { b.disabled = true; b.innerHTML = X.anilloBoton() + 'Aprobando'; cambiarEstado(f._id, 'aprobada').then(function () { cerrar(); X.aviso('Factura aprobada'); }, falla(b)); };
-            if (!c.cuadra) X.confirmar('El importe no cuadra', 'La factura dice ' + bs(f.importe) + ' y sus semanas suman ' + bs(c.suma) + '. ¿Aprobar igual?', go, 'Aprobar igual'); else go();
+            var verificar = function () {
+              if (f.verificacion || f.origen === 'contax') go();
+              else X.confirmar('Sin verificar en Impuestos', 'Esta factura todavía no se cruzó con el Registro de Compras de Impuestos Nacionales. Si no figura ahí puede estar anulada o ser falsa. ¿Aprobar igual?', go, 'Aprobar igual', true);
+            };
+            if (!c.cuadra) X.confirmar('El importe no cuadra', 'La factura dice ' + bs(f.importe) + ' y sus semanas suman ' + bs(c.suma) + '. ¿Aprobar igual?', verificar, 'Aprobar igual'); else verificar();
           } else if (a === 'reabrir') {
             cambiarEstado(f._id, 'recibida').then(function () { cerrar(); X.aviso('Volvió a «Por revisar»'); }, falla(b));
           } else {
@@ -253,73 +261,154 @@
   }
   CTRL.registrarContax = registrarContax;
 
-  /* ── Cruce con el Excel de Impuestos Nacionales ── */
+  /* ── Cruce con el Registro de Compras de Impuestos Nacionales (RCV de MILTHAGOR) ──
+     Una factura está verificada solo si en el archivo hay una con el mismo NIT del emisor y el mismo
+     N.º (y el mismo importe). Los números se repiten entre repartidores (cada uno empieza en 1), así que
+     el número y el importe solos no alcanzan. Si la factura no tiene NIT (las subidas antes de pedirlo),
+     se exige N.º + importe + fecha de emisión + que el nombre del emisor sea el del repartidor. */
+  function limpiaNum(n) { return String(n == null ? '' : n).replace(/\D/g, '').replace(/^0+/, ''); }
+  function fechaRCV(v) {
+    if (typeof v === 'number') return new Date(Date.UTC(1899, 11, 30) + v * 864e5).toISOString().slice(0, 10);
+    var m = String(v || '').match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/); if (m) return m[3] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[1]).slice(-2);
+    m = String(v || '').match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? m[0] : '';
+  }
+  /* Mismo nombre: al menos dos palabras (de 3+ letras) en común, o una si uno de los dos tiene una sola */
+  function mismoNombre(a, b) {
+    var pal = function (t) { return X.normal(t).split(/[^A-Z]+/).filter(function (w) { return w.length >= 3; }); };
+    var pa = pal(a), pb = pal(b); if (!pa.length || !pb.length) return null;
+    var comunes = pa.filter(function (w) { return pb.indexOf(w) >= 0; }).length;
+    return comunes >= Math.min(2, pa.length, pb.length);
+  }
+  function indexarRCV(filas, cols) {
+    var porNum = {}, desde = '', hasta = '';
+    filas.forEach(function (f) {
+      var k = limpiaNum(f[cols.num]); if (!k) return;
+      var fila = { num: k, imp: X.numero(f[cols.imp]), nit: cols.nit >= 0 ? limpiaNum(f[cols.nit]) : '', nom: cols.nom >= 0 ? String(f[cols.nom]).trim() : '',
+        est: cols.est >= 0 ? String(f[cols.est]) : '', fecha: cols.fecha >= 0 ? fechaRCV(f[cols.fecha]) : '', aut: cols.aut >= 0 ? String(f[cols.aut]).trim() : '' };
+      (porNum[k] = porNum[k] || []).push(fila);
+      if (fila.fecha) { if (!desde || fila.fecha < desde) desde = fila.fecha; if (!hasta || fila.fecha > hasta) hasta = fila.fecha; }
+    });
+    return { porNum: porNum, desde: desde, hasta: hasta };
+  }
+  function evaluarRCV(f, ix) {
+    var cands = ix.porNum[limpiaNum(f.numero)] || [], nitF = limpiaNum(f.nitEmisor), fechaF = fechaRCV(f.fechaEmision);
+    var igualImp = function (c) { return Math.abs((c.imp || 0) - (Number(f.importe) || 0)) <= 0.05; };
+    var anulada = function (c) { return /ANULAD/.test(X.normal(c.est)); };
+    var enPeriodo = !fechaF || !ix.desde || (fechaF >= ix.desde && fechaF <= ix.hasta);
+    var res = function (r, fila, como) { return { f: f, r: r, fila: fila || null, como: como || '' }; };
+    if (nitF) {
+      var mias = cands.filter(function (c) { return c.nit === nitF; });
+      if (mias.length) { var ok = mias.filter(igualImp)[0]; return ok ? res(anulada(ok) ? 'anulada' : 'coincide', ok, 'NIT + N.º') : res('importe', mias[0]); }
+      if (cands.some(igualImp)) return res('otroEmisor', cands.filter(igualImp)[0]);
+      return res(enPeriodo ? 'falta' : 'otroMes');
+    }
+    // Sin NIT: número + importe + fecha, y el emisor debe ser el mismo repartidor
+    var c2 = cands.filter(function (c) { return igualImp(c) && (!fechaF || !c.fecha || c.fecha === fechaF); });
+    var suyas = c2.filter(function (c) { return mismoNombre(c.nom, f.nombre) === true; });
+    if (suyas.length === 1) return res(anulada(suyas[0]) ? 'anulada' : 'coincide', suyas[0], 'N.º + importe + fecha + nombre (sin NIT)');
+    if (suyas.length > 1 || (c2.length && !String(f.nombre || '').trim())) return res('dudosa', c2[0]);
+    if (c2.length) return res('otroEmisor', c2[0]);
+    var suyaOtroImp = cands.filter(function (c) { return mismoNombre(c.nom, f.nombre) === true; })[0];
+    if (suyaOtroImp) return res('importe', suyaOtroImp);
+    return res(enPeriodo ? 'falta' : 'otroMes');
+  }
+  CTRL.cruceRCV = { limpiaNum: limpiaNum, fechaRCV: fechaRCV, mismoNombre: mismoNombre, indexarRCV: indexarRCV, evaluarRCV: evaluarRCV };
+
   function cruceImpuestos() {
-    X.ventana('Cruzar con Impuestos Nacionales', 'Sube el Excel (o CSV) que descargas de Impuestos con las facturas recibidas por MILTHAGOR.',
+    X.ventana('Cruzar con Impuestos Nacionales', 'Sube el Registro de Compras de MILTHAGOR que descargas de Impuestos (mejor en Excel .xlsx). Una factura queda verificada solo si coincide su NIT, su N.º y su importe.',
       '<div class="fm"><div class="fila"><label for="czArch">Archivo</label><input id="czArch" type="file" accept=".xlsx,.xls,.csv"></div><div id="czMapa"></div></div>',
       '<button class="btn sec" data-cerrar>Cancelar</button><button class="btn" data-ok disabled>' + ic('cruzar') + 'Cruzar</button>', function (v, cerrar) {
-        var filas = null, enc = null, ok = v.querySelector('[data-ok]'), mapa = v.querySelector('#czMapa');
+        var filas = null, enc = null, ok = v.querySelector('[data-ok]'), mapa = v.querySelector('#czMapa'), nombreArchivo = '';
         v.querySelector('#czArch').addEventListener('change', function (e) {
           var a = e.target.files[0]; if (!a) return;
+          nombreArchivo = a.name;
           mapa.innerHTML = X.anillo('Leyendo el archivo…');
           X.cargarXLSX().then(function (XL) {
             return a.arrayBuffer().then(function (buf) {
-              var lb = XL.read(buf, { type: 'array' }), ws = lb.Sheets[lb.SheetNames[0]];
+              // El CSV de Impuestos viene en UTF-8 sin marca: se decodifica a mano para no romper las Ñ y tildes
+              var lb = /\.csv$/i.test(a.name) ? XL.read(new TextDecoder('utf-8').decode(buf), { type: 'string', raw: true }) : XL.read(buf, { type: 'array' });
+              var ws = lb.Sheets[lb.SheetNames[0]];
               var todas = XL.utils.sheet_to_json(ws, { header: 1, raw: true, defval: '' });
               // La fila de encabezados es la primera que tiene varias celdas con texto
               var i0 = 0; for (var i = 0; i < Math.min(todas.length, 15); i++) { if (todas[i].filter(function (c) { return /[a-z]/i.test(String(c)); }).length >= 3) { i0 = i; break; } }
               enc = todas[i0].map(function (h) { return String(h).trim(); }); filas = todas.slice(i0 + 1).filter(function (f) { return f.some(function (c) { return String(c).trim(); }); });
               var adivina = function (re) { for (var j = 0; j < enc.length; j++) if (re.test(X.normal(enc[j]))) return j; return -1; };
-              var cols = { num: adivina(/(N(RO|UM|°|º)?\.?\s*(DE\s*)?FACT|FACTURA|NUMERO)/), imp: adivina(/IMPORTE TOTAL|IMPORTE|MONTO|TOTAL/), nit: adivina(/NIT|CI/), nom: adivina(/RAZON|NOMBRE/), est: adivina(/ESTADO/) };
+              var cols = { num: adivina(/^NUMERO FACTURA|^N(RO|UM)?\.?\s*(DE\s*)?FACTURA|^FACTURA/), imp: adivina(/^IMPORTE TOTAL|^IMPORTE|^MONTO|^TOTAL/), nit: adivina(/^NIT/), nom: adivina(/^RAZON|^NOMBRE/),
+                fecha: adivina(/^FECHA/), aut: adivina(/AUTORIZACION|^CUF/), est: adivina(/^ESTADO/) };
               var sel = function (k, et) { return '<div class="fila"><label for="cz_' + k + '">' + et + '</label><select id="cz_' + k + '"><option value="-1">(no usar)</option>' + enc.map(function (h, j) { return '<option value="' + j + '"' + (cols[k] === j ? ' selected' : '') + '>' + esc(h || ('Columna ' + (j + 1))) + '</option>'; }).join('') + '</select></div>'; };
-              mapa.innerHTML = '<p class="muted">' + entero(filas.length) + ' filas leídas. Revisa que cada dato apunte a la columna correcta:</p><div class="dos">' + sel('num', 'N.º de factura') + sel('imp', 'Importe') + sel('nit', 'NIT del emisor') + sel('nom', 'Nombre o razón social') + sel('est', 'Estado (opcional)') + '</div>';
+              mapa.innerHTML = '<p class="muted">' + entero(filas.length) + ' facturas en el archivo. Revisa que cada dato apunte a la columna correcta:</p><div class="dos">' +
+                sel('nit', 'NIT del emisor *') + sel('num', 'N.º de factura *') + sel('imp', 'Importe *') + sel('fecha', 'Fecha de la factura') + sel('nom', 'Nombre o razón social') + sel('aut', 'Código de autorización') + sel('est', 'Estado') + '</div>';
               ok.disabled = false;
             });
           }).catch(function (ex) { console.error(ex); mapa.innerHTML = '<p class="login-err">' + esc(ex.message || 'No se pudo leer el archivo.') + '</p>'; });
         });
         ok.addEventListener('click', function () {
           var col = function (k) { return Number(v.querySelector('#cz_' + k).value); };
-          var cN = col('num'), cI = col('imp'), cT = col('nit'), cM = col('nom'), cE = col('est');
-          if (cN < 0 || cI < 0) { X.aviso('Elige al menos la columna del número y la del importe.'); return; }
-          var limpia = function (n) { return String(n == null ? '' : n).replace(/\D/g, '').replace(/^0+/, ''); };
-          var idx = {};
-          filas.forEach(function (f) { var k = limpia(f[cN]); if (!k) return; (idx[k] = idx[k] || []).push({ imp: X.numero(f[cI]), nit: cT >= 0 ? String(f[cT]) : '', nom: cM >= 0 ? String(f[cM]) : '', est: cE >= 0 ? String(f[cE]) : '' }); });
-          var revisar = (D.facturas || []).filter(function (f) { return f.estado === 'recibida' || f.estado === 'observada'; });
-          var res = revisar.map(function (f) {
-            var c = idx[limpia(f.numero)] || [], r = 'falta', fila = null;
-            if (c.length) {
-              fila = c.filter(function (x) { return Math.abs((x.imp || 0) - (Number(f.importe) || 0)) <= 0.05; })[0];
-              r = fila ? (/ANULAD/.test(X.normal(fila.est)) ? 'anulada' : 'coincide') : 'importe'; fila = fila || c[0];
-            }
-            return { f: f, r: r, fila: fila };
-          });
-          cerrar(); mostrarCruce(res, filas.length);
+          var cols = { num: col('num'), imp: col('imp'), nit: col('nit'), nom: col('nom'), fecha: col('fecha'), aut: col('aut'), est: col('est') };
+          if (cols.num < 0 || cols.imp < 0 || cols.nit < 0) { X.aviso('Elige al menos las columnas del NIT, del número y del importe.'); return; }
+          var ix = indexarRCV(filas, cols);
+          // Se revisan las por revisar, las observadas y las aprobadas que todavía no se verificaron (las de CONTAX no)
+          var revisar = (D.facturas || []).filter(function (f) { return f.origen !== 'contax' && (f.estado === 'recibida' || f.estado === 'observada' || (f.estado === 'aprobada' && !f.verificacion)); });
+          var res = revisar.map(function (f) { return evaluarRCV(f, ix); });
+          cerrar(); mostrarCruce(res, filas.length, ix, nombreArchivo);
         });
       });
   }
-  function mostrarCruce(res, total) {
+  var RES_CRUCE = {
+    coincide: ['ok', 'Verificada en Impuestos'], importe: ['mal', 'Está, pero con otro importe'], anulada: ['mal', 'Figura anulada'],
+    otroEmisor: ['mal', 'Ese N.º lo emitió otra persona'], falta: ['mal', 'No está en Impuestos'], dudosa: ['pend', 'Revisar a mano (sin NIT)'], otroMes: ['neutro', 'De otro mes']
+  };
+  function motivoCruce(x, periodo) {
+    var n = 'N.º ' + x.f.numero;
+    if (x.r === 'falta') return 'Tu factura ' + n + ' no figura en el Registro de Compras de Impuestos Nacionales de MILTHAGOR (' + periodo + '). Si la anulaste, emite una nueva y súbela.';
+    if (x.r === 'otroEmisor') return 'La factura ' + n + ' figura en Impuestos Nacionales emitida por otro NIT. Revisa el número y tu NIT, y vuelve a subirla.';
+    if (x.r === 'anulada') return 'La factura ' + n + ' figura anulada en Impuestos Nacionales.';
+    return 'El importe en Impuestos Nacionales (' + bs(x.fila && x.fila.imp) + ') no coincide con el de tu factura.';
+  }
+  function mostrarCruce(res, total, ix, archivo) {
     var n = function (k) { return res.filter(function (x) { return x.r === k; }).length; };
-    var et = { coincide: ['ok', 'Está en Impuestos y el importe coincide'], importe: ['mal', 'Está, pero el importe es distinto'], anulada: ['mal', 'Figura anulada'], falta: ['pend', 'No está en el Excel'] };
-    var c = X.cajon('Resultado del cruce', entero(total) + ' facturas en el Excel · ' + entero(res.length) + ' por revisar en CONTROL',
-      '<div class="rejilla r4 mb">' + ['coincide', 'importe', 'anulada', 'falta'].map(function (k) { return '<div class="kpi' + (k === 'coincide' ? '' : ' alerta') + '"><small>' + et[k][1] + '</small><b class="num">' + n(k) + '</b></div>'; }).join('') + '</div>' +
-      (X.puedeEditar() && n('coincide') ? '<div class="fila-acc mb"><button class="btn" id="czApr">' + ic('check') + 'Aprobar las ' + n('coincide') + ' que coinciden</button><button class="btn sec" id="czObs">Observar las de importe distinto</button></div>' : '') +
+    var periodo = ix.desde ? X.fecha(ix.desde) + ' al ' + X.fecha(ix.hasta) : 'período del archivo';
+    var malas = function (x) { return x.r === 'importe' || x.r === 'anulada' || x.r === 'otroEmisor' || x.r === 'falta'; };
+    var aprobadasMal = res.filter(function (x) { return x.f.estado === 'aprobada' && malas(x); });
+    var aprobables = res.filter(function (x) { return x.r === 'coincide' && x.f.estado === 'recibida'; });
+    var observables = res.filter(function (x) { return malas(x) && (x.f.estado === 'recibida' || (x.f.estado === 'observada' && x.f.motivo !== motivoCruce(x, periodo))); });
+    var orden = ['otroEmisor', 'falta', 'anulada', 'importe', 'dudosa', 'coincide', 'otroMes'];
+    res.sort(function (a, b) { return orden.indexOf(a.r) - orden.indexOf(b.r); });
+    var c = X.cajon('Resultado del cruce', entero(total) + ' facturas en el archivo (' + esc(periodo) + ') · ' + entero(res.length) + ' revisadas en CONTROL',
+      '<div class="rejilla r4 mb">' +
+        '<div class="kpi"><small>Verificadas</small><b class="num">' + n('coincide') + '</b><em>NIT, N.º e importe coinciden</em></div>' +
+        '<div class="kpi alerta"><small>No cuadran</small><b class="num">' + (n('falta') + n('otroEmisor') + n('anulada') + n('importe')) + '</b><em>' + n('falta') + ' no están · ' + n('otroEmisor') + ' de otro emisor · ' + n('anulada') + ' anuladas · ' + n('importe') + ' otro importe</em></div>' +
+        '<div class="kpi' + (n('dudosa') ? ' alerta' : '') + '"><small>Revisar a mano</small><b class="num">' + n('dudosa') + '</b><em>sin NIT y sin datos suficientes</em></div>' +
+        '<div class="kpi"><small>De otro mes</small><b class="num">' + n('otroMes') + '</b><em>carga el archivo de ese mes</em></div>' +
+      '</div>' +
+      (aprobadasMal.length ? '<div class="aviso-caja error mb">' + ic('excepcion') + '<div><b>' + aprobadasMal.length + ' facturas ya aprobadas no tienen respaldo en Impuestos</b>Revísalas una por una (aparecen arriba en la lista). No se cambian solas.</div></div>' : '') +
+      (X.puedeEditar() && (aprobables.length || observables.length) ? '<div class="fila-acc mb">' +
+        (aprobables.length ? '<button class="btn" id="czApr">' + ic('check') + 'Aprobar las ' + aprobables.length + ' verificadas</button>' : '') +
+        (observables.length ? '<button class="btn sec" id="czObs">Observar las ' + observables.length + ' que no cuadran</button>' : '') + '</div>' : '') +
       X.tabla([
-        { t: 'Repartidor', html: function (x) { return '<b>' + esc(x.f.nombre) + '</b><span class="sub num">ID ' + esc(x.f.id) + '</span>'; } },
-        { t: 'N.º', html: function (x) { return '<b class="num">' + esc(x.f.numero) + '</b>'; } },
-        { t: 'En CONTROL', clase: 'monto', html: function (x) { return bs(x.f.importe); } },
-        { t: 'En Impuestos', clase: 'monto', html: function (x) { return x.fila ? bs(x.fila.imp) + (x.fila.nom ? '<span class="sub">' + esc(x.fila.nom) + '</span>' : '') : '—'; } },
-        { t: 'Resultado', html: function (x) { return X.chip(et[x.r][0], et[x.r][1]); } }
+        { t: 'Repartidor', html: function (x) { return '<b>' + esc(x.f.nombre) + '</b><span class="sub num">ID ' + esc(x.f.id) + (x.f.nitEmisor ? ' · NIT ' + esc(x.f.nitEmisor) : ' · sin NIT') + '</span>'; } },
+        { t: 'N.º', html: function (x) { return '<b class="num">' + esc(x.f.numero) + '</b><span class="sub">' + X.fecha(x.f.fechaEmision) + '</span>'; } },
+        { t: 'En CONTROL', clase: 'monto', html: function (x) { return bs(x.f.importe) + '<span class="sub">' + chipFactura(x.f) + '</span>'; } },
+        { t: 'En Impuestos', clase: 'monto', html: function (x) { return x.fila ? bs(x.fila.imp) + '<span class="sub">' + esc(x.fila.nom) + (x.fila.nit ? ' · NIT ' + esc(x.fila.nit) : '') + '</span>' : '—'; } },
+        { t: 'Resultado', html: function (x) { return X.chip(RES_CRUCE[x.r][0], RES_CRUCE[x.r][1]) + (x.como ? '<span class="sub">por ' + esc(x.como) + '</span>' : ''); } }
       ], res, { tam: 500 }), function (cu, cerrar) {
-        X.dbC.collection('cruces').add({ cuando: X.servidor(), quien: S.usuario.email, filasExcel: total, revisadas: res.length, coinciden: n('coincide'), importeDistinto: n('importe'), anuladas: n('anulada'), noEstan: n('falta') }).catch(function () { });
-        X.bitacora('Cruce con Impuestos', n('coincide') + ' coinciden · ' + n('importe') + ' importe distinto · ' + n('falta') + ' no están');
+        X.dbC.collection('cruces').add({ cuando: X.servidor(), quien: S.usuario.email, archivo: archivo, desde: ix.desde, hasta: ix.hasta, filasExcel: total, revisadas: res.length,
+          coinciden: n('coincide'), importeDistinto: n('importe'), anuladas: n('anulada'), otroEmisor: n('otroEmisor'), noEstan: n('falta'), dudosas: n('dudosa'), otroMes: n('otroMes') }).catch(function () { });
+        X.bitacora('Cruce con Impuestos', archivo + ' · ' + n('coincide') + ' verificadas · ' + n('falta') + ' no están · ' + n('otroEmisor') + ' de otro emisor · ' + n('importe') + ' otro importe');
+        // Toda factura verificada queda marcada (también las ya aprobadas u observadas)
+        var verif = res.filter(function (x) { return x.r === 'coincide'; });
+        if (verif.length && X.puedeEditar()) {
+          var lv = X.dbP.batch();
+          verif.forEach(function (x) { lv.update(X.dbP.collection('facturas').doc(x.f._id), { verificacion: { cuando: X.servidor(), quien: S.usuario.email, archivo: archivo, periodo: periodo, como: x.como, nit: x.fila.nit, autorizacion: x.fila.aut } }); });
+          lv.commit().catch(function (e) { console.error('Verificación:', e); });
+        }
         var a = cu.querySelector('#czApr');
-        if (a) a.addEventListener('click', function () { cerrar(); aprobarVarias(res.filter(function (x) { return x.r === 'coincide' && x.f.estado === 'recibida'; }).map(function (x) { return x.f._id; })); });
+        if (a) a.addEventListener('click', function () { cerrar(); aprobarVarias(aprobables.map(function (x) { return x.f._id; }), true); });
         var o = cu.querySelector('#czObs');
         if (o) o.addEventListener('click', function () {
-          var l = res.filter(function (x) { return x.r === 'importe' || x.r === 'anulada'; }); if (!l.length) return;
           var lote = X.dbP.batch();
-          l.forEach(function (x) { lote.update(X.dbP.collection('facturas').doc(x.f._id), { estado: 'observada', revisadoPor: S.usuario.email, revisado: X.servidor(), motivo: x.r === 'anulada' ? 'La factura figura anulada en Impuestos Nacionales.' : 'El importe en Impuestos Nacionales (' + bs(x.fila && x.fila.imp) + ') no coincide con el de tu factura.' }); });
-          lote.commit().then(function () { X.bitacora('Observó facturas por cruce', l.length + ' facturas'); cerrar(); X.aviso(l.length + ' facturas observadas'); }, function (e) { console.error(e); X.aviso('No se pudieron observar.'); });
+          observables.forEach(function (x) { lote.update(X.dbP.collection('facturas').doc(x.f._id), { estado: 'observada', revisadoPor: S.usuario.email, revisado: X.servidor(), motivo: motivoCruce(x, periodo) }); });
+          lote.commit().then(function () { X.bitacora('Observó facturas por cruce', observables.length + ' facturas'); cerrar(); X.aviso(observables.length + ' facturas observadas'); }, function (e) { console.error(e); X.aviso('No se pudieron observar.'); });
         });
       });
     return c;
