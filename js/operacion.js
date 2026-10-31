@@ -331,6 +331,70 @@
     }, function (e) { console.error(e); c.cuerpo.innerHTML = X.vacio('No se pudieron traer las planillas', 'Revisa tus permisos.'); });
   }
 
+  /* ══════════ IMPORTAR NIT DE FACTURAS YA APROBADAS ══════════
+     Del Excel de facturas aprobadas (por ejemplo «Detalle Pagos»: ID del mensajero + NIT Factura) se crea el
+     NIT de cada repartidor que todavía no lo registró. La razón social sale del Registro de Compras de
+     Impuestos (opcional) o del nombre. A ellos el portal ya no les pide el NIT. No se pisa ninguno existente. */
+  function leerHojas(a) {
+    return X.cargarXLSX().then(function (XL) {
+      return a.arrayBuffer().then(function (buf) {
+        var lb = /\.csv$/i.test(a.name) ? XL.read(new TextDecoder('utf-8').decode(buf), { type: 'string', raw: true }) : XL.read(buf, { type: 'array' });
+        return lb.SheetNames.map(function (n) { return XL.utils.sheet_to_json(lb.Sheets[n], { header: 1, raw: true, defval: '' }); });
+      });
+    });
+  }
+  function columna(enc, re) { for (var i = 0; i < enc.length; i++) if (re.test(X.normal(enc[i]))) return i; return -1; }
+  function importarNits() {
+    X.ventana('Importar NIT de repartidores', 'Sube el Excel de facturas ya aprobadas (con «ID del mensajero» y «NIT Factura»). Solo se cargan los que todavía no tienen NIT.',
+      '<div class="fm"><div class="fila"><label for="inArch">Facturas aprobadas</label><input id="inArch" type="file" accept=".xlsx,.xls,.csv"></div>' +
+      '<div class="fila"><label for="inRcv">Registro de Compras de Impuestos (opcional, para la razón social)</label><input id="inRcv" type="file" accept=".xlsx,.xls,.csv"></div><div id="inRes"></div></div>',
+      '<button class="btn sec" data-cerrar>Cancelar</button><button class="btn" data-ok disabled>' + ic('check') + 'Guardar</button>', function (v, cerrar) {
+        var ok = v.querySelector('[data-ok]'), caja = v.querySelector('#inRes'), nuevos = [];
+        var revisar = function () {
+          var a = v.querySelector('#inArch').files[0], rcv = v.querySelector('#inRcv').files[0]; if (!a) return;
+          caja.innerHTML = X.anillo('Leyendo…'); ok.disabled = true;
+          Promise.all([leerHojas(a), rcv ? leerHojas(rcv) : Promise.resolve([]), X.dbP.collection('perfiles').get()]).then(function (r) {
+            var porId = {}, conflictos = 0, razon = {}, ya = {};
+            r[0].forEach(function (f) {
+              var i0 = f.findIndex(function (x) { return columna(x, /ID DEL MENSAJERO|^ID YANGO|^ID$/) >= 0 && columna(x, /NIT/) >= 0; }); if (i0 < 0) return;
+              var e = f[i0], cId = columna(e, /ID DEL MENSAJERO|^ID YANGO|^ID$/), cNit = columna(e, /^NIT FACTURA|^NIT/), cNom = columna(e, /^NOMBRE/);
+              f.slice(i0 + 1).forEach(function (x) {
+                var id = String(x[cId]).trim().replace(/\.0+$/, ''), nit = String(x[cNit]).replace(/\D/g, '');
+                if (!id || !/^\d{5,15}$/.test(nit)) return;
+                if (porId[id] && porId[id].nit !== nit) conflictos++;
+                porId[id] = { nit: nit, nombre: cNom >= 0 ? String(x[cNom]).trim() : '' };
+              });
+            });
+            r[1].forEach(function (f) {
+              var i0 = f.findIndex(function (x) { return columna(x, /^NIT/) >= 0 && columna(x, /^RAZON/) >= 0; }); if (i0 < 0) return;
+              var cNit = columna(f[i0], /^NIT/), cRaz = columna(f[i0], /^RAZON/);
+              f.slice(i0 + 1).forEach(function (x) { var n = String(x[cNit]).replace(/\D/g, '').replace(/^0+/, ''); if (n) razon[n] = String(x[cRaz]).trim(); });
+            });
+            r[2].forEach(function (d) { ya[d.id] = 1; });
+            nuevos = Object.keys(porId).filter(function (id) { return !ya[X.idSeguro(id)]; }).map(function (id) {
+              var p = porId[id], rep = D.repartidores && D.repartidores.get(X.idSeguro(id));
+              return { uid: X.idSeguro(id), id: id, nit: p.nit, razonSocial: (razon[p.nit.replace(/^0+/, '')] || p.nombre || (rep && rep.nombre) || '').slice(0, 160) };
+            });
+            var sinRazon = nuevos.filter(function (x) { return !x.razonSocial; }).length;
+            caja.innerHTML = '<div class="rejilla r3 mb"><div class="dato"><small>Con NIT en el archivo</small><b class="num">' + entero(Object.keys(porId).length) + '</b></div>' +
+              '<div class="dato"><small>Ya registrados</small><b class="num">' + entero(Object.keys(porId).length - nuevos.length) + '</b></div>' +
+              '<div class="dato"><small>Se cargan</small><b class="num">' + entero(nuevos.length) + '</b></div></div>' +
+              (conflictos ? '<p class="muted">' + entero(conflictos) + ' repartidores aparecen con dos NIT distintos: se toma el último.</p>' : '') +
+              (sinRazon ? '<p class="muted">' + entero(sinRazon) + ' sin razón social (sube el Registro de Compras para completarla).</p>' : '');
+            ok.disabled = !nuevos.length; ok.innerHTML = ic('check') + 'Guardar ' + entero(nuevos.length);
+          }).catch(function (e) { console.error(e); caja.innerHTML = '<p class="login-err">' + esc(e.message || 'No se pudo leer.') + '</p>'; });
+        };
+        v.querySelector('#inArch').addEventListener('change', revisar);
+        v.querySelector('#inRcv').addEventListener('change', revisar);
+        ok.addEventListener('click', function () {
+          ok.disabled = true; ok.innerHTML = X.anilloBoton() + 'Guardando';
+          var quien = S.usuario.email, ops = nuevos.map(function (x) { return { tipo: 'set', ref: X.dbP.collection('perfiles').doc(x.uid), datos: { nit: x.nit, razonSocial: x.razonSocial, origen: 'facturas aprobadas', editadoPor: quien, editado: X.servidor() } }; });
+          X.semanas.escribir(ops).then(function () { return X.bitacora('Importó NIT de repartidores', ops.length + ' repartidores'); })
+            .then(function () { cerrar(); X.aviso(ops.length + ' NIT cargados'); }, function (e) { console.error(e); ok.disabled = false; ok.innerHTML = ic('check') + 'Reintentar'; X.aviso('No se pudo guardar. Revisa las reglas del Portal (perfiles).'); });
+        });
+      });
+  }
+
   /* ══════════ HISTORIAL DE PAGOS ══════════ */
   var H = { buscar: '' };
   function pagosPorFecha() {
@@ -417,7 +481,7 @@
   X.pagina('repartidores', {
     t: 'Repartidores', i: 'repartidor', orden: 5, sec: 'Operación',
     render: function () {
-      var cab = X.titulo('Repartidores', 'Quiénes pueden entrar al portal (hoja BDYANGO) y cómo están sus pagos.', '<button class="btn sec" id="btnExpRep">' + ic('descargar') + 'Excel</button>');
+      var cab = X.titulo('Repartidores', 'Quiénes pueden entrar al portal (hoja BDYANGO) y cómo están sus pagos.', (X.puedeEditar() ? '<button class="btn sec" id="btnImpNit">' + ic('subir') + 'Importar NIT</button>' : '') + '<button class="btn sec" id="btnExpRep">' + ic('descargar') + 'Excel</button>');
       if (!S.portalUsuario) return cab + '<div class="card">' + sinPortal() + '</div>';
       if (!D.repartidores) return cab + X.esqueleto(3);
       var f = filtrarRep(), l = lista();
@@ -441,6 +505,7 @@
       el.querySelectorAll('[data-pag]').forEach(function (b) { b.addEventListener('click', function () { R.pag = Number(b.getAttribute('data-pag')); X.refrescar(); }); });
       var f = filtrarRep();
       el.querySelectorAll('tr[data-fila]').forEach(function (tr) { tr.addEventListener('click', function () { var r = f[Number(tr.getAttribute('data-fila'))]; if (r) detalleRepartidor(r.uid); }); });
+      var bin = el.querySelector('#btnImpNit'); if (bin) bin.addEventListener('click', importarNits);
       var be = el.querySelector('#btnExpRep');
       if (be) be.addEventListener('click', function () {
         X.excel([{ nombre: 'Repartidores', filas: [['ID Yango', 'Nombre', 'Celular', 'Habilitado', 'Póliza', 'Cliente CONTAX', 'Semanas pendientes', 'Pendiente (Bs)', 'Pagos recibidos', 'Total cobrado (Bs)']].concat(f.map(function (r) {
