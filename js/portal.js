@@ -160,7 +160,7 @@
         { t: 'Tipo', html: function (a) { return X.chip(a.tipo === 'URGENTE' ? 'mal' : a.tipo === 'IMPORTANTE' ? 'pend' : 'neutro', nombreDe(TIPOS, a.tipo)) + '<span class="sub">' + esc(nombreDe(FRECUENCIAS, a.frecuencia)) + '</span>'; } },
         { t: 'Para', html: function (a) { return esc(a.paraQuien === 'IDS' ? String(a.ids || '').split(/[,;\s]+/).filter(Boolean).length + ' IDs' : nombreDe(PARA, a.paraQuien)); } },
         { t: 'Vigencia', html: function (a) { return esc(vigencia(a)) + '<span class="sub">' + estadoItem(a) + '</span>'; } },
-        { t: 'Lecturas', html: function (a) { return a.frecuencia !== 'CADA INGRESO' ? '<button class="btn sec chico" data-lec data-id="' + a.id + '">Contar</button>' : '<span class="muted">—</span>'; } },
+        { t: 'Lecturas', html: function (a) { return a.frecuencia !== 'CADA INGRESO' ? '<span class="fila-acc"><button class="btn sec chico" data-lec data-id="' + a.id + '">Contar</button><button class="btn sec chico" data-bl data-id="' + a.id + '" aria-label="Descargar quién lo leyó">' + ic('descargar') + 'Quiénes</button></span>' : '<span class="muted">—</span>'; } },
         { t: '', html: function (a) { return X.puedeEditar() ? '<span class="fila-acc"><button class="icono-btn" data-ed data-id="' + a.id + '" aria-label="Editar">' + ic('editar') + '</button><button class="icono-btn" data-cp data-id="' + a.id + '" aria-label="Duplicar">' + ic('copiar') + '</button><button class="icono-btn" data-bo data-id="' + a.id + '" aria-label="Borrar">' + ic('borrar') + '</button></span>' : ''; } }
       ], l, { tam: 100 }) : X.vacio('Todavía no hay avisos', 'Crea el primero con «Nuevo aviso».', 'marca/graficos/rel-app-' + (S.oscuro ? 'oscuro' : 'claro') + '.png')) + '</div>';
     },
@@ -176,6 +176,15 @@
         (q.count ? q.count().get().then(function (r) { return r.data().count; }) : q.get().then(function (r) { return r.size; })).then(function (n) {
           btn.outerHTML = '<span class="num"><b>' + entero(n) + '</b> lo leyeron</span>';
         }, function (e) { console.error(e); btn.textContent = 'No se pudo'; });
+      });
+      // Lista de quién leyó el aviso (lo que antes se descargaba desde el portal)
+      enlazar(el, '[data-bl]', function (id, btn) {
+        var a = de(id); btn.disabled = true;
+        X.dbP.collectionGroup('lecturas').where('codigo', '==', a.codigo).get().then(function (q) {
+          var filas = [['Fecha', 'ID Yango', 'Nombre', 'Aviso']];
+          q.forEach(function (d) { var x = d.data(); filas.push([X.fechaHora(x.fecha), x.id || '', x.nombre || '', x.titulo || '']); });
+          return X.excel([{ nombre: 'Lecturas', filas: filas }], 'Lecturas-' + String(a.titulo || 'aviso').slice(0, 30).replace(/[^\w\-]+/g, '-'));
+        }).then(function () { btn.disabled = false; }, function (e) { console.error(e); btn.disabled = false; X.aviso('No se pudo descargar la lista.'); });
       });
     }
   });
@@ -296,30 +305,53 @@
     }
   });
 
-  /* ══════════ CHATS DEL ASISTENTE ══════════ */
-  var CH = { lista: null, buscar: '' };
+  /* ══════════ CHATS DEL ASISTENTE ══════════
+     Pestañas: chats actuales (colección chats) y el archivo de las hojas viejas
+     (colección archivo: ChatLog y AvisosLeidos), que antes se veía en el admin del portal. */
+  var CH = { lista: null, archivoChats: null, archivoLecturas: null, vista: 'lista', buscar: '' };
+  var VISTAS_CH = [['lista', 'Chats del asistente'], ['archivoChats', 'Chats anteriores (ChatLog)'], ['archivoLecturas', 'Lecturas anteriores (AvisosLeidos)']];
+  function cargarArchivo() {
+    return X.dbP.collection('archivo').get().then(function (q) {
+      CH.archivoChats = []; CH.archivoLecturas = [];
+      q.forEach(function (d) { var x = d.data(), dest = x.tipo === 'chats' ? CH.archivoChats : CH.archivoLecturas; dest.push.apply(dest, x.filas || []); });
+      CH.archivoChats.reverse(); CH.archivoLecturas.reverse();
+    }, function (e) { console.error(e); CH.archivoChats = []; CH.archivoLecturas = []; });
+  }
   X.pagina('chats', {
     t: 'Chats del asistente', i: 'chat', sec: 'Portal de repartidores',
     render: function () {
-      var cab = X.titulo('Chats del asistente', 'Lo que preguntan los repartidores al asistente con IA del portal (últimas 300).', '<button class="btn sec" id="expCh">' + ic('descargar') + 'Excel</button>');
+      var cab = X.titulo('Chats del asistente', 'Lo que preguntan los repartidores al asistente con IA del portal (últimas 300) y el archivo de las hojas anteriores.', '<button class="btn sec" id="expCh">' + ic('descargar') + 'Excel</button>');
       if (!S.portalUsuario) return cab + sinPortal();
-      if (!CH.lista) return cab + X.cargaBarra('Chats', 'Trayendo…');
-      var b = X.normal(CH.buscar), l = CH.lista.filter(function (c) { return !b || (X.normal(c.nombre) + ' ' + c.id + ' ' + X.normal(c.pregunta)).indexOf(b) >= 0; });
-      return cab + '<div class="card"><div class="herr"><div class="buscar">' + ic('buscar') + '<input type="search" id="bCh" placeholder="Buscar en las preguntas" value="' + esc(CH.buscar) + '"></div></div>' +
-        (l.length ? X.tabla([
-          { t: 'Fecha', html: function (c) { return X.fechaHora(c.fecha); } },
-          { t: 'Repartidor', html: function (c) { return esc(c.nombre) + '<span class="sub num">ID ' + esc(c.id) + '</span>'; } },
-          { t: 'Pregunta y respuesta', html: function (c) { return '<b>' + esc(c.pregunta) + '</b><span class="sub">' + esc(String(c.respuesta || '').slice(0, 300)) + '</span>'; } }
-        ], l, { tam: 100 }) : X.vacio('No hay chats', '', 'marca/graficos/rel-app-' + (S.oscuro ? 'oscuro' : 'claro') + '.png')) + '</div>';
+      var pest = '<div class="pestanas" role="tablist">' + VISTAS_CH.map(function (v) { return '<button role="tab" aria-selected="' + (CH.vista === v[0]) + '" data-vch="' + v[0] + '">' + v[1] + '</button>'; }).join('') + '</div>';
+      var datos = CH[CH.vista];
+      if (!datos) return cab + '<div class="card">' + pest + X.cargaBarra('Chats', 'Trayendo…') + '</div>';
+      var b = X.normal(CH.buscar), l = datos.filter(function (c) { return !b || (X.normal(c.nombre) + ' ' + c.id + ' ' + X.normal(c.pregunta) + ' ' + X.normal(c.titulo)).indexOf(b) >= 0; });
+      var cols = CH.vista === 'archivoLecturas' ? [
+        { t: 'Fecha', html: function (c) { return esc(typeof c.fecha === 'string' ? c.fecha : X.fechaHora(c.fecha)); } },
+        { t: 'Repartidor', html: function (c) { return esc(c.nombre) + '<span class="sub num">ID ' + esc(c.id) + '</span>'; } },
+        { t: 'Aviso', html: function (c) { return esc(c.titulo); } }
+      ] : [
+        { t: 'Fecha', html: function (c) { return esc(typeof c.fecha === 'string' ? c.fecha : X.fechaHora(c.fecha)); } },
+        { t: 'Repartidor', html: function (c) { return esc(c.nombre) + '<span class="sub num">ID ' + esc(c.id) + '</span>'; } },
+        { t: 'Pregunta y respuesta', html: function (c) { return '<b>' + esc(c.pregunta) + '</b><span class="sub">' + esc(String(c.respuesta || '').slice(0, 300)) + '</span>'; } }
+      ];
+      return cab + '<div class="card">' + pest + '<div class="herr"><div class="buscar">' + ic('buscar') + '<input type="search" id="bCh" placeholder="Buscar por ID, nombre o texto" value="' + esc(CH.buscar) + '"></div></div>' +
+        (l.length ? X.tabla(cols, l, { tam: 100 }) : X.vacio('No hay registros', '', 'marca/graficos/rel-app-' + (S.oscuro ? 'oscuro' : 'claro') + '.png')) + '</div>';
     },
     despues: function (el) {
       if (S.portalUsuario && !CH.lista) X.dbP.collection('chats').orderBy('fecha', 'desc').limit(300).get().then(function (q) {
         CH.lista = []; q.forEach(function (d) { CH.lista.push(d.data()); }); if (S.pagina === 'chats') X.refrescar();
       }, function (e) { console.error(e); CH.lista = []; if (S.pagina === 'chats') X.refrescar(); });
+      if (S.portalUsuario && CH.vista !== 'lista' && !CH[CH.vista]) cargarArchivo().then(function () { if (S.pagina === 'chats') X.refrescar(); });
+      el.querySelectorAll('[data-vch]').forEach(function (b) { b.addEventListener('click', function () { CH.vista = b.getAttribute('data-vch'); X.refrescar(); }); });
       var bq = el.querySelector('#bCh'); if (bq) bq.addEventListener('input', X.debounce(function () { CH.buscar = bq.value; X.refrescar(); X.setFoco('#bCh'); }, 300));
       var be = el.querySelector('#expCh');
       if (be) be.addEventListener('click', function () {
-        X.excel([{ nombre: 'Chats', filas: [['Fecha', 'ID Yango', 'Nombre', 'Pregunta', 'Respuesta']].concat((CH.lista || []).map(function (c) { return [X.fechaHora(c.fecha), c.id, c.nombre, c.pregunta, c.respuesta]; })) }], 'Chats-asistente-' + X.hoyISO());
+        var fecha = function (c) { return typeof c.fecha === 'string' ? c.fecha : X.fechaHora(c.fecha); };
+        var hojas = [{ nombre: 'Chats', filas: [['Fecha', 'ID Yango', 'Nombre', 'Pregunta', 'Respuesta']].concat((CH.lista || []).map(function (c) { return [fecha(c), c.id, c.nombre, c.pregunta, c.respuesta]; })) }];
+        if (CH.archivoChats) hojas.push({ nombre: 'ChatLog anterior', filas: [['Fecha', 'ID Yango', 'Nombre', 'Pregunta', 'Respuesta']].concat(CH.archivoChats.map(function (c) { return [fecha(c), c.id, c.nombre, c.pregunta, c.respuesta]; })) });
+        if (CH.archivoLecturas) hojas.push({ nombre: 'AvisosLeidos anterior', filas: [['Fecha', 'ID Yango', 'Nombre', 'Aviso']].concat(CH.archivoLecturas.map(function (c) { return [fecha(c), c.id, c.nombre, c.titulo]; })) });
+        X.excel(hojas, 'Chats-asistente-' + X.hoyISO());
       });
     }
   });
