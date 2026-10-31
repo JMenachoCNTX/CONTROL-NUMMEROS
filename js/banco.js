@@ -136,6 +136,97 @@
         });
       });
   }
+  /* ══════════ IMPORTAR DESDE BDYANGO ══════════
+     «BOL Registro Activación» (hojas Activation/Deactivation SCZ, CBBA, LPZ): de ahí salen los datos
+     actualizados de cada repartidor (Yango los mantiene). Se usa: ID, Nombre y Apellido (completos), CI,
+     NIT, Teléfono, Banco, Cta Banco y Telegram. Si un ID aparece varias veces, manda la última fila con datos. */
+  var BANCOS_TEXTO = [
+    [/GANADERO|^BG$|YOLO/, 1, 0], [/CREDITO|BCP/, 3, 1005], [/SOL(IDARIO)?\b|BANCOSOL/, 3, 1017], [/UNION/, 3, 1014],
+    [/MERCANTIL|BMSC/, 3, 1003], [/NACIONAL|BNB/, 3, 1001], [/BISA/, 3, 1009], [/ECONOMICO|BEC\b/, 3, 1016],
+    [/FIE/, 3, 1033], [/FORTALEZA/, 3, 1034], [/NAZARENO/, 3, 3001]
+  ];
+  function bancoDe(texto) {
+    var t = X.normal(texto); if (!t) return null;
+    for (var i = 0; i < BANCOS_TEXTO.length; i++) if (BANCOS_TEXTO[i][0].test(t)) return { forma: BANCOS_TEXTO[i][1], entidad: BANCOS_TEXTO[i][2] };
+    return { forma: 3, entidad: 0, desconocido: true };
+  }
+  function filasBDYango(hojas) {
+    var porId = {}, sinBanco = 0, desconocidos = {}, yolo = 0, hojasUsadas = [];
+    hojas.forEach(function (h) {
+      var enc = h.enc.map(X.normal), c = function (re) { for (var i = 0; i < enc.length; i++) if (re.test(enc[i])) return i; return -1; };
+      var k = { id: c(/^ID\b/), nom: c(/^NOMBRE \(COMPLETO\)|^NOMBRE$/), ape: c(/^APELLIDO/), ci: c(/^CI$/), nit: c(/^NIT$/), tel: c(/^TELEFONO/),
+        banco: c(/^BANCO$/), cuenta: c(/^CTA|^CUENTA/), tg: c(/^TELEGRAM/), est: c(/^ESTADO$/) };
+      if (k.id < 0 || k.banco < 0 || k.cuenta < 0) return;
+      hojasUsadas.push(h.nombre);
+      h.filas.forEach(function (f) {
+        var id = String(f[k.id] == null ? '' : f[k.id]).trim().replace(/\.0+$/, ''); if (!/^\d{4,}$/.test(id)) return;
+        var x = porId[id] || (porId[id] = { id: id });
+        var pon = function (campo, v) { v = String(v == null ? '' : v).trim(); if (v) x[campo] = v; };
+        pon('nombre', [k.nom >= 0 ? f[k.nom] : '', k.ape >= 0 ? f[k.ape] : ''].join(' ').replace(/\s+/g, ' ').trim());
+        if (k.ci >= 0) pon('ci', String(f[k.ci]).replace(/\.0+$/, ''));
+        if (k.nit >= 0) pon('nit', String(f[k.nit]).replace(/\D/g, ''));
+        if (k.tel >= 0) pon('telefono', String(f[k.tel]).replace(/\D/g, ''));
+        if (k.tg >= 0) pon('telegram', String(f[k.tg]).replace(/^@/, ''));
+        if (k.est >= 0) pon('estadoYango', f[k.est]);
+        var cta = String(f[k.cuenta] == null ? '' : f[k.cuenta]).replace(/\D/g, '');
+        if (cta && String(f[k.banco]).trim()) { x.cuenta = cta; x.bancoTexto = String(f[k.banco]).trim(); }
+      });
+    });
+    var cuentas = {};
+    Object.keys(porId).forEach(function (id) {
+      var x = porId[id];
+      if (!x.cuenta) { sinBanco++; return; }
+      var b = bancoDe(x.bancoTexto);
+      if (b.desconocido) desconocidos[x.bancoTexto] = (desconocidos[x.bancoTexto] || 0) + 1;
+      if (/YOLO/.test(X.normal(x.bancoTexto))) yolo++;
+      cuentas[X.idSeguro(id)] = { id: id, nombre: x.nombre || '', ci: x.ci || '', cuenta: x.cuenta, forma: b.forma, moneda: b.forma === 1 ? 0 : 1, entidad: b.entidad,
+        sucursal: b.forma === 1 ? 0 : 'SCZ', banco: x.bancoTexto, telefono: x.telefono || '', telegram: x.telegram || '', estadoYango: x.estadoYango || '', nit: x.nit || '' };
+    });
+    return { cuentas: cuentas, total: Object.keys(porId).length, sinBanco: sinBanco, desconocidos: desconocidos, yolo: yolo, hojas: hojasUsadas };
+  }
+  function importarBDYango(alTerminar) {
+    X.ventana('Importar desde BDYango', 'Sube el Excel de «BOL Registro Activación» (Archivo → Descargar → Microsoft Excel). Se actualizan los datos bancarios de cada repartidor.',
+      '<div class="fm"><div class="fila"><label for="byArch">Archivo</label><input id="byArch" type="file" accept=".xlsx,.xls"></div><div id="byRes"></div></div>',
+      '<button class="btn sec" data-cerrar>Cancelar</button><button class="btn" data-ok disabled>' + ic('check') + 'Guardar</button>', function (v, cerrar) {
+        var ok = v.querySelector('[data-ok]'), caja = v.querySelector('#byRes'), cambios = [], nits = [];
+        v.querySelector('#byArch').addEventListener('change', function (e) {
+          var a = e.target.files[0]; if (!a) return;
+          caja.innerHTML = X.anillo('Leyendo BDYango…'); ok.disabled = true;
+          Promise.all([X.semanas.leerLibro(a), X.dbP.collection('perfiles').get().catch(function () { return { forEach: function () { } }; })]).then(function (r) {
+            var b = filasBDYango(r[0]), ids = Object.keys(b.cuentas), conPerfil = {};
+            r[1].forEach(function (d) { conPerfil[d.id] = 1; });
+            if (!b.hojas.length) { caja.innerHTML = '<p class="login-err">No se encontraron hojas con las columnas ID, Banco y Cta Banco.</p>'; return; }
+            var campos = ['nombre', 'ci', 'cuenta', 'forma', 'entidad', 'telefono', 'telegram', 'banco'];
+            cambios = ids.filter(function (k) { var ant = D.cuentas && D.cuentas.get(k), x = b.cuentas[k]; return !ant || campos.some(function (c) { return String(ant[c] == null ? '' : ant[c]) !== String(x[c]); }); });
+            var nuevos = cambios.filter(function (k) { return !(D.cuentas && D.cuentas.get(k)); }).length;
+            nits = ids.filter(function (k) { var x = b.cuentas[k]; return !conPerfil[k] && /^\d{5,15}$/.test(x.nit); });
+            var desc = Object.keys(b.desconocidos);
+            caja.innerHTML = '<p class="muted">Hojas leídas: ' + esc(b.hojas.join(' · ')) + '</p>' +
+              '<div class="rejilla r3 mb"><div class="dato"><small>Con cuenta</small><b class="num">' + entero(ids.length) + '</b></div>' +
+              '<div class="dato"><small>Nuevas</small><b class="num">' + entero(nuevos) + '</b></div><div class="dato"><small>Actualizadas</small><b class="num">' + entero(cambios.length - nuevos) + '</b></div></div>' +
+              '<p class="muted">' + entero(b.sinBanco) + ' repartidores sin banco o cuenta en BDYango · ' + entero(nits.length) + ' NIT nuevos para el portal.</p>' +
+              (b.yolo ? '<p class="muted">' + entero(b.yolo) + ' cuentas «Yolo» se pagan como Banco Ganadero.</p>' : '') +
+              (desc.length ? '<div class="aviso-caja">' + ic('excepcion') + '<div><b>Bancos sin código</b>' + esc(desc.map(function (d) { return d + ' (' + b.desconocidos[d] + ')'; }).join(', ')) + ': esas cuentas quedan sin entidad y no entran a la planilla hasta asignar el código.</div></div>' : '');
+            cambios = cambios.map(function (k) { return { k: k, x: b.cuentas[k] }; });
+            nits = nits.map(function (k) { return { k: k, x: b.cuentas[k] }; });
+            ok.disabled = !cambios.length && !nits.length; ok.innerHTML = ic('check') + 'Guardar ' + entero(cambios.length);
+          }).catch(function (ex) { console.error(ex); caja.innerHTML = '<p class="login-err">' + esc(ex.message || 'No se pudo leer el archivo.') + '</p>'; });
+        });
+        ok.addEventListener('click', function () {
+          ok.disabled = true; ok.innerHTML = X.anilloBoton() + 'Guardando';
+          var quien = S.usuario.email;
+          escribirC(cambios.map(function (o) { var d = Object.assign({}, o.x, { origen: 'BDYango', actualizado: X.servidor(), quien: quien }); delete d.nit; return { ref: colC().doc(o.k), datos: d }; }),
+            function (h, t) { ok.innerHTML = X.anilloBoton() + entero(h) + ' de ' + entero(t); })
+            .then(function () {
+              // NIT del portal para quienes todavía no lo registraron (no se pisa ninguno)
+              return X.semanas.escribir(nits.map(function (o) { return { tipo: 'set', ref: X.dbP.collection('perfiles').doc(o.k), datos: { nit: o.x.nit, razonSocial: o.x.nombre || '', origen: 'BDYango', editadoPor: quien, editado: X.servidor() } }; }));
+            })
+            .then(function () { return X.bitacora('Importó BDYango', cambios.length + ' cuentas · ' + nits.length + ' NIT'); })
+            .then(cargar)
+            .then(function () { cerrar(); X.aviso('BDYango importado'); if (alTerminar) alTerminar(); }, function (e) { console.error(e); ok.disabled = false; ok.innerHTML = ic('check') + 'Reintentar'; X.aviso('No se pudo guardar. Revisa tus permisos.'); });
+        });
+      });
+  }
   var CB = { buscar: '', pag: 0 };
   function verCuentas() {
     var c = X.cajon('Cuentas bancarias', 'Cuenta de cada repartidor para la planilla del Banco Ganadero. Sin cuenta, el repartidor no entra en la planilla.', '');
@@ -144,17 +235,18 @@
         .filter(function (x) { return !b || (X.normal(x.nombre) + ' ' + x.id + ' ' + x.ci + ' ' + x.cuenta).indexOf(b) >= 0; })
         .sort(function (a, z) { return X.normal(a.nombre).localeCompare(X.normal(z.nombre)); });
       // Los datos bancarios se toman de BDYango (datos actualizados de Yango), no de planillas anteriores del banco
-      c.cuerpo.innerHTML = '<div class="fila-acc mb">' + (X.puedeEditar() ? '<button class="btn sec chico" id="cbNueva">' + ic('mas') + 'Agregar</button>' : '') + '</div>' +
+      c.cuerpo.innerHTML = '<div class="fila-acc mb">' + (X.puedeEditar() ? '<button class="btn chico" id="cbBdy">' + ic('subir') + 'Importar BDYango</button><button class="btn sec chico" id="cbNueva">' + ic('mas') + 'Agregar</button>' : '') + '</div>' +
         '<div class="herr"><div class="buscar">' + ic('buscar') + '<input type="search" id="cbBuscar" placeholder="Buscar por nombre, ID, CI o cuenta" value="' + esc(CB.buscar) + '"></div></div>' +
         (l.length ? X.tabla([
           { t: 'Repartidor', html: function (x) { return '<b>' + esc(x.nombre) + '</b><span class="sub num">ID ' + esc(x.id) + ' · CI ' + esc(x.ci) + '</span>'; } },
           { t: 'Banco', html: function (x) { return esc(nombreBanco(x)) + '<span class="sub num">' + esc(x.cuenta) + '</span>'; } },
           { t: '', html: function (x) { return X.puedeEditar() ? '<button class="btn sec chico" data-editar="' + esc(x._id || X.idSeguro(x.id)) + '">' + ic('editar') + 'Editar</button>' : ''; } }
-        ], l, { pag: CB.pag }) : X.vacio(D.cuentas && D.cuentas.size ? 'Nada con esa búsqueda' : 'Todavía no hay cuentas', 'Se cargarán desde BDYango.', 'marca/graficos/ilu-factura-recibo.png'));
+        ], l, { pag: CB.pag }) : X.vacio(D.cuentas && D.cuentas.size ? 'Nada con esa búsqueda' : 'Todavía no hay cuentas', 'Usa «Importar BDYango».', 'marca/graficos/ilu-factura-recibo.png'));
       var bq = c.cuerpo.querySelector('#cbBuscar');
       bq.addEventListener('input', function () { CB.buscar = bq.value; CB.pag = 0; pintar(); var e = c.cuerpo.querySelector('#cbBuscar'); e.focus(); e.setSelectionRange(e.value.length, e.value.length); });
       c.cuerpo.querySelectorAll('[data-pag]').forEach(function (x) { x.addEventListener('click', function () { CB.pag = Number(x.getAttribute('data-pag')); pintar(); }); });
       var bi = c.cuerpo.querySelector('#cbImp'); if (bi) bi.addEventListener('click', function () { importarCuentas(pintar); });
+      var by = c.cuerpo.querySelector('#cbBdy'); if (by) by.addEventListener('click', function () { importarBDYango(pintar); });
       var bn = c.cuerpo.querySelector('#cbNueva'); if (bn) bn.addEventListener('click', function () { editarCuenta(null, pintar); });
       c.cuerpo.querySelectorAll('[data-editar]').forEach(function (x) { x.addEventListener('click', function () { editarCuenta(D.cuentas.get(x.getAttribute('data-editar')), pintar); }); });
     };
@@ -382,6 +474,7 @@
   X.banco = {
     cargar: cargar, cuentaDe: cuentaDe, faltaEnCuenta: faltaEnCuenta, nombreBanco: nombreBanco, verCuentas: verCuentas, importarCuentas: importarCuentas,
     armar: armar, descargarBanco: descargarBanco, semanaPrincipal: semanaPrincipal, detalleExcel: detalleExcel, conciliar: conciliar,
-    _puro: { leerGlosa: leerGlosa, glosa: glosa, semBanco: semBanco, serialExcel: serialExcel, rangoLargo: rangoLargo, numOTexto: numOTexto, cuentasDePlanilla: cuentasDePlanilla, filasBanco: filasBanco, leerExtracto: leerExtracto, cruzar: cruzar, ENC_BANCO: ENC_BANCO }
+    importarBDYango: importarBDYango,
+    _puro: { bancoDe: bancoDe, filasBDYango: filasBDYango, leerGlosa: leerGlosa, glosa: glosa, semBanco: semBanco, serialExcel: serialExcel, rangoLargo: rangoLargo, numOTexto: numOTexto, cuentasDePlanilla: cuentasDePlanilla, filasBanco: filasBanco, leerExtracto: leerExtracto, cruzar: cruzar, ENC_BANCO: ENC_BANCO }
   };
 })();
