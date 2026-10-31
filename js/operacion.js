@@ -162,10 +162,18 @@
     t: 'Pagos', i: 'pagos', orden: 3, sec: 'Operación',
     render: function () {
       var reglaTxt = C.reglaPago === 'semana' ? 'Se paga cada semana que tenga su factura aprobada.' : 'Regla «todo o nada»: si a un repartidor le falta una factura o una está mal, se retienen todos sus pagos.';
+      var SM = X.semanas, mc = SM && SM.modoControl();
       var cab = X.titulo('Pagos pendientes', reglaTxt + ' Las excepciones y los clientes CONTAX se aplican solos.',
+        (SM && X.puedeEditar() ? '<button class="btn sec" id="btnImportar">' + ic('subir') + 'Importar planilla semanal</button>' : '') +
+        (SM ? '<button class="btn sec" id="btnImportaciones">' + ic('historial') + 'Importaciones</button>' : '') +
+        (SM && X.esAdmin() ? '<button class="btn sec" id="btnMigrar">Migrar desde Sheets</button>' : '') +
+        (X.banco && X.puedeEditar() ? '<button class="btn sec" id="btnCuentas">' + ic('cliente') + 'Cuentas bancarias</button>' : '') +
         '<button class="btn sec" id="btnCierres">' + ic('historial') + 'Planillas generadas</button><button class="btn" id="btnPlanilla"' + (X.puedeEditar() ? '' : ' disabled') + '>' + ic('descargar') + 'Planilla de pago</button>');
       if (!S.portalUsuario) return cab + '<div class="card">' + sinPortal() + '</div>';
       if (!D.repartidores) return cab + X.esqueleto(3);
+      var pc = mc ? SM.porConfirmar() : null;
+      cab += (mc ? '' : '<div class="aviso-caja mb">' + ic('ayuda') + '<div><b>Los pagos todavía salen de Google Sheets</b>Lo que importes queda guardado en «semanas», pero esta página sigue mostrando las hojas hasta que se cambie <code>fuentePagos</code> a <code>\'control\'</code> en config.js.</div></div>') +
+        (pc && pc.semanas ? '<div class="aviso-caja mb">' + ic('ayuda') + '<div><b>' + entero(pc.semanas) + ' semanas en planillas sin confirmar · ' + bs(pc.total) + '</b>Cuando llegue el extracto del banco, ábrelo en «Planillas generadas» y toca «Conciliar extracto».</div></div>' : '');
       var ev = lista().map(evaluar).filter(function (e) { return e.semanas.length; });
       var semanas = {}; ev.forEach(function (e) { e.semanas.forEach(function (s) { semanas[s.p.semana] = 1; }); });
       var semLista = Object.keys(semanas).sort(function (a, b) { return ordenSemana(b) - ordenSemana(a); });
@@ -187,7 +195,7 @@
           '<select id="sSemana" aria-label="Semana"><option value="">Todas las semanas</option>' + semLista.map(function (s) { return '<option' + (s === P.semana ? ' selected' : '') + '>' + esc(s) + '</option>'; }).join('') + '</select></div>' +
         (f.length ? X.tabla([
           { t: 'Repartidor', html: function (e) { return '<b>' + esc(e.r.nombre) + '</b><span class="sub num">ID ' + esc(e.r.id) + (e.cliente ? ' · ' : '') + '</span>' + (e.cliente ? X.chip('contax', 'Cliente CONTAX') : ''); } },
-          { t: 'Semanas', html: function (e) { return e.semanas.map(function (s) { return '<div style="margin:2px 0"><span class="num">' + esc(semanaCorta(s.p.semana)) + '</span> ' + chipSemana(s.estado) + '</div>'; }).join(''); } },
+          { t: 'Semanas', html: function (e) { return e.semanas.map(function (s) { return '<div style="margin:2px 0"><span class="num">' + esc(semanaCorta(s.p.semana)) + '</span> ' + chipSemana(s.estado) + (s.p.rebote ? ' ' + X.chip('mal', 'Rebotó en el banco') : '') + '</div>'; }).join(''); } },
           { t: 'Estado', html: function (e) { return e.listo ? X.chip('ok', e.parcial ? 'Pago parcial' : 'Listo para pagar') : X.chip('mal', 'Retenido'); } },
           { t: 'Pendiente', clase: 'monto', html: function (e) { return bs(e.total); } },
           { t: 'A pagar', clase: 'monto', html: function (e) { return '<b>' + bs(e.totalPagar) + '</b>'; } }
@@ -206,8 +214,13 @@
           var filtrados = filtrarPagos(ev); var e = filtrados[Number(tr.getAttribute('data-fila'))]; if (e) detalleRepartidor(e.r.uid);
         });
       });
-      var bp = el.querySelector('#btnPlanilla'); if (bp) bp.addEventListener('click', function () { planilla(ev); });
+      // Se recalcula al hacer clic: las facturas llegan en vivo y pueden haber cambiado desde que se pintó la página
+      var bp = el.querySelector('#btnPlanilla'); if (bp) bp.addEventListener('click', function () { planilla(lista().map(evaluar).filter(function (e) { return e.semanas.length; })); });
       var bc = el.querySelector('#btnCierres'); if (bc) bc.addEventListener('click', verCierres);
+      var bi = el.querySelector('#btnImportar'); if (bi) bi.addEventListener('click', function () { X.semanas.importar(); });
+      var bl = el.querySelector('#btnImportaciones'); if (bl) bl.addEventListener('click', function () { X.semanas.verImportaciones(); });
+      var bm = el.querySelector('#btnMigrar'); if (bm) bm.addEventListener('click', function () { X.semanas.migrar(); });
+      var bcu = el.querySelector('#btnCuentas'); if (bcu) bcu.addEventListener('click', function () { X.banco.verCuentas(); });
     }
   });
   function filtrarPagos(ev) {
@@ -224,56 +237,84 @@
   function debounce(fn, ms) { var t; return function () { var a = arguments; clearTimeout(t); t = setTimeout(function () { fn.apply(null, a); }, ms); }; }
   function setFoco(sel) { var e = document.querySelector(sel); if (e) { e.focus(); var v = e.value; e.value = ''; e.value = v; } }
 
+  /* Planilla de pago: archivo de carga masiva del Banco Ganadero (js/banco.js), una fila por semana pagada.
+     Los listos sin cuenta bancaria quedan fuera y se avisan. */
   function planilla(ev) {
     var listos = ev.filter(function (e) { return e.listo; }), ret = ev.filter(function (e) { return !e.listo; });
-    var total = X.redondear(listos.reduce(function (s, e) { return s + e.totalPagar; }, 0));
-    X.ventana('Planilla de pago', 'Se descarga un Excel con tres hojas: Pagar, Retenidos y Resumen.',
-      '<div class="rejilla r2 mb"><div class="dato"><small>Repartidores a pagar</small><b class="num">' + entero(listos.length) + '</b></div><div class="dato"><small>Total a pagar</small><b class="num">' + bs(total) + '</b></div></div>' +
-      '<div class="aviso-caja">' + ic('ayuda') + '<div><b>Formato del banco</b>La hoja «Pagar» trae ID, nombre, celular, semanas e importe. Cuando tengas el modelo de planilla masiva del Banco Ganadero, se ajusta para que salga igual.</div></div>' +
-      '<label class="interruptor"><input type="checkbox" id="chkCierre" checked>Guardar esta planilla en «Planillas generadas»</label>',
-      '<button class="btn sec" data-cerrar>Cancelar</button><button class="btn" data-ok>' + ic('descargar') + 'Descargar Excel</button>',
+    var B = X.banco, a = B.armar(listos), sem = B.semanaPrincipal(a.lineas), mc = X.semanas && X.semanas.modoControl();
+    var totSin = X.redondear(a.sinCuenta.reduce(function (t, x) { return t + x.importe; }, 0));
+    X.ventana('Planilla de pago', 'Se descarga la planilla de carga masiva del Banco Ganadero: una fila por semana pagada, con la glosa «Pago MTG - ID Rider … Fact.Nro … SEM…».',
+      '<div class="rejilla r3 mb"><div class="dato"><small>Repartidores a pagar</small><b class="num">' + entero(a.pagan.length) + '</b></div>' +
+        '<div class="dato"><small>Filas para el banco</small><b class="num">' + entero(a.lineas.length) + '</b></div>' +
+        '<div class="dato"><small>Total a pagar</small><b class="num">' + bs(a.total) + '</b></div></div>' +
+      (a.sinCuenta.length ? '<div class="aviso-caja mb">' + ic('excepcion') + '<div><b>' + entero(a.sinCuenta.length) + ' repartidores listos no tienen cuenta bancaria · ' + bs(totSin) + '</b>Quedan fuera de esta planilla. Agrégalas en «Cuentas bancarias» y vuelve a generar. <button class="btn sec chico" id="plCuentas" type="button">Ver cuentas</button></div></div>' : '') +
+      '<div class="fm"><div class="dos"><div class="fila"><label for="plFecha">Fecha de pago</label><input id="plFecha" type="date" value="' + X.hoyISO() + '"></div>' +
+        '<div class="fila"><label for="plNombre">Nombre del archivo</label><input id="plNombre" value="' + esc((sem ? sem.replace(/G\d{4}$/, '') + ' ' : '') + 'Planilla Banco') + '"></div></div></div>' +
+      (mc
+        ? '<div class="aviso-caja">' + ic('check') + '<div><b>Se guarda en «Planillas generadas»</b>Las semanas incluidas pasan a «en planilla» y no vuelven a salir en otra planilla hasta que se concilie el extracto, se confirme o se anule.</div></div><input type="checkbox" id="chkCierre" checked hidden>'
+        : '<label class="interruptor"><input type="checkbox" id="chkCierre" checked>Guardar esta planilla en «Planillas generadas»</label>'),
+      '<button class="btn sec" data-cerrar>Cancelar</button><button class="btn" data-ok' + (a.lineas.length ? '' : ' disabled') + '>' + ic('descargar') + 'Descargar planilla del banco</button>',
       function (v, cerrar) {
+        var pc = v.querySelector('#plCuentas'); if (pc) pc.addEventListener('click', function () { cerrar(); B.verCuentas(); });
         v.querySelector('[data-ok]').addEventListener('click', function () {
-          var btn = v.querySelector('[data-ok]'); btn.disabled = true; btn.innerHTML = X.anilloBoton() + 'Preparando';
-          var hoy = X.hoyISO();
-          var pagar = [['N.º', 'ID Yango', 'Nombre', 'Celular', 'Semanas', 'Importe (Bs)', 'Cliente CONTAX']].concat(listos.map(function (e, i) {
-            return [i + 1, e.r.id, e.r.nombre, X.telVisible(e.r.celular), e.semanas.filter(function (s) { return s.ok; }).map(function (s) { return s.p.semana; }).join(', '), e.totalPagar, e.cliente ? 'SÍ' : ''];
-          }));
-          pagar.push(['', '', 'TOTAL', '', '', total, '']);
-          var retenidos = [['ID Yango', 'Nombre', 'Celular', 'Semanas', 'Importe retenido (Bs)', 'Motivo']].concat(ret.map(function (e) {
-            return [e.r.id, e.r.nombre, X.telVisible(e.r.celular), e.semanas.map(function (s) { return s.p.semana; }).join(', '), e.total, e.motivo];
-          }));
-          var porSem = {}; ev.forEach(function (e) { e.semanas.forEach(function (s) { var k = s.p.semana; porSem[k] = porSem[k] || [0, 0, 0, 0]; porSem[k][0]++; porSem[k][1] += Number(s.p.importe) || 0; if (e.listo && s.ok) { porSem[k][2]++; porSem[k][3] += Number(s.p.importe) || 0; } }); });
-          var resumen = [['Resumen de pago · ' + X.fecha(new Date())], [], ['Semana', 'Repartidores', 'Pendiente (Bs)', 'A pagar', 'A pagar (Bs)']].concat(Object.keys(porSem).sort(function (a, b) { return ordenSemana(a) - ordenSemana(b); }).map(function (k) {
-            return [k, porSem[k][0], X.redondear(porSem[k][1]), porSem[k][2], X.redondear(porSem[k][3])];
-          }));
-          resumen.push([], ['Regla de pago', C.reglaPago === 'semana' ? 'Por semana' : 'Todo o nada'], ['Generado por', S.usuario.email]);
-          X.excel([{ nombre: 'Pagar', filas: pagar }, { nombre: 'Retenidos', filas: retenidos }, { nombre: 'Resumen', filas: resumen }], 'Planilla-pago-' + hoy).then(function () {
-            var guardar = v.querySelector('#chkCierre').checked;
-            X.bitacora('Descargó planilla de pago', listos.length + ' repartidores · ' + bs(total));
-            if (!guardar) return;
-            return X.dbC.collection('pagos').add({
-              fecha: hoy, creado: X.servidor(), quien: S.usuario.email, total: total, cantidad: listos.length,
-              retenidos: ret.length, regla: C.reglaPago || 'todo',
-              filas: listos.map(function (e) { return { id: String(e.r.id), nombre: e.r.nombre, importe: e.totalPagar, semanas: e.semanas.filter(function (s) { return s.ok; }).map(function (s) { return s.p.semana; }) }; })
+          var btn = v.querySelector('[data-ok]'), fecha = v.querySelector('#plFecha').value, nombre = v.querySelector('#plNombre').value.trim() || 'Planilla Banco';
+          if (!fecha) { X.aviso('Elige la fecha de pago.'); return; }
+          btn.disabled = true; btn.innerHTML = X.anilloBoton() + 'Preparando';
+          B.descargarBanco(a.lineas, fecha, nombre).then(function () {
+            X.bitacora('Descargó planilla del banco', a.pagan.length + ' repartidores · ' + a.lineas.length + ' filas · ' + bs(a.total));
+            // Con fuentePagos 'control' la planilla siempre se guarda: sus semanas pasan a «en planilla»
+            if (!v.querySelector('#chkCierre').checked && !mc) return;
+            var ok = function (e) { return e.semanas.filter(function (s) { return s.ok; }); };
+            var filas = a.pagan.map(function (e) {
+              return { id: String(e.r.id), nombre: e.r.nombre, importe: e.totalPagar, ciudad: ok(e).map(function (s) { return s.p.ciudad; }).filter(Boolean)[0] || e.r.ciudad || '',
+                semanas: ok(e).map(function (s) { return s.p.semana; }),
+                detalle: ok(e).map(function (s) { return { semana: s.p.semana, importe: Number(s.p.importe) || 0 }; }),
+                docs: ok(e).map(function (s) { return s.p._doc; }).filter(Boolean) };
             });
-          }).then(function () { cerrar(); X.aviso('Planilla descargada'); }, function (e) { console.error(e); btn.disabled = false; btn.textContent = 'Descargar Excel'; X.aviso(e.message || 'No se pudo generar el Excel.'); });
+            var docs = a.lineas.map(function (l) { return l.doc; }).filter(Boolean);
+            return X.dbC.collection('pagos').add({
+              fecha: X.hoyISO(), fechaProgramada: fecha, archivo: nombre, semanaPrincipal: sem, creado: X.servidor(), quien: S.usuario.email,
+              total: a.total, cantidad: a.pagan.length, retenidos: ret.length, regla: C.reglaPago || 'todo', estado: mc ? 'enviada' : 'registro', fuente: mc ? 'control' : 'sheets',
+              filas: filas, lineas: a.lineas, sinCuenta: a.sinCuenta,
+              retenidosDet: ret.map(function (e) { return { id: String(e.r.id), nombre: e.r.nombre, importe: e.total, motivo: e.motivo }; })
+            }).then(function (ref) {
+              return mc ? X.semanas.marcarEnPlanilla(ref.id, docs).then(function () { X.recargarTodo(); }) : null;
+            });
+          }).then(function () { cerrar(); X.aviso('Planilla del banco descargada'); }, function (e) { console.error(e); btn.disabled = false; btn.textContent = 'Descargar planilla del banco'; X.aviso(e.message || 'No se pudo generar el Excel.'); });
         });
       });
   }
   function verCierres() {
-    var c = X.cajon('Planillas generadas', 'Cada planilla de pago que se descargó y se guardó.', X.cargaBarra('Planillas', 'Trayendo…'));
+    var c = X.cajon('Planillas generadas', 'Cada planilla del banco que se generó. Concilia el extracto para marcar lo pagado y lo rebotado.', X.cargaBarra('Planillas', 'Trayendo…'));
     X.dbC.collection('pagos').orderBy('creado', 'desc').limit(60).get().then(function (q) {
       var l = []; q.forEach(function (d) { var x = d.data(); x._id = d.id; l.push(x); });
       c.cuerpo.innerHTML = l.length ? X.tabla([
-        { t: 'Fecha', html: function (x) { return X.fechaHora(x.creado) + '<span class="sub">' + esc(x.quien) + '</span>'; } },
-        { t: 'Repartidores', clase: 'monto', html: function (x) { return entero(x.cantidad); } },
+        { t: 'Planilla', html: function (x) { return '<b>' + esc(x.archivo || ('Planilla ' + X.fecha(x.fecha))) + '</b><span class="sub">' + X.fechaHora(x.creado) + ' · ' + esc(x.quien) + '</span>'; } },
+        { t: 'Repartidores', clase: 'monto', html: function (x) { return entero(x.cantidad) + (x.lineas ? '<span class="sub">' + entero(x.lineas.length) + ' filas</span>' : ''); } },
         { t: 'Total', clase: 'monto', html: function (x) { return '<b>' + bs(x.total) + '</b>'; } },
-        { t: '', html: function (x) { return '<button class="btn sec chico" data-bajar="' + esc(x._id) + '">' + ic('descargar') + 'Excel</button>'; } }
+        { t: 'Estado', html: function (x) {
+          return (x.estado === 'pagada' ? X.chip('ok', 'Pagada ' + X.fecha(x.fechaPago)) : x.estado === 'enviada' ? X.chip('pend', x.conciliacion ? 'Conciliada en parte' : 'Por confirmar') : x.estado === 'anulada' ? X.chip('neutro', 'Anulada') : X.chip('neutro', 'Registro')) +
+            ((x.rebotados || []).length ? ' ' + X.chip('mal', entero(x.rebotados.length) + ' rebotados') : '') + ((x.sinCuenta || []).length ? ' ' + X.chip('pend', entero(x.sinCuenta.length) + ' sin cuenta') : '');
+        } },
+        { t: '', html: function (x) {
+          var conf = X.semanas && x.estado === 'enviada' && X.puedeEditar();
+          return '<div class="fila-acc"><button class="btn sec chico" data-bajar="' + esc(x._id) + '">' + ic('descargar') + (x.lineas ? 'Banco' : 'Excel') + '</button>' +
+            (x.lineas ? '<button class="btn sec chico" data-detalle="' + esc(x._id) + '">' + ic('descargar') + 'Detalle</button>' : '') +
+            (X.semanas ? '<button class="btn sec chico" data-reporte="' + esc(x._id) + '">' + ic('grafico') + 'Gráficos</button>' : '') +
+            (conf && x.lineas ? '<button class="btn chico" data-conciliar="' + esc(x._id) + '">' + ic('cruzar') + 'Conciliar extracto</button>' : '') +
+            (conf ? '<button class="btn sec chico" data-confirmar="' + esc(x._id) + '">' + ic('check') + 'Pago confirmado</button><button class="btn sec chico" data-anular="' + esc(x._id) + '">Anular</button>' : '') + '</div>';
+        } }
       ], l) : X.vacio('Todavía no se guardó ninguna planilla', '', 'marca/graficos/ilu-factura-recibo.png');
+      var buscarP = function (b, k) { return l.filter(function (y) { return y._id === b.getAttribute(k); })[0]; };
+      c.cuerpo.querySelectorAll('[data-reporte]').forEach(function (b) { b.addEventListener('click', function () { X.semanas.reporte(buscarP(b, 'data-reporte')); }); });
+      c.cuerpo.querySelectorAll('[data-detalle]').forEach(function (b) { b.addEventListener('click', function () { X.banco.detalleExcel(buscarP(b, 'data-detalle')); }); });
+      c.cuerpo.querySelectorAll('[data-conciliar]').forEach(function (b) { b.addEventListener('click', function () { X.banco.conciliar(buscarP(b, 'data-conciliar'), c.cerrar); }); });
+      c.cuerpo.querySelectorAll('[data-confirmar]').forEach(function (b) { b.addEventListener('click', function () { X.semanas.confirmarPago(buscarP(b, 'data-confirmar'), c.cerrar); }); });
+      c.cuerpo.querySelectorAll('[data-anular]').forEach(function (b) { b.addEventListener('click', function () { X.semanas.anularPlanilla(buscarP(b, 'data-anular'), c.cerrar); }); });
       c.cuerpo.querySelectorAll('[data-bajar]').forEach(function (b) {
         b.addEventListener('click', function () {
-          var x = l.filter(function (y) { return y._id === b.getAttribute('data-bajar'); })[0];
+          var x = buscarP(b, 'data-bajar');
+          if (x.lineas) { X.banco.descargarBanco(x.lineas, x.fechaProgramada || x.fecha, x.archivo || 'Planilla Banco'); return; }
           X.excel([{ nombre: 'Pagar', filas: [['N.º', 'ID Yango', 'Nombre', 'Semanas', 'Importe (Bs)']].concat((x.filas || []).map(function (f, i) { return [i + 1, f.id, f.nombre, (f.semanas || []).join(', '), f.importe]; })).concat([['', '', 'TOTAL', '', x.total]]) }], 'Planilla-pago-' + x.fecha);
         });
       });
@@ -296,7 +337,7 @@
   X.pagina('historial', {
     t: 'Historial de pagos', i: 'historial', orden: 4, sec: 'Operación',
     render: function () {
-      var cab = X.titulo('Historial de pagos', 'Pagos ya realizados (hoja HistPagosMTG), agrupados por fecha de pago.', '<button class="btn sec" id="btnExpHist">' + ic('descargar') + 'Excel</button>');
+      var cab = X.titulo('Historial de pagos', (X.semanas && X.semanas.modoControl() ? 'Pagos ya realizados (confirmados en CONTROL y migrados de HistPagosMTG), del último año, agrupados por fecha de pago.' : 'Pagos ya realizados (hoja HistPagosMTG), agrupados por fecha de pago.'), '<button class="btn sec" id="btnExpHist">' + ic('descargar') + 'Excel</button>');
       if (!S.portalUsuario) return cab + '<div class="card">' + sinPortal() + '</div>';
       if (!D.repartidores) return cab + X.esqueleto(3);
       var l = pagosPorFecha(), total = X.redondear(l.reduce(function (s, x) { return s + x.total; }, 0));
@@ -418,7 +459,7 @@
       '<div class="card mb"><div class="h2">Pendientes <small>' + bs(e.total) + '</small></div>' +
         (e.semanas.length ? X.tabla([
           { t: 'Semana', html: function (s) { return '<b class="num">' + esc(s.p.semana) + '</b><span class="sub">' + esc(s.p.rango || '') + '</span>'; } },
-          { t: 'Estado en Sheets', html: function (s) { return esc(s.p.estado || ''); } },
+          { t: X.semanas && X.semanas.modoControl() ? 'Estado' : 'Estado en Sheets', html: function (s) { return esc(s.p.estado || ''); } },
           { t: 'Factura', html: function (s) { return chipSemana(s.estado) + (s.f && s.f.numero ? '<span class="sub">N.º ' + esc(s.f.numero) + '</span>' : '') + (s.ex ? '<span class="sub">' + esc(s.ex.motivo || '') + '</span>' : ''); } },
           { t: 'Importe', clase: 'monto', html: function (s) { return bs(s.p.importe); } }
         ], e.semanas, { tam: 100 }) : X.vacio('Sin pagos pendientes')) + '</div>' +

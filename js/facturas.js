@@ -124,7 +124,7 @@
     if (S.pagina === 'facturas' && !document.querySelector('.velo')) {
       var a = document.activeElement, id = a && a.id;
       X.refrescar(); if (id) X.setFoco('#' + id);
-    } else if (S.pagina === 'tablero' && !document.querySelector('.velo')) X.refrescar();
+    } else if ((S.pagina === 'tablero' || S.pagina === 'pagos') && !document.querySelector('.velo')) X.refrescar();
   };
 
   function cambiarEstado(id, estado, motivo) {

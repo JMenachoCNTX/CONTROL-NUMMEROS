@@ -26,6 +26,10 @@ service cloud.firestore {
     match /notas/{id} { allow read: if esEquipo(); allow write: if puedeEditar(); }
     match /cruces/{id} { allow read: if esEquipo(); allow write: if puedeEditar(); }
     match /pagos/{id} { allow read: if esEquipo(); allow write: if puedeEditar(); }
+    // Planillas semanales de Yango/MTG importadas (las semanas viven en «semanas» del Portal)
+    match /importaciones/{id} { allow read: if esEquipo(); allow write: if puedeEditar(); }
+    // Cuentas bancarias de los repartidores (para la planilla del Banco Ganadero). Datos sensibles: solo quien puede editar.
+    match /cuentas/{id} { allow read, write: if puedeEditar(); }
 
     // Ajustes generales del panel
     match /config/{doc} { allow read: if esEquipo(); allow write: if esAdmin(); }

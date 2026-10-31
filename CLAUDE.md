@@ -15,20 +15,23 @@ CONTAX (sistema NUMMEROS by CONTAX). Los pagos a repartidores (Yango) los hace *
 
 ## Cómo está armado (archivos principales)
 - `index.html` — la página y todo el diseño (marca NUMMEROS).
-- `config.js` — versión, datos de los 3 proyectos de Firebase, URL del puente, corte y regla de pago (`reglaPago: 'todo'` o `'semana'`).
+- `config.js` — versión, datos de los 3 proyectos de Firebase, URL del puente, corte, regla de pago (`reglaPago: 'todo'` o `'semana'`) y **`fuentePagos`** (`'sheets'` = los pagos salen de Google Sheets como antes; `'control'` = salen de la colección `semanas`).
 - `js/base.js` — inicio de sesión, menú, ventanas, Excel (SheetJS desde cdnjs) y carga de datos.
 - `js/operacion.js` — Tablero, Pagos, Historial, Repartidores, Trámites.
 - `js/facturas.js` — revisión de facturas y cruce con Impuestos.
 - `js/portal.js` — Anuncios, Avisos, Preguntas, Notificaciones, Chats.
 - `js/gestion.js` — Clientes CONTAX, Excepciones, Equipo, Bitácora, Ayuda.
+- `js/semanas.js` — semanas de pago: importar las 3 planillas semanales de Yango/MTG («Milthagor Santa Cruz 19.10.26-25.10.26.xlsx»: se paga la columna **Y «Importe total»**; con importe 0 y ganancias > 0 = no habilitado; sin importe ni ganancias = no se guarda), migración única desde Sheets, marcar semanas «en planilla», confirmar pago, anular planilla, deshacer importación y reporte con gráficos.
+- `js/banco.js` — cuentas bancarias de los repartidores, planilla de carga masiva del **Banco Ganadero** (una fila por semana pagada; glosa `Pago MTG - ID Rider: {id} Fact.Nro.{n} - SEM43G2026`; forma 1 = Ganadero, 3 = ACH con código de entidad), «Detalle Pagos {fecha}» en Excel (mismo formato que se manda a Milthagor) y conciliación con el extracto (ACEP/PROCESADO = pagado, VENCIDO u otro = rebotado y vuelve a pendientes).
 - `firestore.rules` — reglas del proyecto `control--nummeros`.
 - `marca/` — logos, íconos, fuentes y fotos de la marca (copia de la misma carpeta de los otros repos).
 - No hay paso de compilación: son archivos HTML/JS planos con Firebase "compat" 10.12 desde gstatic.
 
 ## Dónde se guardan los datos
 Usa **tres** proyectos de Firebase a la vez:
-- `control--nummeros` (propio): colecciones `clientes`, `excepciones`, `notas`, `cruces`, `pagos` (planillas generadas), `config`, `bitacora` (no se edita ni borra).
+- `control--nummeros` (propio): colecciones `clientes`, `excepciones`, `notas`, `cruces`, `pagos` (planillas generadas, con estado `enviada` / `pagada` / `anulada`), `importaciones` (cada planilla semanal cargada), `cuentas` (cuenta bancaria de cada repartidor, id = ID Yango; datos sensibles, solo admin/operador), `config`, `bitacora` (no se edita ni borra).
 - `portal-nummeros` (el del Portal): lee `repartidores`, `publico/portal` y `publico/contenido`, `privado/estado`; revisa `facturas` y `facturasPdf`; escribe `imagenes`, `colaNotif`; lee `chats`, `notificaciones`.
+  Escribe **`semanas`** (una por repartidor y semana; id `{idYango}_{año}-{semana}`; estados `pendiente` / `no_habilitado` / `en_planilla` / `pagado`). La estructura y las reglas están acordadas en `../INTEGRACION-NUCLEO-YANGO.md`: no cambiarlas sin actualizar ese documento.
 - `crm-contax` (Panel NUMMEROS): solo para **iniciar sesión** y leer la lista `users` (sección Equipo).
 
 ## Cómo se entra (accesos únicos)
@@ -41,7 +44,7 @@ El permiso se elige en **Panel → Usuarios → columna CONTROL**. Las reglas de
 - GitHub Pages desde la rama `main` (raíz): https://jmenachocntx.github.io/CONTROL-NUMMEROS/
 - Todavía **no hay archivo `CNAME`**. El dominio previsto es `controlnummeros.contaxbolivia.com` (pasos en `README.md`).
 - `firestore.rules` **no se publica solo**: hay que copiarlo y pegarlo en la consola de Firebase del proyecto `control--nummeros` → Firestore → Reglas → Publicar.
-- Versiones: `version` en `config.js` (hoy 1.2) y el mensaje del commit dice la versión (ej. "... (v1.2)").
+- Versiones: `version` en `config.js` (hoy 1.3), el `?v=` de los scripts en `index.html` y el mensaje del commit dice la versión (ej. "... (v1.3)").
 
 ## Cuidados importantes
 - **El repositorio es PÚBLICO.** Nunca subir contraseñas, archivos `.json` de cuentas de servicio ni datos de clientes.
@@ -50,3 +53,4 @@ El permiso se elige en **Panel → Usuarios → columna CONTROL**. Las reglas de
 - Si cambias reglas que afectan al Portal, el archivo correcto es `firestore.rules` de `PortalNUMMEROS`, no este.
 - Este panel depende del puente del Panel NUMMEROS: si se cambia la URL `/exec` del puente, actualizar `puenteUrl` en `config.js`.
 - Agregar un `.gitignore` con `.DS_Store` antes de subir archivos desde la Mac.
+- **No cambiar `fuentePagos` a `'control'`** hasta que: (1) estén publicadas las reglas de `semanas` en el Portal, (2) se haya hecho la migración desde Sheets, y (3) el Portal lea `semanas`. Ese mismo día el equipo deja de cargar PPendientes/HistPagosMTG y Control pasa a mandar los avisos «Semana N registrada» y «Recibiste tu pago».

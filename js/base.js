@@ -596,6 +596,8 @@
       var m = new Map();
       q.forEach(function (d) { var x = d.data(); x.uid = d.id; m.set(d.id, x); });
       D.repartidores = m; D.cargadoEn = new Date();
+      // Con fuentePagos 'control', pendientes e historial salen de «semanas» (js/semanas.js)
+      return CTRL.semanas ? CTRL.semanas.cargar() : null;
     });
   }
   function cargarSync() {
@@ -624,7 +626,9 @@
     return Promise.all([
       dbC.collection('clientes').get().then(function (q) { D.clientes = []; q.forEach(function (d) { var x = d.data(); x._id = d.id; D.clientes.push(x); }); }, function (e) { console.warn(e); D.clientes = []; }),
       dbC.collection('excepciones').get().then(function (q) { D.excepciones = []; q.forEach(function (d) { var x = d.data(); x._id = d.id; D.excepciones.push(x); }); }, function (e) { console.warn(e); D.excepciones = []; }),
-      dbC.collection('notas').get().then(function (q) { D.notas = {}; q.forEach(function (d) { D.notas[d.id] = d.data(); }); }, function () { D.notas = {}; })
+      dbC.collection('notas').get().then(function (q) { D.notas = {}; q.forEach(function (d) { D.notas[d.id] = d.data(); }); }, function () { D.notas = {}; }),
+      // Cuentas bancarias de los repartidores (js/banco.js)
+      CTRL.banco ? CTRL.banco.cargar() : null
     ]);
   }
   function recargarTodo(conAviso) {
