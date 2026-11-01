@@ -400,7 +400,7 @@
   }
 
   /* ══════════ HISTORIAL DE PAGOS ══════════ */
-  var H = { buscar: '', pagT: 0 };
+  var H = { buscar: '', pagT: 0, sub: 'fechas', fecha: '', buscarF: '', pagF: 0 };
   /* Todos los pagos con las columnas de HistPagosMTG (lo que puede pedir auditoría) */
   var COLS_HIST = [['Fecha de pago', function (h) { return X.fecha(h.fecha); }], ['Semana', 'semana'], ['Rango (Días)', 'rango'], ['ID del mensajero', 'id'], ['Nombre completo', 'nombre'],
     ['Importe total', 'importe'], ['Comentarios', 'comentario'], ['Nro Factura', 'factura'], ['Fecha Factura', 'fechaFactura'], ['NIT Factura', 'nit'],
@@ -435,81 +435,103 @@
     t: 'Historial de pagos', i: 'historial', orden: 4, sec: 'Operación',
     render: function () {
       var propio = D.hist && D.hist.length;
-      var cab = X.titulo('Historial de pagos', (propio ? 'Pagos ya realizados, guardados en CONTROL (migrados de HistPagosMTG y confirmados aquí), agrupados por fecha de pago.' : 'Pagos ya realizados (copia de la hoja HistPagosMTG). Usa Pagos → «Migrar desde Sheets» para guardarlos en CONTROL.'), '<button class="btn sec" id="btnExpHist">' + ic('descargar') + 'Excel</button>');
+      var cab = X.titulo('Historial de pagos', (propio ? 'Pagos ya realizados, guardados en CONTROL (migrados de HistPagosMTG y confirmados aquí).' : 'Pagos ya realizados (copia de la hoja HistPagosMTG). Usa Pagos → «Migrar desde Sheets» para guardarlos en CONTROL.'), '<button class="btn sec" id="btnExpHist">' + ic('descargar') + 'Excel completo</button>');
       if (!S.portalUsuario) return cab + '<div class="card">' + sinPortal() + '</div>';
       if (!D.repartidores) return cab + X.esqueleto(3);
       var l = pagosPorFecha(), total = X.redondear(l.reduce(function (s, x) { return s + x.total; }, 0)), nPagos = l.reduce(function (s, x) { return s + x.filas.length; }, 0);
-      var anio = new Date().getFullYear(), delAnio = l.filter(function (x) { var d = X.aFecha(x.fecha); return d && d.getFullYear() === anio; });
-      return cab +
-        '<div class="rejilla r4 mb">' +
+      var anio = new Date().getFullYear(), delAnio = l.filter(function (x) { var d = X.aFecha(x.iso || x.fecha); return d && d.getFullYear() === anio; });
+      if (!H.fecha || !l.some(function (x) { return (x.iso || x.fecha) === H.fecha; })) H.fecha = l[0] ? (l[0].iso || l[0].fecha) : '';
+      var kpis = '<div class="rejilla r4 mb">' +
           '<div class="kpi"><small>Pagado ' + anio + '</small><b class="num">' + bs(delAnio.reduce(function (s, x) { return s + x.total; }, 0)) + '</b><em>' + entero(delAnio.length) + ' fechas de pago</em></div>' +
           '<div class="kpi"><small>Último pago</small><b class="num">' + (l[0] ? bs(l[0].total) : '—') + '</b><em>' + (l[0] ? esc(l[0].fecha) + ' · ' + entero(l[0].filas.length) + ' pagos' : '') + '</em></div>' +
-          '<div class="kpi"><small>Promedio por pago</small><b class="num">' + bs(l.length ? total / l.length : 0) + '</b><em>sobre ' + entero(l.length) + ' fechas</em></div>' +
+          '<div class="kpi"><small>Promedio por fecha</small><b class="num">' + bs(l.length ? total / l.length : 0) + '</b><em>sobre ' + entero(l.length) + ' fechas</em></div>' +
           '<div class="kpi"><small>Total histórico</small><b class="num">' + bs(total) + '</b><em>' + entero(nPagos) + ' pagos</em></div>' +
-        '</div>' +
-        '<div class="card mb"><div class="h2">Evolución <small>por fecha de pago</small></div><div class="grafico"><canvas id="gHist"></canvas></div></div>' +
-        '<div class="card"><div class="h2">Fechas de pago <small>toca una para ver el detalle</small></div>' +
-          X.tabla([
-            { t: 'Fecha de pago', html: function (x) { return '<b class="num">' + esc(x.fecha) + '</b>'; } },
-            { t: 'Semanas', html: function (x) { return esc(Object.keys(x.semanas).map(semanaCorta).join(', ')); } },
-            { t: 'Pagos', clase: 'monto', html: function (x) { return entero(x.filas.length); } },
-            { t: 'Total', clase: 'monto', html: function (x) { return '<b>' + bs(x.total) + '</b>'; } }
-          ], l, { clic: true, tam: 30, pag: H.pag || 0 }) + '</div>' +
-        (propio ? (function () {
-          var t = filtrarHist(); H.lista = t;
-          return '<div class="card"><div class="h2">Todos los pagos <small>' + entero(t.length) + ' pagos · ' + bs(t.reduce(function (s, h) { return s + h.importe; }, 0)) + ' · toca uno para ver el informe del repartidor</small></div>' +
-            '<div class="herr"><div class="buscar">' + ic('buscar') + '<input type="search" id="bHist" placeholder="Buscar por nombre, ID, semana, N.º de factura o NIT" value="' + esc(H.buscar) + '"></div>' +
-            '<button class="btn sec chico" id="btnExpTodo">' + ic('descargar') + 'Excel (' + entero(t.length) + ')</button></div>' +
-            '<div class="tabla-ancha">' + X.tabla(COLS_HIST.map(function (c) {
-              return { t: c[0], clase: c[1] === 'importe' ? 'monto' : '', html: function (h) { var v = valorHist(h, c); return c[1] === 'importe' ? bs(v) : c[1] === 'nombre' ? '<b>' + esc(v) + '</b>' : c[1] === 'autorizacion' ? '<span class="sub num" style="max-width:180px;display:block;overflow:hidden;text-overflow:ellipsis" title="' + esc(v) + '">' + esc(v) + '</span>' : esc(v); } };
-            }), t, { clic: true, tam: 50, pag: H.pagT }) + '</div></div>';
-        })() : '');
+        '</div>';
+      var graficos = '<div class="graf-rejilla mb">' +
+        '<div class="card"><div class="h2">Pagado por fecha de pago <small>últimas 20 fechas</small></div><div class="grafico"><canvas id="gHist"></canvas></div></div>' +
+        '<div class="card"><div class="h2">Pagado por mes <small>últimos 12 meses</small></div><div class="grafico"><canvas id="gMes"></canvas></div></div>' +
+        '<div class="card"><div class="h2">Repartidores pagados <small>por fecha de pago</small></div><div class="grafico"><canvas id="gCant"></canvas></div></div>' +
+        '<div class="card"><div class="h2">Los que más cobraron <small>total histórico</small></div><div class="grafico"><canvas id="gTop"></canvas></div></div>' +
+      '</div>';
+      var nF = l.filter(function (x) { return (x.iso || x.fecha) === H.fecha; })[0];
+      var todos = filtrarHist(); H.lista = todos;
+      var sub = '<div class="subpestanas" role="tablist">' +
+        '<button role="tab" data-sub="fechas" aria-selected="' + (H.sub === 'fechas') + '">' + ic('reloj') + 'Fechas de pago <em class="num">' + entero(l.length) + '</em></button>' +
+        '<button role="tab" data-sub="todos" aria-selected="' + (H.sub === 'todos') + '">' + ic('historial') + 'Todos los pagos <em class="num">' + entero(nPagos) + '</em></button></div>';
+      var cuerpo;
+      if (H.sub === 'fechas') {
+        var filasF = filasFecha(nF); H.listaF = filasF;
+        var totF = filasF.reduce(function (s, h) { return s + (Number(h.importe) || 0); }, 0);
+        cuerpo = '<div class="herr">' +
+            '<select id="sFecha" aria-label="Fecha de pago">' + l.map(function (x) { var k = x.iso || x.fecha; return '<option value="' + esc(k) + '"' + (k === H.fecha ? ' selected' : '') + '>' + esc(x.fecha) + ' · ' + entero(x.filas.length) + ' pagos · ' + bs(x.total) + '</option>'; }).join('') + '</select>' +
+            '<div class="buscar">' + ic('buscar') + '<input type="search" id="bHistF" placeholder="Buscar en esta fecha: nombre, ID, semana, factura o NIT" value="' + esc(H.buscarF) + '"></div>' +
+            '<button class="btn sec chico" id="btnExpFecha">' + ic('descargar') + 'Excel de esta fecha</button></div>' +
+          (nF ? '<p class="muted" style="margin:0 0 10px">Semanas: ' + esc(Object.keys(nF.semanas).map(semanaCorta).join(', ')) + ' · <b>' + entero(filasF.length) + ' pagos · ' + bs(totF) + '</b> · toca un pago para ver el informe del repartidor</p>' : '') +
+          tablaHist(filasF, H.pagF, '<td colspan="5">Total</td><td class="monto">' + bs(totF) + '</td><td colspan="7"></td>');
+      } else {
+        cuerpo = '<div class="herr"><div class="buscar">' + ic('buscar') + '<input type="search" id="bHist" placeholder="Buscar por nombre, ID, semana, N.º de factura o NIT" value="' + esc(H.buscar) + '"></div>' +
+            '<button class="btn sec chico" id="btnExpTodo">' + ic('descargar') + 'Excel (' + entero(todos.length) + ')</button></div>' +
+          '<p class="muted" style="margin:0 0 10px"><b>' + entero(todos.length) + ' pagos · ' + bs(todos.reduce(function (s, h) { return s + h.importe; }, 0)) + '</b> · toca un pago para ver el informe del repartidor</p>' +
+          tablaHist(todos, H.pagT);
+      }
+      return cab + kpis + graficos + '<div class="card">' + sub + cuerpo + '</div>';
     },
     despues: function (el) {
       if (!D.repartidores) return;
-      var l = pagosPorFecha(), col = X.colores(), g = l.slice(0, 26).reverse();
+      var l = pagosPorFecha(), col = X.colores(), g = l.slice(0, 20).reverse();
+      var eje = { y: { ticks: { callback: function (v) { return 'Bs ' + entero(v); } } } };
+      var tipBs = { callbacks: { label: function (c) { return bs(c.parsed[c.chart.options.indexAxis === 'y' ? 'x' : 'y']); } } };
       var cv = el.querySelector('#gHist');
-      if (cv) X.grafico(cv, { type: 'line', data: { labels: g.map(function (x) { return x.fecha.slice(0, 5); }), datasets: [{ label: 'Pagado', data: g.map(function (x) { return x.total; }), borderColor: col.fuerte, backgroundColor: col.suave, fill: true, tension: .3, pointRadius: 3 }] },
-        options: { maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: function (c) { return bs(c.parsed.y); } } } }, scales: { y: { ticks: { callback: function (v) { return 'Bs ' + entero(v); } } } } } });
-      el.querySelectorAll('[data-pag]').forEach(function (b) { if (b.closest('.tabla-ancha')) return; b.addEventListener('click', function () { H.pag = Number(b.getAttribute('data-pag')); X.refrescar(); }); });
-      var tablas = el.querySelectorAll('.card');
-      el.querySelectorAll('tr[data-fila]').forEach(function (tr) {
-        var enTodos = tr.closest('.tabla-ancha');
-        tr.addEventListener('click', function () {
-          var i = Number(tr.getAttribute('data-fila'));
-          if (enTodos) { var h = (H.lista || [])[i]; if (h && X.informe) X.informe.abrir(h.id); }
-          else detallePago(l[i]);
-        });
+      if (cv) X.grafico(cv, { type: 'bar', data: { labels: g.map(function (x) { return x.fecha.slice(0, 5); }), datasets: [{ label: 'Pagado', data: g.map(function (x) { return x.total; }), backgroundColor: col.fuerte }] },
+        options: { maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: tipBs }, scales: eje } });
+      var mes = {}; l.forEach(function (x) { var d = X.aFecha(x.iso || x.fecha); if (!d) return; var k = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2); mes[k] = (mes[k] || 0) + x.total; });
+      var meses = Object.keys(mes).sort().slice(-12), NOM = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+      var cm = el.querySelector('#gMes');
+      if (cm) X.grafico(cm, { type: 'bar', data: { labels: meses.map(function (k) { return NOM[Number(k.slice(5)) - 1] + ' ' + k.slice(2, 4); }), datasets: [{ label: 'Pagado', data: meses.map(function (k) { return X.redondear(mes[k]); }), backgroundColor: meses.map(function (k, i) { return i % 2 ? col.medio : col.fuerte; }) }] },
+        options: { maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: tipBs }, scales: eje } });
+      var cc = el.querySelector('#gCant');
+      if (cc) X.grafico(cc, { type: 'line', data: { labels: g.map(function (x) { return x.fecha.slice(0, 5); }), datasets: [{ label: 'Repartidores', data: g.map(function (x) { return x.filas.length; }), borderColor: col.fuerte, fill: true, tension: .35 }] },
+        options: { maintainAspectRatio: false, plugins: { legend: { display: false } } } });
+      var por = {}; (D.hist || []).forEach(function (h) { var k = String(h.id); por[k] = por[k] || { n: h.nombre || k, t: 0 }; por[k].t += h.importe; });
+      var top = Object.keys(por).map(function (k) { return por[k]; }).sort(function (a, z) { return z.t - a.t; }).slice(0, 8);
+      var ct = el.querySelector('#gTop');
+      if (ct) X.grafico(ct, { type: 'bar', data: { labels: top.map(function (x) { var n = String(x.n).split(' '); return (n[0] + ' ' + (n[1] || '')).trim().toUpperCase(); }), datasets: [{ label: 'Cobrado', data: top.map(function (x) { return X.redondear(x.t); }), backgroundColor: top.map(function (x, i) { return i % 2 ? col.medio : col.fuerte; }), maxBarThickness: 22 }] },
+        options: { indexAxis: 'y', maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: tipBs }, scales: { x: { ticks: { callback: function (v) { return 'Bs ' + entero(v); } } } } } });
+      el.querySelectorAll('[data-sub]').forEach(function (b) { b.addEventListener('click', function () { H.sub = b.getAttribute('data-sub'); X.refrescar(); }); });
+      var lst = H.sub === 'fechas' ? H.listaF : H.lista;
+      el.querySelectorAll('.tabla-ancha tr[data-fila]').forEach(function (tr) {
+        tr.addEventListener('click', function () { var h = (lst || [])[Number(tr.getAttribute('data-fila'))]; if (h && X.informe) X.informe.abrir(h.id); });
       });
+      el.querySelectorAll('.tabla-ancha [data-pag]').forEach(function (b) { b.addEventListener('click', function (ev) { ev.stopPropagation(); if (H.sub === 'fechas') H.pagF = Number(b.getAttribute('data-pag')); else H.pagT = Number(b.getAttribute('data-pag')); X.refrescar(); }); });
+      var sf = el.querySelector('#sFecha'); if (sf) sf.addEventListener('change', function () { H.fecha = sf.value; H.pagF = 0; X.refrescar(); });
+      var bf = el.querySelector('#bHistF'); if (bf) bf.addEventListener('input', debounce(function () { H.buscarF = bf.value; H.pagF = 0; X.refrescar(); setFoco('#bHistF'); }, 300));
       var bh = el.querySelector('#bHist'); if (bh) bh.addEventListener('input', debounce(function () { H.buscar = bh.value; H.pagT = 0; X.refrescar(); setFoco('#bHist'); }, 350));
-      el.querySelectorAll('.tabla-ancha [data-pag]').forEach(function (b) { b.addEventListener('click', function (ev) { ev.stopPropagation(); H.pagT = Number(b.getAttribute('data-pag')); X.refrescar(); }); });
+      var enc = COLS_HIST.map(function (c) { return c[0]; }), fila = function (h) { return COLS_HIST.map(function (c) { return valorHist(h, c); }); };
+      var bxf = el.querySelector('#btnExpFecha'); if (bxf) bxf.addEventListener('click', function () {
+        X.excel([{ nombre: 'Pago ' + X.fecha(H.fecha).replace(/\//g, '-'), filas: [enc].concat((H.listaF || []).map(fila)) }], 'Pago-' + X.fecha(H.fecha).replace(/\//g, '-'));
+      });
       var bt = el.querySelector('#btnExpTodo'); if (bt) bt.addEventListener('click', function () {
-        X.excel([{ nombre: 'HistPagos', filas: [COLS_HIST.map(function (c) { return c[0]; })].concat((H.lista || []).map(function (h) { return COLS_HIST.map(function (c) { return valorHist(h, c); }); })) }], 'Historial-pagos-completo-' + X.hoyISO());
+        X.excel([{ nombre: 'HistPagos', filas: [enc].concat((H.lista || []).map(fila)) }], 'Historial-pagos-completo-' + X.hoyISO());
       });
       var be = el.querySelector('#btnExpHist');
       if (be) be.addEventListener('click', function () {
-        var filas = [COLS_HIST.map(function (c) { return c[0]; })];
-        l.forEach(function (x) { x.filas.forEach(function (f) { var h = Object.assign({ fecha: x.iso || x.fecha, id: f.r.id, nombre: f.r.nombre }, f.h); filas.push(COLS_HIST.map(function (c) { return valorHist(h, c); })); }); });
+        var filas = [enc]; l.forEach(function (x) { filasFecha(x, true).forEach(function (h) { filas.push(fila(h)); }); });
         X.excel([{ nombre: 'Por fecha', filas: [['Fecha de pago', 'Pagos', 'Total (Bs)']].concat(l.map(function (x) { return [x.fecha, x.filas.length, x.total]; })) }, { nombre: 'Detalle', filas: filas }], 'Historial-pagos-' + X.hoyISO());
       });
     }
   });
-  function detallePago(x) {
-    if (!x) return;
-    var filas = x.filas.slice().sort(function (a, b) { return X.normal(a.r.nombre).localeCompare(X.normal(b.r.nombre)); });
-    X.cajon('Pago del ' + esc(x.fecha), entero(filas.length) + ' pagos · ' + bs(x.total),
-      '<div class="herr"><button class="btn sec chico" id="bjP">' + ic('descargar') + 'Excel</button></div>' +
-      X.tabla([
-        { t: 'Repartidor', html: function (f) { return '<b>' + esc(f.r.nombre) + '</b><span class="sub num">ID ' + esc(f.r.id) + '</span>'; } },
-        { t: 'Semana', html: function (f) { return esc(f.h.semana) + '<span class="sub">' + esc(f.h.rango || '') + '</span>'; } },
-        { t: 'Factura', html: function (f) { return f.h.factura ? 'N.º ' + esc(f.h.factura) + '<span class="sub num">NIT ' + esc(f.h.nit || '—') + ' · ' + esc(f.h.fechaFactura || '') + '</span>' : '<span class="muted">—</span>'; } },
-        { t: 'Importe', clase: 'monto', html: function (f) { return bs(f.h.importe); } }
-      ], filas, { tam: 500, pie: '<td colspan="3">Total</td><td class="monto">' + bs(x.total) + '</td>' }),
-      function (c) {
-        c.querySelector('#bjP').addEventListener('click', function () {
-          X.excel([{ nombre: 'Pago ' + x.fecha.replace(/\//g, '-'), filas: [['ID Yango', 'Nombre', 'Semana', 'Período', 'Importe (Bs)']].concat(filas.map(function (f) { return [f.r.id, f.r.nombre, f.h.semana, f.h.rango, Number(f.h.importe) || 0]; })) }], 'Pago-' + x.fecha.replace(/\//g, '-'));
-        });
-      });
+  /* Pagos de una fecha con todas las columnas (filtrados por la búsqueda de esa fecha) */
+  function filasFecha(x, sinFiltro) {
+    if (!x) return [];
+    var b = sinFiltro ? '' : X.normal(H.buscarF);
+    return x.filas.map(function (f) { return Object.assign({ fecha: x.iso || x.fecha, id: f.r.id, nombre: f.r.nombre }, f.h); })
+      .filter(function (h) { return !b || (X.normal(h.nombre) + ' ' + h.id + ' ' + h.semana + ' ' + h.factura + ' ' + h.nit).indexOf(b) >= 0; })
+      .sort(function (a, z) { return X.normal(a.nombre).localeCompare(X.normal(z.nombre)); });
+  }
+  function tablaHist(filas, pag, pie) {
+    return '<div class="tabla-ancha">' + X.tabla(COLS_HIST.map(function (c) {
+      return { t: c[0], clase: c[1] === 'importe' ? 'monto' : '', html: function (h) { var v = valorHist(h, c); return c[1] === 'importe' ? bs(v) : c[1] === 'nombre' ? '<b>' + esc(v) + '</b>' : c[1] === 'rango' ? '<span style="white-space:nowrap">' + esc(v) + '</span>' : c[1] === 'autorizacion' ? '<span class="sub num" style="max-width:180px;display:block;overflow:hidden;text-overflow:ellipsis" title="' + esc(v) + '">' + esc(v) + '</span>' : esc(v); } };
+    }), filas, { clic: true, tam: 50, pag: pag || 0, pie: pie }) + '</div>';
   }
 
   /* ══════════ REPARTIDORES ══════════ */
@@ -538,7 +560,7 @@
       }).join('') + '</div>' +
         '<div class="herr"><div class="buscar">' + ic('buscar') + '<input type="search" id="bRep" placeholder="Buscar por nombre, ID o celular" value="' + esc(R.buscar) + '"></div></div>' +
         (f.length ? X.tabla([
-          { t: 'Repartidor', html: function (r) { return '<b>' + esc(r.nombre) + '</b><span class="sub num">ID ' + esc(r.id) + '</span>'; } },
+          { t: 'Repartidor', html: function (r) { return '<b>' + esc(r.nombre || 'Sin nombre') + '</b><span class="sub num">ID ' + esc(r.id) + '</span>'; } },
           { t: 'Celular', html: function (r) { return '<span class="num">' + esc(X.telVisible(r.celular)) + '</span>'; } },
           { t: 'Situación', html: function (r) { return (r.habilitado === false ? X.chip('mal', 'No habilitado') : X.chip('ok', 'Habilitado')) + ' ' + (r.poliza ? '' : X.chip('pend', 'Sin póliza')) + (X.clienteDe(r) ? ' ' + X.chip('contax', 'CONTAX') : ''); } },
           { t: 'Pendiente', clase: 'monto', html: function (r) { var p = (r.resumen || {}).pendientes || {}; return p.cantidad ? '<b>' + bs(p.total) + '</b><span class="sub">' + p.cantidad + ' sem.</span>' : '<span class="muted">—</span>'; } },

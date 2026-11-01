@@ -161,8 +161,8 @@
     base: '<ellipse cx="12" cy="5.5" rx="7.5" ry="2.8"/><path d="M4.5 5.5v13c0 1.6 3.4 2.8 7.5 2.8s7.5-1.2 7.5-2.8v-13"/><path d="M4.5 12c0 1.6 3.4 2.8 7.5 2.8s7.5-1.2 7.5-2.8"/>',
     banco: '<path d="M3 10h18L12 4z"/><path d="M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 20h18"/>',
     persona: '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/>',
-    plegar: '<path d="M4 4v16"/><path d="m15 7-5 5 5 5"/><path d="M10 12h10"/>',
-    desplegar: '<path d="M4 4v16"/><path d="m14 7 5 5-5 5"/><path d="M8 12h11"/>'
+    plegar: '<path d="M4 6.5h16M4 12h16M4 17.5h16"/>',
+    ampliar: '<circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2M11 8.5v5M8.5 11h5"/>'
   };
   function ic(n, extra) { return '<svg class="ic' + (extra ? ' ' + extra : '') + '" viewBox="0 0 24 24" ' + T + ' aria-hidden="true">' + (IC[n] || IC.flecha) + '</svg>'; }
 
@@ -375,7 +375,7 @@
 
   function pintarMenu() {
     var m = document.getElementById('menu'); if (!m) return;
-    var html = '<button class="menu-plegar" data-accion="plegar" title="' + (S.menuMini ? 'Dejar el menú abierto' : 'Ocultar el menú (quedan los íconos)') + '" aria-label="Ocultar o mostrar el menú">' + ic(S.menuMini ? 'desplegar' : 'plegar') + '</button>' +
+    var html = '<button class="menu-plegar" data-accion="plegar" title="' + (S.menuMini ? 'Dejar el menú abierto' : 'Ocultar el menú (quedan los íconos)') + '" aria-label="Ocultar o mostrar el menú">' + ic('plegar') + '</button>' +
       '<a class="menu-logo" href="#/tablero" data-ir="tablero"><img src="marca/logos/nummeros-logotipo-horizontal-' + (S.oscuro ? 'claro' : 'principal') + '.svg" alt="NUMMEROS"><img class="menu-iso" src="marca/logos/nummeros-isotipo-' + (S.oscuro ? 'claro' : 'principal') + '.svg" alt="NUMMEROS"><small>CONTROL</small></a>';
     SECCIONES.forEach(function (sec) {
       var items = Object.keys(PAG).filter(function (k) { return PAG[k].sec === sec && (!PAG[k].soloAdmin || esAdmin()); });
@@ -384,7 +384,7 @@
       html += '<span class="menu-sec">' + sec + '</span>';
       items.forEach(function (k) {
         var p = PAG[k], n = p.cuenta ? p.cuenta() : 0;
-        html += '<button class="menu-link' + (S.pagina === k ? ' activo' : '') + '" data-ir="' + k + '" title="' + esc(p.t) + '">' + ic(p.i) + '<span>' + p.t + '</span>' + (n ? '<span class="cuenta num">' + n + '</span>' : '') + '</button>';
+        html += '<button class="menu-link' + (S.pagina === k ? ' activo' : '') + '" data-ir="' + k + '" aria-label="' + esc(p.t) + '">' + ic(p.i) + '<span>' + p.t + '</span>' + (n ? '<span class="cuenta num">' + n + '</span>' : '') + '</button>';
       });
     });
     html += '<div class="menu-pie"><img src="marca/logos/nummeros-logotipo-firma-' + (S.oscuro ? 'claro' : 'principal') + '.svg" alt="NUMMEROS by CONTAX">CONTROL · v' + esc(C.version) + '</div>';
@@ -400,6 +400,7 @@
     if (!PAG[p] || (PAG[p].soloAdmin && !esAdmin())) p = 'tablero';
     S.pagina = p;
     document.querySelectorAll('.velo').forEach(function (v) { v.remove(); });
+    if (tip) tip.classList.remove('ver');
     if (CTRL.graficos) { CTRL.graficos.forEach(function (g) { try { g.destroy(); } catch (e) { } }); CTRL.graficos = []; }
     var el = document.getElementById('pagina');
     if (!el) return;
@@ -447,18 +448,108 @@
     return h;
   }
 
-  /* Gráficos con los colores de la marca */
+  /* Gráficos con los colores de la marca, en 3D (barras con volumen, líneas y tortas con sombra),
+     con animación al aparecer y botón «ampliar» que los abre en grande. */
+  var VOLUMEN = {
+    id: 'nm3d',
+    beforeDatasetDraw: function (ch, a) {
+      var t = ch.getDatasetMeta(a.index).type;
+      if (t === 'bar') return;
+      var c = ch.ctx; c.save();
+      c.shadowColor = S.oscuro ? 'rgba(0,0,0,.55)' : 'rgba(11,43,38,.28)';
+      c.shadowBlur = t === 'line' ? 10 : 14; c.shadowOffsetX = t === 'line' ? 0 : 4; c.shadowOffsetY = t === 'line' ? 7 : 8;
+    },
+    afterDatasetDraw: function (ch, a) {
+      var meta = ch.getDatasetMeta(a.index), c = ch.ctx;
+      if (meta.type !== 'bar') { c.restore(); return; }
+      if (meta.hidden) return;
+      var apilado = ch.options.scales && ch.options.scales.x && ch.options.scales.x.stacked;
+      meta.data.forEach(function (b, i) {
+        var p = b.getProps(['x', 'y', 'base', 'width', 'height'], true), hz = ch.options.indexAxis === 'y';
+        var iz, de, ar, ab;
+        if (hz) { ar = p.y - p.height / 2; ab = p.y + p.height / 2; iz = Math.min(p.x, p.base); de = Math.max(p.x, p.base); }
+        else { iz = p.x - p.width / 2; de = p.x + p.width / 2; ar = Math.min(p.y, p.base); ab = Math.max(p.y, p.base); }
+        if (!isFinite(iz + de + ar + ab) || (de - iz) < 1 || (ab - ar) < .5) return;
+        var g = Math.min(11, (hz ? ab - ar : de - iz) * .3), col = b.options.backgroundColor;
+        // En barras apiladas, la cara de arriba solo en la última con valor
+        var tapa = true;
+        if (apilado) ch.data.datasets.forEach(function (d, j) { if (j > a.index && !ch.getDatasetMeta(j).hidden && Number(d.data[i]) > 0) tapa = false; });
+        var cara = function (pts, sombra) {
+          c.beginPath(); c.moveTo(pts[0], pts[1]); for (var k = 2; k < pts.length; k += 2) c.lineTo(pts[k], pts[k + 1]); c.closePath();
+          c.fillStyle = col; c.fill(); c.fillStyle = sombra; c.fill();
+        };
+        c.save();
+        cara([de, ar, de + g, ar - g, de + g, ab - g, de, ab], 'rgba(0,0,0,.38)');
+        if (tapa || hz) cara([iz, ar, de, ar, de + g, ar - g, iz + g, ar - g], 'rgba(255,255,255,.34)');
+        c.restore();
+      });
+    }
+  };
+  function aRgba(hex, a) { var m = /^#?([0-9a-f]{6})$/i.exec(String(hex || '')); if (!m) return hex; var n = parseInt(m[1], 16); return 'rgba(' + (n >> 16) + ',' + (n >> 8 & 255) + ',' + (n & 255) + ',' + a + ')'; }
+  function preparar(config) {
+    var o = config.options = config.options || {};
+    o.layout = Object.assign({ padding: { top: 16, right: 16 } }, o.layout || {});
+    o.animation = Object.assign({ duration: 1000, easing: 'easeOutQuart', delay: function (x) { return x.type === 'data' && x.mode === 'default' ? x.dataIndex * 45 + x.datasetIndex * 120 : 0; } }, o.animation || {});
+    (config.data.datasets || []).forEach(function (d) {
+      var t = d.type || config.type;
+      if (t === 'bar') { d.borderRadius = 0; d.maxBarThickness = d.maxBarThickness || 56; }
+      if (t === 'line' && d.fill && typeof d.borderColor === 'string') {
+        var base = d.borderColor;
+        d.backgroundColor = function (x) {
+          var a = x.chart.chartArea; if (!a) return aRgba(base, .2);
+          var gr = x.chart.ctx.createLinearGradient(0, a.top, 0, a.bottom); gr.addColorStop(0, aRgba(base, .42)); gr.addColorStop(1, aRgba(base, 0)); return gr;
+        };
+        d.pointRadius = d.pointRadius == null ? 3 : d.pointRadius; d.pointHoverRadius = 7; d.borderWidth = d.borderWidth || 3;
+      }
+    });
+    return config;
+  }
+  function copiaConfig(cf) {
+    return { type: cf.type, data: { labels: (cf.data.labels || []).slice(), datasets: cf.data.datasets.map(function (d) { return Object.assign({}, d, { data: d.data.slice() }); }) }, options: Object.assign({}, cf.options) };
+  }
   function grafico(canvas, config) {
+    var original = copiaConfig(config);
     var hacer = function () {
       if (!window.Chart) return setTimeout(hacer, 150);
+      if (!document.contains(canvas)) return;
       var oscuro = S.oscuro;
       Chart.defaults.font.family = 'Questrial, "Century Gothic", sans-serif';
       Chart.defaults.color = oscuro ? '#8EB69B' : '#557363';
-      Chart.defaults.borderColor = oscuro ? '#235347' : '#DAF1DE';
-      var g = new Chart(canvas, config);
+      Chart.defaults.borderColor = oscuro ? 'rgba(142,182,155,.16)' : '#DAF1DE';
+      if (!Chart.registry.plugins.get('nm3d')) Chart.register(VOLUMEN);
+      var g = new Chart(canvas, preparar(config));
       CTRL.graficos.push(g);
     };
     hacer();
+    // «ampliar»: el mismo gráfico en grande, en una ventana
+    var card = canvas.closest('.card, .graf'), h = card && card.querySelector('.h2');
+    if (!card || card.querySelector('.ampliar')) return;
+    card.classList.add('con-graf');
+    var b = document.createElement('button'); b.type = 'button'; b.className = 'ampliar'; b.innerHTML = ic('ampliar') + 'ampliar';
+    (h || card).appendChild(b);
+    var abrir = function () {
+      var tit = h ? h.childNodes[0].textContent : 'Gráfico';
+      var v = ventana(esc(tit), h && h.querySelector('small') ? esc(h.querySelector('small').textContent) : '', '<div class="grafico grande"><canvas></canvas></div>', null, function (w) {
+        w.classList.add('ventana-graf');
+        var cv = w.querySelector('canvas'), g2 = null, ir2 = function () { if (!window.Chart) return setTimeout(ir2, 150); g2 = new Chart(cv, preparar(copiaConfig(original))); };
+        ir2();
+        var quitar = new MutationObserver(function () { if (!document.contains(cv)) { quitar.disconnect(); if (g2) g2.destroy(); } });
+        quitar.observe(document.body, { childList: true });
+      });
+      return v;
+    };
+    b.addEventListener('click', function (e) { e.stopPropagation(); abrir(); });
+    var area = canvas.parentNode; area.title = 'Toca para ampliar';
+    area.addEventListener('click', function (e) { if (!e.target.closest('.card .tabla')) abrir(); });
+  }
+  /* Barra 3D en SVG (reportes y PDF): frente, cara de arriba y costado */
+  function barraSvg(x, y, w, h, color, hz) {
+    if (w <= 0 || h <= 0) return '';
+    var g = Math.min(9, (hz ? h : w) * .3), f = function (n) { return Math.round(n * 10) / 10; };
+    var pol = function (pts, capa) { var t = pts.map(f).join(' '); return '<polygon points="' + t + '" fill="' + color + '"/><polygon points="' + t + '" fill="' + capa + '"/>'; };
+    return '<g>' + pol([x + w, y, x + w + g, y - g, x + w + g, y + h - g, x + w, y + h], 'rgba(0,0,0,.38)') +
+      pol([x, y, x + w, y, x + w + g, y - g, x + g, y - g], 'rgba(255,255,255,.34)') +
+      '<rect x="' + f(x) + '" y="' + f(y) + '" width="' + f(w) + '" height="' + f(h) + '" fill="' + color + '"/></g>';
   }
   function colores() {
     return S.oscuro ? { fuerte: '#8EB69B', medio: '#DAF1DE', suave: '#235347', alerta: '#FDB022' } : { fuerte: '#235347', medio: '#8EB69B', suave: '#DAF1DE', alerta: '#B54708' };
@@ -605,10 +696,22 @@
     var ap = document.querySelector('.app.menu-mini.menu-ver');
     if (ap && document.contains(e.target) && !e.target.closest('.menu') && !e.target.closest('[data-accion="plegar"]')) ap.classList.remove('menu-ver');
   });
+  /* Menú plegado: al pasar el cursor sobre un ícono se ve su nombre al costado (sin abrir el menú) */
+  var tip = null;
+  document.addEventListener('mouseover', function (e) {
+    var l = e.target.closest && e.target.closest('.app.menu-mini:not(.menu-ver) .menu-link, .app.menu-mini:not(.menu-ver) .menu-plegar');
+    if (!l) { if (tip) tip.classList.remove('ver'); return; }
+    if (!tip) { tip = document.createElement('div'); tip.className = 'menu-tip'; tip.setAttribute('role', 'tooltip'); document.body.appendChild(tip); }
+    var r = l.getBoundingClientRect();
+    tip.textContent = l.classList.contains('menu-plegar') ? 'Mostrar el menú' : l.getAttribute('aria-label');
+    tip.style.top = (r.top + r.height / 2) + 'px'; tip.style.left = (r.right + 14) + 'px';
+    tip.classList.add('ver');
+  });
   /* Menú plegable: con el menú abierto, el botón lo deja solo con íconos. Plegado, el botón lo abre encima
      del contenido; tocar fuera lo vuelve a plegar y «Dejar abierto» lo fija otra vez. */
   function plegarMenu() {
     var a = document.querySelector('.app'); if (!a) return;
+    if (tip) tip.classList.remove('ver');
     if (!S.menuMini) { S.menuMini = true; guardarLocal('ctrl_menu_mini', '1'); a.classList.add('menu-mini'); a.classList.remove('menu-ver'); }
     else if (!a.classList.contains('menu-ver')) a.classList.add('menu-ver');
     else { S.menuMini = false; guardarLocal('ctrl_menu_mini', '0'); a.classList.remove('menu-mini', 'menu-ver'); }
@@ -738,6 +841,6 @@
     cargaN: cargaN, cargaCifras: cargaCifras, cargaBarra: cargaBarra, anillo: anillo, anilloBoton: anilloBoton, esqueleto: esqueleto, clasicos: clasicos, textoClasicos: textoClasicos,
     cajon: cajon, ventana: ventana, confirmar: confirmar, formulario: formulario, activarComunes: activarComunes,
     csv: csv, excel: excel, cargarXLSX: cargarXLSX, bajarArchivo: bajarArchivo, bitacora: bitacora, puente: puente,
-    titulo: titulo, vacio: vacio, chip: chip, tabla: tabla, grafico: grafico, colores: colores, clienteDe: clienteDe
+    titulo: titulo, vacio: vacio, chip: chip, tabla: tabla, grafico: grafico, barraSvg: barraSvg, colores: colores, clienteDe: clienteDe
   };
 })();

@@ -660,12 +660,12 @@
      Página aparte, lista para imprimir o guardar en PDF, con gráficos en SVG. */
   function barras(datos, o) {
     o = o || {};
-    var max = Math.max.apply(null, datos.map(function (d) { return d.v; }).concat([1])), alto = 28, ancho = 520, eti = 130, h = datos.length * alto + 8;
+    var max = Math.max.apply(null, datos.map(function (d) { return d.v; }).concat([1])), alto = 30, ancho = 520, eti = 130, h = datos.length * alto + 14;
     return '<svg viewBox="0 0 ' + (ancho + eti + 110) + ' ' + h + '" width="100%" role="img" aria-label="' + esc(o.titulo || '') + '">' + datos.map(function (d, i) {
-      var w = Math.max(2, Math.round(d.v / max * ancho)), y = i * alto + 4;
+      var w = Math.max(2, Math.round(d.v / max * ancho)), y = i * alto + 10;
       return '<text x="' + (eti - 8) + '" y="' + (y + 15) + '" text-anchor="end" font-size="12" fill="#335F4F">' + esc(d.k) + '</text>' +
-        '<rect x="' + eti + '" y="' + y + '" width="' + w + '" height="20" rx="4" fill="' + (d.color || '#235347') + '"/>' +
-        '<text x="' + (eti + w + 6) + '" y="' + (y + 15) + '" font-size="12" fill="#051F20">' + esc(o.fmt ? o.fmt(d.v) : d.v) + '</text>';
+        X.barraSvg(eti, y, w, 18, d.color || '#235347', true) +
+        '<text x="' + (eti + w + 14) + '" y="' + (y + 15) + '" font-size="12" fill="#051F20">' + esc(o.fmt ? o.fmt(d.v) : d.v) + '</text>';
     }).join('') + '</svg>';
   }
   function reporte(p) {

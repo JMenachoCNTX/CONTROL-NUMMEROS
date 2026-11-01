@@ -143,6 +143,10 @@ img{max-width:100%}
 .menu-link.activo .cuenta{background:rgba(255,255,255,.25);color:inherit}
 .menu-pie{margin-top:auto;padding:16px 8px 0;font-size:12px;color:var(--suave)}
 .menu-pie img{height:30px;width:auto;display:block;margin-bottom:6px}
+.inf-ficha{display:flex;gap:18px;align-items:center;flex-wrap:wrap}
+.inf-ini{width:64px;height:64px;border-radius:50%;background:var(--verde-700);color:#fff;display:grid;place-items:center;font:700 24px var(--display);flex:none;box-shadow:0 6px 0 var(--verde-900),0 12px 22px rgba(5,31,32,.25)}
+.inf-nom{flex:1;min-width:220px}.inf-nom h2{font:700 26px/1.1 var(--display);margin:0 0 2px}
+.inf-acc{margin-left:auto}
 .lista-res{display:grid;gap:6px;margin-top:12px;max-height:420px;overflow:auto}
 .fila-res{display:flex;justify-content:space-between;gap:12px;align-items:center;border:1px solid var(--borde);background:var(--superficie);color:var(--texto);border-radius:var(--r-md);padding:10px 14px;cursor:pointer;text-align:left;font-size:14px}
 .fila-res:hover{border-color:var(--acento);background:rgba(35,83,71,.06)}
@@ -297,6 +301,27 @@ td .sub{display:block;font-size:12px;color:var(--suave)}
 .aviso-caja b{display:block;font:600 15px var(--display);margin-bottom:2px}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--verde-800);color:#fff;padding:11px 18px;border-radius:var(--r-md);font:600 14px var(--display);letter-spacing:.02em;z-index:200;box-shadow:var(--sombra-alta);max-width:calc(100% - 32px)}
 .grafico{position:relative;height:260px}
+/* Gráficos 3D: «ampliar» y efecto al pasar el cursor */
+.con-graf{transition:transform .2s ease,box-shadow .2s ease}
+.con-graf:hover{transform:translateY(-3px);box-shadow:var(--sombra-alta)}
+.con-graf .grafico{cursor:zoom-in}
+.ampliar{border:0;background:transparent;color:var(--suave);font:600 12px var(--display);letter-spacing:.04em;display:inline-flex;align-items:center;gap:4px;margin-left:10px;cursor:pointer;padding:2px 6px;border-radius:999px;vertical-align:middle;text-transform:lowercase}
+.ampliar .ic{width:14px;height:14px}
+.ampliar:hover{background:var(--campo);color:var(--texto)}
+.ventana.ventana-graf{width:min(1100px,100%);animation:crecer .38s cubic-bezier(.2,.9,.3,1.15)}
+@keyframes crecer{from{transform:scale(.72) translateY(30px);opacity:0}to{transform:none;opacity:1}}
+.grafico.grande{height:min(62vh,560px);cursor:default}
+.graf-rejilla{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+@media (max-width:980px){.graf-rejilla{grid-template-columns:1fr}}
+/* Nombre de la opción al pasar el cursor sobre el menú plegado */
+.menu-tip{position:fixed;z-index:90;transform:translate(-6px,-50%);opacity:0;pointer-events:none;background:var(--verde-800);color:#fff;font:600 13.5px var(--display);letter-spacing:.03em;padding:6px 12px;border-radius:8px;box-shadow:var(--sombra-alta);white-space:nowrap;transition:opacity .12s,transform .12s}
+.menu-tip:before{content:"";position:absolute;left:-5px;top:50%;margin-top:-5px;border:5px solid transparent;border-left:0;border-right-color:var(--verde-800)}
+.menu-tip.ver{opacity:1;transform:translate(0,-50%)}
+/* Subpestañas */
+.subpestanas{display:flex;gap:4px;border-bottom:2px solid var(--borde);margin:0 0 16px;overflow-x:auto}
+.subpestanas button{border:0;background:transparent;color:var(--suave);font:600 15px var(--display);letter-spacing:.03em;padding:10px 16px;cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px;white-space:nowrap;display:inline-flex;gap:8px;align-items:center}
+.subpestanas button[aria-selected="true"]{color:var(--texto);border-bottom-color:var(--acento)}
+.subpestanas button em{font-style:normal;font-size:12px;background:var(--campo);border-radius:999px;padding:0 8px}
 .fila-acc{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .miniatura{width:96px;height:60px;object-fit:cover;border-radius:8px;border:1px solid var(--borde);background:var(--campo)}
 .pasos-img{width:100%;height:auto;border-radius:var(--r-md);border:1px solid var(--borde);display:block}
@@ -392,20 +417,20 @@ td .sub{display:block;font-size:12px;color:var(--suave)}
   </div>
 </div>
 
-<script src="config.js?v=2.0.1"></script>
+<script src="config.js?v=2.1"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" defer></script>
-<script src="js/base.js?v=2.0.1"></script>
-<script src="js/operacion.js?v=2.0.1"></script>
-<script src="js/facturas.js?v=2.0.1"></script>
-<script src="js/portal.js?v=2.0.1"></script>
-<script src="js/gestion.js?v=2.0.1"></script>
-<script src="js/semanas.js?v=2.0.1"></script>
-<script src="js/banco.js?v=2.0.1"></script>
-<script src="js/documentos.js?v=2.0.1"></script>
-<script src="js/informe.js?v=2.0.1"></script>
+<script src="js/base.js?v=2.1"></script>
+<script src="js/operacion.js?v=2.1"></script>
+<script src="js/facturas.js?v=2.1"></script>
+<script src="js/portal.js?v=2.1"></script>
+<script src="js/gestion.js?v=2.1"></script>
+<script src="js/semanas.js?v=2.1"></script>
+<script src="js/banco.js?v=2.1"></script>
+<script src="js/documentos.js?v=2.1"></script>
+<script src="js/informe.js?v=2.1"></script>
 <script>CTRL.iniciar();</script>
 </body>
 </html>

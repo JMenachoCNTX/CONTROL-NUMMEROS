@@ -509,7 +509,7 @@
       // Repartidores sin nombre (por ejemplo los que no están en la hoja BDYANGO del robot): se toma el de BDYango
       if (D.repartidores) D.repartidores.forEach(function (x) { var t = b.todos[x.id]; if (!x.nombre && t && t.nombre) x.nombre = t.nombre; });
     }, function (e) { console.warn('BDYango:', e); D.bdyango = { cuentas: {}, lista: [], error: e.message || 'No se pudo leer BDYango.' }; })
-      .then(function () { if (S.pagina === 'bdyango' || S.pagina === 'pagos') X.refrescar(); });
+      .then(function () { if (['bdyango', 'pagos', 'repartidores', 'informe', 'historial', 'tablero'].indexOf(S.pagina) >= 0 && !document.querySelector('.velo') && !/INPUT|SELECT|TEXTAREA/.test((document.activeElement || {}).tagName)) X.refrescar(); });
     return bdyPromesa;
   }
   var BY = { ciudad: '', filtro: 'todos', buscar: '', pag: 0 };
