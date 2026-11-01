@@ -5,7 +5,7 @@
    en la página. La seguridad la dan las reglas (firestore.rules).
    ══════════════════════════════════════════════════════════ */
 window.CONTROL = {
-  version: '1.9',
+  version: '2.0',
 
   /* Proyecto propio de CONTROL (equipo, clientes CONTAX, excepciones, bitácora) */
   firebaseControl: {
@@ -57,7 +57,7 @@ window.CONTROL = {
      'sheets'  = de Google Sheets (PPendientes / HistPagosMTG), copiados por el robot del Portal. Así funciona hoy.
      'control' = de la colección «semanas» del Portal, que se llena importando las planillas semanales aquí.
      Cambiar a 'control' recién cuando el Portal lea «semanas» (ver INTEGRACION-NUCLEO-YANGO.md). */
-  fuentePagos: 'sheets',
+  fuentePagos: 'control',
 
   /* Documentos de los repartidores (deben coincidir con config.js del Portal) */
   documentos: { matriculaHasta: '2027-05-31', gestionEEFF: '2025' }

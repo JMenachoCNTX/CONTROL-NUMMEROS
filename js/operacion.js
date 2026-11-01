@@ -165,7 +165,7 @@
   /* ══════════ PAGOS ══════════ */
   var P = { filtro: 'todos', semana: '', buscar: '', pag: 0 };
   X.pagina('pagos', {
-    t: 'Pagos', i: 'pagos', orden: 3, sec: 'Operación',
+    t: 'Pagos pendientes', i: 'pagos', orden: 3, sec: 'Operación',
     render: function () {
       var reglaTxt = C.reglaPago === 'semana' ? 'Se paga cada semana que tenga su factura aprobada.' : 'Regla «todo o nada»: si a un repartidor le falta una factura o una está mal, se retienen todos sus pagos.';
       var SM = X.semanas, mc = SM && SM.modoControl();
@@ -197,10 +197,10 @@
         '<div class="card"><div class="pestanas" role="tablist">' + [['todos', 'Todos'], ['listos', 'Listos'], ['retenidos', 'Retenidos'], ['revision', 'En revisión'], ['contax', 'Clientes CONTAX']].map(function (p) {
           return '<button role="tab" aria-selected="' + (P.filtro === p[0]) + '" data-filtro="' + p[0] + '">' + p[1] + ' <em class="num">' + entero(cuenta(p[0])) + '</em></button>';
         }).join('') + '</div>' +
-        '<div class="herr"><div class="buscar">' + ic('buscar') + '<input type="search" id="bPagos" placeholder="Buscar por nombre, ID o celular" value="' + esc(P.buscar) + '"></div>' +
+        '<div class="herr"><div class="buscar">' + ic('buscar') +  '<input type="search" id="bPagos" placeholder="Buscar repartidor por nombre o ID" value="' + esc(P.buscar) + '"></div>' +
           '<select id="sSemana" aria-label="Semana"><option value="">Todas las semanas</option>' + semLista.map(function (s) { return '<option' + (s === P.semana ? ' selected' : '') + '>' + esc(s) + '</option>'; }).join('') + '</select></div>' +
         (f.length ? X.tabla([
-          { t: 'Repartidor', html: function (e) { return '<b>' + esc(e.r.nombre) + '</b><span class="sub num">ID ' + esc(e.r.id) + (e.cliente ? ' · ' : '') + '</span>' + (e.cliente ? X.chip('contax', 'Cliente CONTAX') : ''); } },
+          { t: 'Repartidor', html: function (e) { return '<b>' + esc(e.r.nombre || 'Sin nombre') + '</b><span class="sub num">ID ' + esc(e.r.id) + (e.cliente ? ' · ' : '') + '</span>' + (e.cliente ? X.chip('contax', 'Cliente CONTAX') : ''); } },
           { t: 'Semanas', html: function (e) { return e.semanas.map(function (s) { return '<div style="margin:2px 0"><span class="num">' + esc(semanaCorta(s.p.semana)) + '</span> ' + chipSemana(s.estado) + (s.p.rebote ? ' ' + X.chip('mal', 'Rebotó en el banco') : '') + '</div>'; }).join(''); } },
           { t: 'Estado', html: function (e) {
             var falta = e.listo && X.banco ? X.banco.faltaEnCuenta(X.banco.cuentaDe(e.r.id)) : [];
@@ -400,7 +400,17 @@
   }
 
   /* ══════════ HISTORIAL DE PAGOS ══════════ */
-  var H = { buscar: '' };
+  var H = { buscar: '', pagT: 0 };
+  /* Todos los pagos con las columnas de HistPagosMTG (lo que puede pedir auditoría) */
+  var COLS_HIST = [['Fecha de pago', function (h) { return X.fecha(h.fecha); }], ['Semana', 'semana'], ['Rango (Días)', 'rango'], ['ID del mensajero', 'id'], ['Nombre completo', 'nombre'],
+    ['Importe total', 'importe'], ['Comentarios', 'comentario'], ['Nro Factura', 'factura'], ['Fecha Factura', 'fechaFactura'], ['NIT Factura', 'nit'],
+    ['Nro Autorización', 'autorizacion'], ['Mes de Pago', 'mes'], ['Gestión SEM', 'gestion']];
+  function valorHist(h, c) { return typeof c[1] === 'function' ? c[1](h) : (h[c[1]] == null ? '' : h[c[1]]); }
+  function filtrarHist() {
+    var b = X.normal(H.buscar);
+    return (D.hist || []).filter(function (h) { return !b || (X.normal(h.nombre) + ' ' + h.id + ' ' + h.semana + ' ' + h.factura + ' ' + h.nit).indexOf(b) >= 0; })
+      .sort(function (a, z) { return String(z.fecha).localeCompare(String(a.fecha)) || X.normal(a.nombre).localeCompare(X.normal(z.nombre)); });
+  }
   function pagosPorFecha() {
     var m = {};
     // Historial propio de CONTROL («historialPagos», migrado de HistPagosMTG)
@@ -444,7 +454,16 @@
             { t: 'Semanas', html: function (x) { return esc(Object.keys(x.semanas).map(semanaCorta).join(', ')); } },
             { t: 'Pagos', clase: 'monto', html: function (x) { return entero(x.filas.length); } },
             { t: 'Total', clase: 'monto', html: function (x) { return '<b>' + bs(x.total) + '</b>'; } }
-          ], l, { clic: true, tam: 30, pag: H.pag || 0 }) + '</div>';
+          ], l, { clic: true, tam: 30, pag: H.pag || 0 }) + '</div>' +
+        (propio ? (function () {
+          var t = filtrarHist(); H.lista = t;
+          return '<div class="card"><div class="h2">Todos los pagos <small>' + entero(t.length) + ' pagos · ' + bs(t.reduce(function (s, h) { return s + h.importe; }, 0)) + ' · toca uno para ver el informe del repartidor</small></div>' +
+            '<div class="herr"><div class="buscar">' + ic('buscar') + '<input type="search" id="bHist" placeholder="Buscar por nombre, ID, semana, N.º de factura o NIT" value="' + esc(H.buscar) + '"></div>' +
+            '<button class="btn sec chico" id="btnExpTodo">' + ic('descargar') + 'Excel (' + entero(t.length) + ')</button></div>' +
+            '<div class="tabla-ancha">' + X.tabla(COLS_HIST.map(function (c) {
+              return { t: c[0], clase: c[1] === 'importe' ? 'monto' : '', html: function (h) { var v = valorHist(h, c); return c[1] === 'importe' ? bs(v) : c[1] === 'nombre' ? '<b>' + esc(v) + '</b>' : c[1] === 'autorizacion' ? '<span class="sub num" style="max-width:180px;display:block;overflow:hidden;text-overflow:ellipsis" title="' + esc(v) + '">' + esc(v) + '</span>' : esc(v); } };
+            }), t, { clic: true, tam: 50, pag: H.pagT }) + '</div></div>';
+        })() : '');
     },
     despues: function (el) {
       if (!D.repartidores) return;
@@ -452,12 +471,25 @@
       var cv = el.querySelector('#gHist');
       if (cv) X.grafico(cv, { type: 'line', data: { labels: g.map(function (x) { return x.fecha.slice(0, 5); }), datasets: [{ label: 'Pagado', data: g.map(function (x) { return x.total; }), borderColor: col.fuerte, backgroundColor: col.suave, fill: true, tension: .3, pointRadius: 3 }] },
         options: { maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: function (c) { return bs(c.parsed.y); } } } }, scales: { y: { ticks: { callback: function (v) { return 'Bs ' + entero(v); } } } } } });
-      el.querySelectorAll('[data-pag]').forEach(function (b) { b.addEventListener('click', function () { H.pag = Number(b.getAttribute('data-pag')); X.refrescar(); }); });
-      el.querySelectorAll('tr[data-fila]').forEach(function (tr) { tr.addEventListener('click', function () { detallePago(l[Number(tr.getAttribute('data-fila'))]); }); });
+      el.querySelectorAll('[data-pag]').forEach(function (b) { if (b.closest('.tabla-ancha')) return; b.addEventListener('click', function () { H.pag = Number(b.getAttribute('data-pag')); X.refrescar(); }); });
+      var tablas = el.querySelectorAll('.card');
+      el.querySelectorAll('tr[data-fila]').forEach(function (tr) {
+        var enTodos = tr.closest('.tabla-ancha');
+        tr.addEventListener('click', function () {
+          var i = Number(tr.getAttribute('data-fila'));
+          if (enTodos) { var h = (H.lista || [])[i]; if (h && X.informe) X.informe.abrir(h.id); }
+          else detallePago(l[i]);
+        });
+      });
+      var bh = el.querySelector('#bHist'); if (bh) bh.addEventListener('input', debounce(function () { H.buscar = bh.value; H.pagT = 0; X.refrescar(); setFoco('#bHist'); }, 350));
+      el.querySelectorAll('.tabla-ancha [data-pag]').forEach(function (b) { b.addEventListener('click', function (ev) { ev.stopPropagation(); H.pagT = Number(b.getAttribute('data-pag')); X.refrescar(); }); });
+      var bt = el.querySelector('#btnExpTodo'); if (bt) bt.addEventListener('click', function () {
+        X.excel([{ nombre: 'HistPagos', filas: [COLS_HIST.map(function (c) { return c[0]; })].concat((H.lista || []).map(function (h) { return COLS_HIST.map(function (c) { return valorHist(h, c); }); })) }], 'Historial-pagos-completo-' + X.hoyISO());
+      });
       var be = el.querySelector('#btnExpHist');
       if (be) be.addEventListener('click', function () {
-        var filas = [['Fecha de pago', 'Semana', 'Período', 'ID Yango', 'Nombre', 'Importe (Bs)', 'Ciudad', 'Nro Factura', 'Fecha Factura', 'NIT Factura', 'Nro Autorización']];
-        l.forEach(function (x) { x.filas.forEach(function (f) { filas.push([x.fecha, f.h.semana, f.h.rango, f.r.id, f.r.nombre, Number(f.h.importe) || 0, f.h.ciudad || '', f.h.factura || '', f.h.fechaFactura || '', f.h.nit || '', f.h.autorizacion || '']); }); });
+        var filas = [COLS_HIST.map(function (c) { return c[0]; })];
+        l.forEach(function (x) { x.filas.forEach(function (f) { var h = Object.assign({ fecha: x.iso || x.fecha, id: f.r.id, nombre: f.r.nombre }, f.h); filas.push(COLS_HIST.map(function (c) { return valorHist(h, c); })); }); });
         X.excel([{ nombre: 'Por fecha', filas: [['Fecha de pago', 'Pagos', 'Total (Bs)']].concat(l.map(function (x) { return [x.fecha, x.filas.length, x.total]; })) }, { nombre: 'Detalle', filas: filas }], 'Historial-pagos-' + X.hoyISO());
       });
     }
@@ -470,8 +502,9 @@
       X.tabla([
         { t: 'Repartidor', html: function (f) { return '<b>' + esc(f.r.nombre) + '</b><span class="sub num">ID ' + esc(f.r.id) + '</span>'; } },
         { t: 'Semana', html: function (f) { return esc(f.h.semana) + '<span class="sub">' + esc(f.h.rango || '') + '</span>'; } },
+        { t: 'Factura', html: function (f) { return f.h.factura ? 'N.º ' + esc(f.h.factura) + '<span class="sub num">NIT ' + esc(f.h.nit || '—') + ' · ' + esc(f.h.fechaFactura || '') + '</span>' : '<span class="muted">—</span>'; } },
         { t: 'Importe', clase: 'monto', html: function (f) { return bs(f.h.importe); } }
-      ], filas, { tam: 500, pie: '<td colspan="2">Total</td><td class="monto">' + bs(x.total) + '</td>' }),
+      ], filas, { tam: 500, pie: '<td colspan="3">Total</td><td class="monto">' + bs(x.total) + '</td>' }),
       function (c) {
         c.querySelector('#bjP').addEventListener('click', function () {
           X.excel([{ nombre: 'Pago ' + x.fecha.replace(/\//g, '-'), filas: [['ID Yango', 'Nombre', 'Semana', 'Período', 'Importe (Bs)']].concat(filas.map(function (f) { return [f.r.id, f.r.nombre, f.h.semana, f.h.rango, Number(f.h.importe) || 0]; })) }], 'Pago-' + x.fecha.replace(/\//g, '-'));

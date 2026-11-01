@@ -12,10 +12,17 @@
 
   /* Forma de pago 1 = cuenta del Banco Ganadero (moneda 0, entidad 0, sucursal 0).
      Forma 3 = transferencia ACH a otro banco (moneda 1, sucursal SCZ). Códigos tomados de las planillas reales. */
-  var ENTIDADES = {
-    1001: 'Banco Nacional de Bolivia', 1003: 'Banco Mercantil Santa Cruz', 1005: 'Banco de Crédito', 1009: 'Banco BISA',
-    1014: 'Banco Unión', 1016: 'Banco Económico', 1017: 'Banco Solidario', 1033: 'Banco FIE', 1034: 'Banco Fortaleza', 3001: 'Cooperativa Jesús Nazareno'
-  };
+  /* Cuadro «Códigos de Banco para Envío vía ACH» del Banco Ganadero: [código, nombre, abreviación, forma de pago] */
+  var TABLA_BANCOS = [
+    [1001, 'Banco Nacional de Bolivia', 'BNB', 3], [1003, 'Banco Mercantil Santa Cruz', 'BMSC', 3], [1005, 'Banco de Crédito de Bolivia', 'BCP', 3],
+    [1008, 'Banco Do Brasil', 'DO BRASIL', 3], [1009, 'Banco Bisa', 'BISA', 3], [1014, 'Banco Unión', 'Unión', 3], [1016, 'Banco Económico', 'Económico', 3],
+    [1017, 'Banco Solidario', 'Banco Sol', 3], [1033, 'Banco FIE', 'FIE', 3], [1034, 'Banco Fortaleza', 'Fortaleza', 3], [1035, 'Banco FASSIL S.A.', '', 3],
+    [1036, 'Banco PRODEM S.A.', 'PRODEM', 3], [3001, 'Cooperativa Jesús Nazareno', 'JESUS NAZARENO', 3], [53001, 'EEFECTIVO S.A.', 'TIGO MONEY', 3],
+    [74002, 'Banco PYME ECOFUTURO S.A.A.', 'ECOFUTURO', 3], [74003, 'Banco PYME de la Comunidad', 'BANCOMUNIDAD', 3],
+    ['', 'Banco Ganadero', 'Ganadero', 1], ['', 'Banco Ganadero', 'Yolo', 1], [1005, 'Banco de Crédito de Bolivia', 'Yape', 3]
+  ];
+  var ENTIDADES = {};
+  TABLA_BANCOS.forEach(function (b) { if (b[0] && !ENTIDADES[b[0]]) ENTIDADES[b[0]] = b[1]; });
   var CIUDAD_CORTA = { SCZ: 'SC', CBBA: 'CBBA', LPZ: 'LP' };
   var MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
   var ENC_BANCO = ['NRO. DE ORDEN', 'CODIGO DE CLIENTE', 'NRO.DECUENTA', 'NOMBRE DE CLIENTE', 'DOC DE IDENTIDAD', 'IMPORTE', 'FECHA DE PAGO', 'FORMA DE PAGO',
@@ -146,7 +153,8 @@
      actualizados de cada repartidor (Yango los mantiene). Se usa: ID, Nombre y Apellido (completos), CI,
      NIT, Teléfono, Banco, Cta Banco y Telegram. Si un ID aparece varias veces, manda la última fila con datos. */
   var BANCOS_TEXTO = [
-    [/GANADERO|^BG$|YOLO/, 1, 0], [/CREDITO|BCP/, 3, 1005], [/SOL(IDARIO)?\b|BANCOSOL/, 3, 1017], [/UNION/, 3, 1014],
+    [/GANADERO|^BG$|YOLO/, 1, 0], [/YAPE/, 3, 1005], [/BRASIL/, 3, 1008], [/FASSIL/, 3, 1035], [/PRODEM/, 3, 1036], [/TIGO|EFECTIVO/, 3, 53001],
+    [/ECOFUTURO/, 3, 74002], [/COMUNIDAD/, 3, 74003], [/CREDITO|BCP/, 3, 1005], [/SOL(IDARIO)?\b|BANCOSOL/, 3, 1017], [/UNION/, 3, 1014],
     [/MERCANTIL|BMSC/, 3, 1003], [/NACIONAL|BNB/, 3, 1001], [/BISA/, 3, 1009], [/ECONOMICO|BEC\b/, 3, 1016],
     [/FIE/, 3, 1033], [/FORTALEZA/, 3, 1034], [/NAZARENO/, 3, 3001]
   ];
@@ -498,17 +506,19 @@
     bdyPromesa = X.puente('admin_ctrl_hoja', { hoja: 'bdyango' }).then(function (r) {
       var b = filasBDYango(r.hojas.map(function (h) { return { nombre: h.nombre, enc: h.filas[0] || [], filas: h.filas.slice(1) }; }));
       D.bdyango = { cuentas: b.cuentas, lista: Object.keys(b.todos).map(function (id) { return b.todos[id]; }), sinBanco: b.sinBanco, desconocidos: b.desconocidos, leido: r.leido };
+      // Repartidores sin nombre (por ejemplo los que no están en la hoja BDYANGO del robot): se toma el de BDYango
+      if (D.repartidores) D.repartidores.forEach(function (x) { var t = b.todos[x.id]; if (!x.nombre && t && t.nombre) x.nombre = t.nombre; });
     }, function (e) { console.warn('BDYango:', e); D.bdyango = { cuentas: {}, lista: [], error: e.message || 'No se pudo leer BDYango.' }; })
       .then(function () { if (S.pagina === 'bdyango' || S.pagina === 'pagos') X.refrescar(); });
     return bdyPromesa;
   }
   var BY = { ciudad: '', filtro: 'todos', buscar: '', pag: 0 };
   X.pagina('bdyango', {
-    t: 'DBYango', i: 'cliente', orden: 5, sec: 'Operación',
+    t: 'DBYango', i: 'base', orden: 5, sec: 'Operación',
     render: function () {
       var B = D.bdyango;
       var cab = X.titulo('DBYango', 'Datos de «BOL Registro Activación» (Yango), leídos en vivo' + (B && B.leido ? ' · ' + X.hace(B.leido) : '') + '. Una fila por repartidor (su último registro). Sus cuentas son las que usa la planilla del banco.',
-        '<button class="btn sec" id="byRec">' + ic('historial') + 'Leer de nuevo</button>');
+        '<button class="btn sec" id="byExc">' + ic('descargar') + 'Excel de esta lista</button><button class="btn sec" id="byRec">' + ic('recargar') + 'Leer de nuevo</button>');
       if (!B) return cab + '<div class="card">' + X.cargaBarra('BDYango', 'Leyendo la hoja de Yango…') + '</div>';
       if (B.error) return cab + '<div class="card">' + X.vacio('No se pudo leer BDYango', B.error) + '</div>';
       var conCta = B.lista.filter(function (x) { return x.cuenta; }), bq = X.normal(BY.buscar);
@@ -526,23 +536,33 @@
           '<div class="kpi"><small>Repartidores</small><b class="num">' + entero(cuenta.todos) + '</b><em>' + entero(cuenta.activos) + ' activados</em></div>' +
           '<div class="kpi"><small>Con cuenta bancaria</small><b class="num">' + entero(conCta.length) + '</b><em>' + entero(conCta.filter(function (x) { return Number(x.forma) === 1; }).length) + ' Banco Ganadero</em></div>' +
           '<div class="kpi"><small>Sin banco o cuenta</small><b class="num">' + entero(cuenta.sinbanco) + '</b><em>no entran a la planilla</em></div>' +
-          '<div class="kpi"><small>Banco sin código</small><b class="num">' + entero(cuenta.sincodigo) + '</b><em>' + esc(Object.keys(B.desconocidos || {}).slice(0, 3).join(', ')) + '</em></div>' +
-        '</div><div class="card"><div class="pestanas" role="tablist">' + [['todos', 'Todos'], ['activos', 'Activados'], ['sinbanco', 'Sin banco o cuenta'], ['sincodigo', 'Banco sin código']].map(function (p) {
+          '<div class="kpi"><small>Banco no reconocido</small><b class="num">' + entero(cuenta.sincodigo) + '</b><em>' + esc(Object.keys(B.desconocidos || {}).slice(0, 3).join(', ')) + '</em></div>' +
+        '</div><div class="card"><div class="pestanas" role="tablist">' + [['todos', 'Todos'], ['activos', 'Activados'], ['sinbanco', 'Sin datos bancarios'], ['sincodigo', 'Banco no reconocido']].map(function (p) {
           return '<button role="tab" aria-selected="' + (BY.filtro === p[0]) + '" data-fby="' + p[0] + '">' + p[1] + ' <em class="num">' + entero(cuenta[p[0]]) + '</em></button>';
         }).join('') + '</div>' +
+ (BY.filtro === 'sincodigo' ? '<div class="aviso-caja mb">' + ic('ayuda') + '<div><b>¿Qué es «banco no reconocido»?</b>El banco que figura en BDYango no está en el cuadro de códigos del Banco Ganadero (pestaña «Códigos de banco»), o en esa columna escribieron otra cosa (por ejemplo un número). Sin código no se puede transferir: hay que pedir a Yango que lo corrija.</div></div>' : '') +
         '<div class="herr"><div class="buscar">' + ic('buscar') + '<input type="search" id="bBy" placeholder="Buscar por nombre, ID, CI, NIT, teléfono o cuenta" value="' + esc(BY.buscar) + '"></div>' +
           '<select id="sByCiudad" aria-label="Ciudad"><option value="">Todas las ciudades</option>' + ['SCZ', 'CBBA', 'LPZ'].map(function (c) { return '<option value="' + c + '"' + (BY.ciudad === c ? ' selected' : '') + '>' + esc(X.semanas.CIUDADES[c]) + '</option>'; }).join('') + '</select></div>' +
         (l.length ? X.tabla([
           { t: 'Repartidor', html: function (x) { return '<b>' + esc(x.nombre || '—') + '</b><span class="sub num">ID ' + esc(x.id) + (x.ci ? ' · CI ' + esc(x.ci) : '') + '</span>'; } },
           { t: 'Ciudad · Estado', html: function (x) { return esc(X.semanas.CIUDADES[x.ciudad] || x.ciudad || '') + '<span class="sub">' + esc(x.estadoYango || '') + (x.fecha ? ' · ' + esc(x.fecha) : '') + '</span>'; } },
           { t: 'Contacto', html: function (x) { return '<span class="num">' + esc(x.telefono || '—') + '</span>' + (x.telegram ? '<span class="sub">@' + esc(x.telegram) + '</span>' : ''); } },
-          { t: 'Banco · Cuenta', html: function (x) { return x.cuenta ? esc(x.desconocido ? x.bancoTexto + ' (sin código)' : nombreBanco(x)) + '<span class="sub num">' + esc(x.cuenta) + '</span>' : X.chip('mal', 'Sin datos bancarios'); } },
+          { t: 'Banco · Cuenta', html: function (x) { return x.cuenta ? (x.desconocido ? esc(x.bancoTexto) + ' ' + X.chip('mal', 'No reconocido') : esc(nombreBanco(x))) + '<span class="sub num">' + esc(x.cuenta) + '</span>' : X.chip('mal', 'Sin datos bancarios'); } },
           { t: 'NIT', html: function (x) { return '<span class="num">' + esc(x.nit || '—') + '</span>'; } }
         ], l, { clic: true, pag: BY.pag }) : X.vacio('Nada con este filtro')) + '</div>';
     },
     despues: function (el) {
       if (!D.bdyango && !bdyPromesa) cargarBDYango();
       var br = el.querySelector('#byRec'); if (br) br.addEventListener('click', function () { br.disabled = true; br.innerHTML = X.anilloBoton() + 'Leyendo'; cargarBDYango(true); });
+      var bx = el.querySelector('#byExc'); if (bx) bx.addEventListener('click', function () {
+        var nom = { todos: 'Todos', activos: 'Activados', sinbanco: 'Sin datos bancarios', sincodigo: 'Banco no reconocido' }[BY.filtro] + (BY.ciudad ? ' ' + BY.ciudad : '');
+        X.excel([{ nombre: nom.slice(0, 30), filas: [['ID Yango', 'Nombre', 'Ciudad', 'Estado', 'Fecha de registro', 'CI', 'NIT', 'Teléfono', 'Telegram', 'Correo', 'Banco (como figura en BDYango)', 'Cuenta', 'Banco para la planilla', 'Código', 'Observación']]
+          .concat((BY.lista || []).map(function (x) {
+            var obs = !x.cuenta ? 'Sin datos bancarios' : x.desconocido ? 'Banco no reconocido' : '';
+            return [x.id, x.nombre || '', X.semanas.CIUDADES[x.ciudad] || x.ciudad || '', x.estadoYango || '', x.fecha || '', x.ci || '', x.nit || '', x.telefono || '', x.telegram || '', x.correo || '',
+              x.bancoTexto || '', x.cuenta || '', x.cuenta && !x.desconocido ? nombreBanco(x) : '', x.cuenta && !x.desconocido ? (Number(x.forma) === 1 ? 'Ganadero' : x.entidad) : '', obs];
+          })) }], 'BDYango-' + nom.replace(/\s+/g, '-') + '-' + X.hoyISO());
+      });
       el.querySelectorAll('[data-fby]').forEach(function (b) { b.addEventListener('click', function () { BY.filtro = b.getAttribute('data-fby'); BY.pag = 0; X.refrescar(); }); });
       var sc = el.querySelector('#sByCiudad'); if (sc) sc.addEventListener('change', function () { BY.ciudad = sc.value; BY.pag = 0; X.refrescar(); });
       var bq = el.querySelector('#bBy'); if (bq) bq.addEventListener('input', X.debounce(function () { BY.buscar = bq.value; BY.pag = 0; X.refrescar(); X.setFoco('#bBy'); }, 300));
@@ -558,6 +578,23 @@
         dato('Banco', x.bancoTexto) + dato('Cuenta', x.cuenta) + dato('Matrícula de Comercio', x.matricula) + dato('Caducidad del seguro', x.seguroVence) + '</div>' +
       (g && g.origen === 'manual' ? '<div class="aviso-caja">' + ic('ayuda') + '<div><b>Cuenta corregida a mano en CONTROL</b>La planilla usa ' + esc(nombreBanco(g)) + ' ' + esc(g.cuenta) + ', no la de BDYango.</div></div>' : ''));
   }
+
+  /* ══════════ CÓDIGOS DE BANCO (cuadro con el que se arma la planilla) ══════════ */
+  X.pagina('codigosBanco', {
+    t: 'Códigos de banco', i: 'banco', orden: 5.5, sec: 'Operación',
+    render: function () {
+      var uso = {};
+      ((D.bdyango && D.bdyango.lista) || []).forEach(function (x) { if (!x.cuenta || x.desconocido) return; var k = Number(x.forma) === 1 ? 'G' : String(x.entidad); uso[k] = (uso[k] || 0) + 1; });
+      return X.titulo('Códigos de banco', 'Cuadro «Códigos de Banco para Envío vía ACH» con el que se arma la planilla del Banco Ganadero. Forma de pago 1 = cuenta del Banco Ganadero; 3 = transferencia ACH a otro banco con su código.') +
+        '<div class="card">' + X.tabla([
+          { t: 'Código', html: function (b) { return '<b class="num">' + esc(b[0] || '—') + '</b>'; } },
+          { t: 'Nombre del banco', html: function (b) { return esc(b[1]); } },
+          { t: 'Abreviación (como lo escriben)', html: function (b) { return esc(b[2] || '—'); } },
+          { t: 'Forma de pago', clase: 'monto', html: function (b) { return '<b>' + b[3] + '</b>'; } },
+          { t: 'Repartidores en BDYango', clase: 'monto', html: function (b, i) { var k = b[3] === 1 ? 'G' : String(b[0]); return b[2] === 'Yolo' || b[2] === 'Yape' ? '<span class="muted">incluido arriba</span>' : entero(uso[k] || 0); } }
+        ], TABLA_BANCOS, { tam: 50 }) + '</div>';
+    }
+  });
 
   X.banco = {
     cargar: cargar, cargarBDYango: cargarBDYango, cuentaDe: cuentaDe, faltaEnCuenta: faltaEnCuenta, nombreBanco: nombreBanco, verCuentas: verCuentas, importarCuentas: importarCuentas,

@@ -143,6 +143,35 @@ img{max-width:100%}
 .menu-link.activo .cuenta{background:rgba(255,255,255,.25);color:inherit}
 .menu-pie{margin-top:auto;padding:16px 8px 0;font-size:12px;color:var(--suave)}
 .menu-pie img{height:30px;width:auto;display:block;margin-bottom:6px}
+.lista-res{display:grid;gap:6px;margin-top:12px;max-height:420px;overflow:auto}
+.fila-res{display:flex;justify-content:space-between;gap:12px;align-items:center;border:1px solid var(--borde);background:var(--superficie);color:var(--texto);border-radius:var(--r-md);padding:10px 14px;cursor:pointer;text-align:left;font-size:14px}
+.fila-res:hover{border-color:var(--acento);background:rgba(35,83,71,.06)}
+.tabla-ancha{overflow-x:auto}.tabla-ancha table{min-width:1500px}
+/* Menú plegable: solo íconos; al pasar el cursor, el ícono «sobresale» */
+.menu{transition:width .18s}
+.menu-plegar{align-self:flex-end;border:0;background:transparent;color:var(--suave);width:34px;height:34px;border-radius:var(--r-md);display:grid;place-items:center;cursor:pointer;margin:-10px -4px 0 0}
+.menu-plegar:hover{background:rgba(35,83,71,.1);color:var(--menu-texto)}
+.menu-iso{display:none!important}
+@media (min-width:981px){
+.app.menu-mini{grid-template-columns:76px minmax(0,1fr)}
+.app.menu-mini .menu{padding:16px 10px;overflow-x:visible;align-items:center}
+.app.menu-mini .menu-plegar{align-self:center;margin:0 0 8px}
+.app.menu-mini .menu-logo{padding:2px 0 14px}
+.app.menu-mini .menu-logo img:first-child,.app.menu-mini .menu-logo small,.app.menu-mini .menu-sec,.app.menu-mini .menu-pie,.app.menu-mini .menu-link span{display:none}
+.app.menu-mini .menu-iso{display:block!important;height:30px;width:auto}
+.app.menu-mini .menu-sec+.menu-link,.app.menu-mini .menu-link{width:48px;height:44px;justify-content:center;padding:0;position:relative;transition:transform .15s,box-shadow .15s,background .15s;margin:2px 0}
+.app.menu-mini .menu-link:hover{transform:scale(1.18) translateX(3px);background:var(--superficie);box-shadow:var(--sombra-alta);z-index:2}
+.app.menu-mini .menu-link .ic{width:22px;height:22px}
+.app.menu-mini .menu-link .cuenta{display:block;position:absolute;top:2px;right:0;min-width:16px;font-size:10px;padding:0 4px}
+.app.menu-mini.menu-ver .menu{position:fixed;inset:0 auto 0 0;width:256px;z-index:60;box-shadow:var(--sombra-alta);align-items:stretch;padding:22px 14px 16px}
+.app.menu-mini.menu-ver .menu-plegar{align-self:flex-end;margin:-10px -4px 0 0}
+.app.menu-mini.menu-ver .menu-logo img:first-child,.app.menu-mini.menu-ver .menu-logo small,.app.menu-mini.menu-ver .menu-sec,.app.menu-mini.menu-ver .menu-pie,.app.menu-mini.menu-ver .menu-link span{display:block}
+.app.menu-mini.menu-ver .menu-link span.cuenta{display:block}
+.app.menu-mini.menu-ver .menu-iso{display:none!important}
+.app.menu-mini.menu-ver .menu-link{width:100%;height:auto;justify-content:flex-start;padding:8px 10px}
+.app.menu-mini.menu-ver .menu-link:hover{transform:none;box-shadow:none;background:rgba(35,83,71,.08)}
+.app.menu-mini.menu-ver .menu-link .cuenta{position:static;margin-left:auto}
+}
 .cab{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:12px;padding:12px clamp(16px,3vw,32px);background:color-mix(in srgb,var(--fondo) 92%,transparent);backdrop-filter:blur(10px);border-bottom:1px solid var(--borde)}
 .cab .hamb{display:none}
 .cab-estado{font-size:13px;color:var(--suave);display:flex;align-items:center;gap:8px;min-width:0}
@@ -173,6 +202,7 @@ img{max-width:100%}
   .app.menu-abierto .menu{transform:none}
   .app.menu-abierto:after{content:"";position:fixed;inset:0;background:rgba(5,31,32,.4);z-index:50}
   .cab .hamb{display:inline-grid}
+  .menu-plegar{display:none}
   .cab-estado{display:none}
   .usuario span{display:none}
 }
@@ -362,19 +392,20 @@ td .sub{display:block;font-size:12px;color:var(--suave)}
   </div>
 </div>
 
-<script src="config.js?v=1.9"></script>
+<script src="config.js?v=2.0"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" defer></script>
-<script src="js/base.js?v=1.9"></script>
-<script src="js/operacion.js?v=1.9"></script>
-<script src="js/facturas.js?v=1.9"></script>
-<script src="js/portal.js?v=1.9"></script>
-<script src="js/gestion.js?v=1.9"></script>
-<script src="js/semanas.js?v=1.9"></script>
-<script src="js/banco.js?v=1.9"></script>
-<script src="js/documentos.js?v=1.9"></script>
+<script src="js/base.js?v=2.0"></script>
+<script src="js/operacion.js?v=2.0"></script>
+<script src="js/facturas.js?v=2.0"></script>
+<script src="js/portal.js?v=2.0"></script>
+<script src="js/gestion.js?v=2.0"></script>
+<script src="js/semanas.js?v=2.0"></script>
+<script src="js/banco.js?v=2.0"></script>
+<script src="js/documentos.js?v=2.0"></script>
+<script src="js/informe.js?v=2.0"></script>
 <script>CTRL.iniciar();</script>
 </body>
 </html>

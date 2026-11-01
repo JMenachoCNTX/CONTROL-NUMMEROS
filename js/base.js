@@ -16,6 +16,7 @@
     nombre: '',
     pagina: 'tablero',
     oscuro: leer('ctrl_oscuro') === '1',
+    menuMini: leer('ctrl_menu_mini') === '1',
     menuAbierto: false
   };
   /* ── Datos en memoria ── */
@@ -156,7 +157,12 @@
     portal: '<rect x="7" y="2.5" width="10" height="19" rx="2"/><path d="M11 18.5h2"/>',
     grafico: '<path d="M4 20V11M10 20V5M16 20v-8M21 20H3"/>',
     filtro: '<path d="M4 5h16l-6 8v6l-4-2v-4z"/>',
-    escudo: '<path d="M12 3 4 6v6c0 4.5 3.4 8.2 8 9 4.6-.8 8-4.5 8-9V6z"/><path d="m9 12 2 2 4-4"/>'
+    escudo: '<path d="M12 3 4 6v6c0 4.5 3.4 8.2 8 9 4.6-.8 8-4.5 8-9V6z"/><path d="m9 12 2 2 4-4"/>',
+    base: '<ellipse cx="12" cy="5.5" rx="7.5" ry="2.8"/><path d="M4.5 5.5v13c0 1.6 3.4 2.8 7.5 2.8s7.5-1.2 7.5-2.8v-13"/><path d="M4.5 12c0 1.6 3.4 2.8 7.5 2.8s7.5-1.2 7.5-2.8"/>',
+    banco: '<path d="M3 10h18L12 4z"/><path d="M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 20h18"/>',
+    persona: '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/>',
+    plegar: '<path d="M4 4v16"/><path d="m15 7-5 5 5 5"/><path d="M10 12h10"/>',
+    desplegar: '<path d="M4 4v16"/><path d="m14 7 5 5-5 5"/><path d="M8 12h11"/>'
   };
   function ic(n, extra) { return '<svg class="ic' + (extra ? ' ' + extra : '') + '" viewBox="0 0 24 24" ' + T + ' aria-hidden="true">' + (IC[n] || IC.flecha) + '</svg>'; }
 
@@ -369,7 +375,8 @@
 
   function pintarMenu() {
     var m = document.getElementById('menu'); if (!m) return;
-    var html = '<a class="menu-logo" href="#/tablero" data-ir="tablero"><img src="marca/logos/nummeros-logotipo-horizontal-' + (S.oscuro ? 'claro' : 'principal') + '.svg" alt="NUMMEROS"><small>CONTROL</small></a>';
+    var html = '<button class="menu-plegar" data-accion="plegar" title="' + (S.menuMini ? 'Dejar el menú abierto' : 'Ocultar el menú (quedan los íconos)') + '" aria-label="Ocultar o mostrar el menú">' + ic(S.menuMini ? 'desplegar' : 'plegar') + '</button>' +
+      '<a class="menu-logo" href="#/tablero" data-ir="tablero"><img src="marca/logos/nummeros-logotipo-horizontal-' + (S.oscuro ? 'claro' : 'principal') + '.svg" alt="NUMMEROS"><img class="menu-iso" src="marca/logos/nummeros-isotipo-' + (S.oscuro ? 'claro' : 'principal') + '.svg" alt="NUMMEROS"><small>CONTROL</small></a>';
     SECCIONES.forEach(function (sec) {
       var items = Object.keys(PAG).filter(function (k) { return PAG[k].sec === sec && (!PAG[k].soloAdmin || esAdmin()); });
       items.sort(function (a, b) { return (PAG[a].orden || 50) - (PAG[b].orden || 50); });
@@ -377,7 +384,7 @@
       html += '<span class="menu-sec">' + sec + '</span>';
       items.forEach(function (k) {
         var p = PAG[k], n = p.cuenta ? p.cuenta() : 0;
-        html += '<button class="menu-link' + (S.pagina === k ? ' activo' : '') + '" data-ir="' + k + '">' + ic(p.i) + '<span>' + p.t + '</span>' + (n ? '<span class="cuenta num">' + n + '</span>' : '') + '</button>';
+        html += '<button class="menu-link' + (S.pagina === k ? ' activo' : '') + '" data-ir="' + k + '" title="' + esc(p.t) + '">' + ic(p.i) + '<span>' + p.t + '</span>' + (n ? '<span class="cuenta num">' + n + '</span>' : '') + '</button>';
       });
     });
     html += '<div class="menu-pie"><img src="marca/logos/nummeros-logotipo-firma-' + (S.oscuro ? 'claro' : 'principal') + '.svg" alt="NUMMEROS by CONTAX">CONTROL · v' + esc(C.version) + '</div>';
@@ -554,7 +561,7 @@
   /* ══════════ ARMADO DEL PANEL ══════════ */
   function pintarApp() {
     var u = S.usuario, foto = u.photoURL;
-    raiz.innerHTML = '<div class="app">' +
+    raiz.innerHTML = '<div class="app' + (S.menuMini ? ' menu-mini' : '') + '">' +
       '<nav class="menu" id="menu" aria-label="Menú principal"></nav>' +
       '<div class="cuerpo">' +
         '<header class="cab"><button class="icono-btn hamb" data-accion="menu" aria-label="Abrir menú">' + ic('menu') + '</button>' +
@@ -587,13 +594,26 @@
     var k = acc.getAttribute('data-accion');
     if (k === 'salir') salir();
     else if (k === 'menu') document.querySelector('.app').classList.toggle('menu-abierto');
+    else if (k === 'plegar') plegarMenu();
     else if (k === 'tema') { S.oscuro = !S.oscuro; guardarLocal('ctrl_oscuro', S.oscuro ? '1' : '0'); aplicarTema(); pintarApp(); avisoPortal(); ir(S.pagina, true); }
     else if (k === 'recargar') { recargarTodo(true); }
   });
   document.addEventListener('click', function (e) {
     if (e.target.classList && e.target.classList.contains('app') === false && document.querySelector('.app.menu-abierto') && !e.target.closest('.menu') && !e.target.closest('[data-accion="menu"]'))
       document.querySelector('.app').classList.remove('menu-abierto');
+    // Menú plegado y abierto un momento: al tocar fuera vuelve a quedar solo con los íconos
+    var ap = document.querySelector('.app.menu-mini.menu-ver');
+    if (ap && !e.target.closest('.menu')) ap.classList.remove('menu-ver');
   });
+  /* Menú plegable: con el menú abierto, el botón lo deja solo con íconos. Plegado, el botón lo abre encima
+     del contenido; tocar fuera lo vuelve a plegar y «Dejar abierto» lo fija otra vez. */
+  function plegarMenu() {
+    var a = document.querySelector('.app'); if (!a) return;
+    if (!S.menuMini) { S.menuMini = true; guardarLocal('ctrl_menu_mini', '1'); a.classList.add('menu-mini'); a.classList.remove('menu-ver'); }
+    else if (!a.classList.contains('menu-ver')) a.classList.add('menu-ver');
+    else { S.menuMini = false; guardarLocal('ctrl_menu_mini', '0'); a.classList.remove('menu-mini', 'menu-ver'); }
+    pintarMenu();
+  }
   function aplicarTema() {
     document.documentElement.setAttribute('data-theme', S.oscuro ? 'oscuro' : 'claro');
     var m = document.querySelector('meta[name=theme-color]'); if (m) m.content = S.oscuro ? '#051F20' : '#F4FAF5';

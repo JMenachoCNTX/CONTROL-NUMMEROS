@@ -130,7 +130,8 @@
   /* ══════════ HISTORIAL DE PAGOS («historialPagos» del Portal) ══════════
      Reemplaza a la hoja HistPagosMTG. Un documento por fecha de pago (y parte, máx. 2000 pagos),
      con los pagos en «filas» (texto JSON) para no gastar una escritura por pago:
-     [semana, rango, idYango, nombre, importe, ciudad, nroFactura, fechaFactura, nitFactura, autorizacion, nro]. */
+     [semana, rango, idYango, nombre, importe, comentarios, nroFactura, fechaFactura, nitFactura, autorizacion, nro, mesPago, gestion]
+     (las mismas columnas de HistPagosMTG). Cada repartidor ve los suyos en «historialRider/{uid}» del Portal. */
   var TAM_PARTE = 2000;
   function colH() { return X.dbP.collection('historialPagos'); }
   function cargarHistorial() {
@@ -142,8 +143,8 @@
         try { filas = JSON.parse(x.filas || '[]'); } catch (e) { console.warn('historialPagos ' + d.id, e); }
         partes.push({ id: d.id, fecha: x.fecha, origen: x.origen || '' });
         filas.forEach(function (f) {
-          l.push({ fecha: x.fecha, semana: f[0], rango: f[1], id: String(f[2]), nombre: f[3], importe: Number(f[4]) || 0, ciudad: f[5] || '',
-            factura: f[6] || '', fechaFactura: f[7] || '', nit: f[8] || '', autorizacion: f[9] || '', nro: f[10] || '' });
+          l.push({ fecha: x.fecha, semana: f[0], rango: f[1], id: String(f[2]), nombre: f[3], importe: Number(f[4]) || 0, comentario: f[5] || '', ciudad: f[5] || '',
+            factura: f[6] || '', fechaFactura: f[7] || '', nit: f[8] || '', autorizacion: f[9] || '', nro: f[10] || '', mes: f[11] || '', gestion: f[12] || '' });
         });
       });
       D.hist = l; D.histPartes = partes;
@@ -161,6 +162,7 @@
         return { semana: h.semana, rango: h.rango, importe: h.importe, ciudad: h.ciudad, factura: h.factura, fechaPago: X.fecha(h.fecha), _o: d ? d.getTime() : 0 };
       }).sort(function (a, b) { return b._o - a._o; });
       r.historial = l;
+      if (!r.nombre && por[r.uid] && por[r.uid][0]) r.nombre = por[r.uid][0].nombre;
       r.resumen = r.resumen || {};
       r.resumen.pagados = { cantidad: l.length, total: X.redondear(l.reduce(function (t, x) { return t + x.importe; }, 0)) };
     });
@@ -486,7 +488,8 @@
       var id = String(f[4] || '').trim(); if (!id && !f[6]) return;
       var fecha = fechaISO(f[1]);
       hist.push({ fecha: fecha || 'sin-fecha', fila: [String(f[2] || '').trim(), String(f[3] || '').trim(), id, String(f[5] || '').trim(), X.redondear(numHoja(f[6])),
-        String(f[7] || '').trim(), String(f[8] || '').trim(), String(f[9] || '').trim(), String(f[10] || '').trim(), String(f[11] || '').trim(), String(f[0] || '').trim()], gestion: f[13] });
+        String(f[7] || '').trim(), String(f[8] || '').trim(), String(f[9] || '').trim(), String(f[10] || '').trim(), String(f[11] || '').trim(), String(f[0] || '').trim(),
+        String(f[12] || '').trim(), String(f[13] || '').trim()], gestion: f[13] });
     });
     de('PPendientes').forEach(function (f) {
       var id = String(f[4] || '').trim(); if (!id && !f[6]) return;
@@ -505,6 +508,13 @@
         var filas = porFecha[f].slice(i, i + TAM_PARTE);
         partes.push({ id: f + '_' + n, fecha: f, parte: n, filas: filas, total: X.redondear(filas.reduce(function (t, x) { return t + x[4]; }, 0)) });
       }
+    });
+    // Historial de cada repartidor para su portal: [semana, rango, importe, fechaPago, nroFactura]
+    var porRider = {};
+    datos.hist.forEach(function (h) {
+      var u = X.idSeguro(h.fila[2]); if (!u) return;
+      var r = porRider[u] || (porRider[u] = { uid: u, id: h.fila[2], filas: [] });
+      r.filas.push([h.fila[0], h.fila[1], h.fila[4], h.fecha, h.fila[6]]);
     });
     // Semanas abiertas que la hoja ya muestra pagadas pasan a «pagado»
     var pagadas = [], vistas = {};
@@ -525,7 +535,7 @@
       nuevas[k] = { id: p.id, uid: uid, nombre: p.nombre, celular: '', ciudad: CIUDAD_HOJA[X.normal(p.comentario)] || '', semana: p.semana, anio: anio, orden: anio * 100 + n,
         rango: p.rango, importe: p.importe, estado: 'pendiente', planilla: null, fechaPago: null, retenido: true, origen: 'migracion' };
     });
-    return { partes: partes, pagadas: pagadas, nuevas: nuevas, aPendiente: aPendiente, yaEstaban: yaEstaban, sinSemana: sinSemana,
+    return { partes: partes, riders: Object.keys(porRider).map(function (u) { return porRider[u]; }), pagadas: pagadas, nuevas: nuevas, aPendiente: aPendiente, yaEstaban: yaEstaban, sinSemana: sinSemana,
       hoja: { hist: datos.hist.length, histTotal: suma(datos.hist), pend: datos.pend.length, pendTotal: suma(datos.pend, 'importe') } };
   }
   function migrar() {
@@ -559,9 +569,10 @@
             var ops = nuevas.map(function (k) { var d = m.nuevas[k]; d.lote = lote; d.loteCreado = lote; d.creado = X.servidor(); d.actualizado = X.servidor(); d.quien = quien; return { ref: col().doc(k), datos: d }; })
               .concat(m.pagadas.map(function (x) { return { tipo: 'update', ref: col().doc(x.k), datos: { estado: 'pagado', fechaPago: x.fecha, actualizado: X.servidor(), quien: quien } }; }))
               .concat(m.aPendiente.map(function (x) { return { tipo: 'update', ref: col().doc(x.k), datos: { estado: 'pendiente', importe: x.importe, retenido: true, actualizado: X.servidor(), quien: quien } }; }))
-              .concat(viejas.map(function (p) { return { tipo: 'delete', ref: colH().doc(p.id) }; }));
+              .concat(viejas.map(function (p) { return { tipo: 'delete', ref: colH().doc(p.id) }; }))
+              .concat(m.riders.map(function (r) { return { ref: X.dbP.collection('historialRider').doc(r.uid), datos: { uid: r.uid, id: r.id, cantidad: r.filas.length, filas: JSON.stringify(r.filas), origen: 'HistPagosMTG', actualizado: X.servidor() } }; }));
             paso().then(function () {
-              return escribir(ops, function (a, t) { ok.innerHTML = X.anilloBoton() + 'Pendientes ' + entero(a) + ' de ' + entero(t); });
+              return escribir(ops, function (a, t) { ok.innerHTML = X.anilloBoton() + 'Pendientes y repartidores ' + entero(a) + ' de ' + entero(t); });
             }).then(function () {
               return X.bitacora('Migró desde Sheets', h.hist + ' pagos del historial (' + h.histTotal + ') · ' + h.pend + ' pendientes (' + h.pendTotal + ')');
             }).then(cargarHistorial).then(function () {
