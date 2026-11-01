@@ -5,7 +5,7 @@
    en la página. La seguridad la dan las reglas (firestore.rules).
    ══════════════════════════════════════════════════════════ */
 window.CONTROL = {
-  version: '2.0',
+  version: '2.0.1',
 
   /* Proyecto propio de CONTROL (equipo, clientes CONTAX, excepciones, bitácora) */
   firebaseControl: {
