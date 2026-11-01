@@ -100,9 +100,11 @@
     '.inf-tabla{width:100%;border-collapse:collapse;font-size:9.5px}.inf-tabla th{background:#1F2D4D;color:#fff;font-weight:600;padding:5px 4px;text-align:left}' +
     '.inf-tabla .grupo th{font-size:13px;font-weight:400;text-align:center}.inf-tabla td{padding:3px 4px;border-bottom:1px solid #E5E7EB;vertical-align:top}' +
     '.inf-tabla .n{text-align:right;white-space:nowrap}.inf-tabla .aut{max-width:150px;overflow-wrap:anywhere;font-size:8.5px}.inf-tabla tr.ret td{color:#B91C1C}' +
-    '.inf-tabla tfoot td{font-weight:700;border-top:2px solid #1F2D4D}.inf-vacio{text-align:center;color:#6B7280;padding:18px}' +
+    '.inf .inf-tabla tfoot td{font-weight:700;border-top:2px solid #1F2D4D;background:#F3F4F6!important;color:#111827!important}.inf .inf-tabla th{text-transform:none;letter-spacing:0}.inf-vacio{text-align:center;color:#6B7280;padding:18px}' +
     '.inf-pie{text-align:center;color:#6B7280;font-size:9.5px;margin-top:14px}' +
-    '@media print{@page{size:A4;margin:10mm}.inf{padding:0;max-width:none}.inf-tabla tr{break-inside:avoid}}';
+    '.inf-scroll{overflow-x:auto}.inf-scroll .inf-tabla{min-width:820px}' +
+    '@media (max-width:760px){.inf{padding:16px 12px}.inf-gen{grid-template-columns:1fr}.inf-banda{font-size:20px}}' +
+    '@media print{@page{size:A4;margin:10mm}.inf{padding:0;max-width:none}.inf-scroll{overflow:visible}.inf-scroll .inf-tabla{min-width:0}.inf-tabla tr{break-inside:avoid}}';
 
   function htmlInforme(d, base) {
     var hist = d.hist, hoy = X.fecha(new Date());
@@ -145,11 +147,11 @@
         { nombre: 'Débito Fiscal (13%)', color: '#1F2D4D', datos: mImp.map(function (m) { return X.redondear(imp[m] * 0.13); }) },
         { nombre: 'IT (3%)', color: '#9CA3AF', guion: true, datos: mImp.map(function (m) { return X.redondear(imp[m] * 0.03); }) }]) +
       '<div class="inf-h">Historial Pagos / Facturación MTG Delivery</div>' +
-      '<table class="inf-tabla"><thead><tr class="grupo"><th colspan="5">Detalle de Pagos</th><th colspan="7">Detalle Facturación</th></tr>' +
+      '<div class="inf-scroll"><table class="inf-tabla"><thead><tr class="grupo"><th colspan="5">Detalle de Pagos</th><th colspan="7">Detalle Facturación</th></tr>' +
         '<tr><th>Semana</th><th>Rango (Días)</th><th>Nombre completo</th><th class="n">Importe total</th><th class="n">Fecha de Pago</th><th class="n">Nro Factura</th><th class="n">Fecha Factura</th><th>NIT Factura</th><th>Nro Autorización</th><th>Mes Declaración</th><th class="n">Débito Fiscal (13%)</th><th class="n">IT (3%)</th></tr></thead>' +
         '<tbody>' + filasPend + filasHist + '</tbody>' +
         (hist.length ? '<tfoot><tr><td colspan="3">Total pagado</td><td class="n">' + fmt(tot, 2) + '</td><td colspan="6"></td><td class="n">' + fmt(tot * 0.13, 2) + '</td><td class="n">' + fmt(tot * 0.03, 2) + '</td></tr></tfoot>' : '') +
-      '</table>' + (filasPend || filasHist ? '' : '<p class="inf-vacio">Sin pagos registrados.</p>') +
+      '</table></div>' + (filasPend || filasHist ? '' : '<p class="inf-vacio">Sin pagos registrados.</p>') +
       '<p class="inf-pie">CONTAX · Contabilidad e Impuestos · Informe generado el ' + X.fechaHora(new Date()) + '</p></div>';
   }
 
@@ -186,7 +188,7 @@
         }).join('') + '</div>' : X.vacio('No encontramos a nadie con «' + esc(IN.buscar) + '»', 'Prueba con otra parte del nombre o con el ID.')) : '') + '</div>';
       if (!IN.id) return cab + caja;
       var d = datos(IN.id); cargarPerfil(d.uid);
-      return cab + caja + '<style>' + INF_CSS + '</style><div class="card" style="padding:0;overflow:hidden;background:#fff">' + htmlInforme(d, '') + '</div>';
+      return cab + caja + '<style>' + INF_CSS + '</style><div class="card" style="padding:0;overflow:hidden;background:#fff;max-width:100%">' + htmlInforme(d, '') + '</div>';
     },
     despues: function (el) {
       var b = el.querySelector('#bInf');
