@@ -5,8 +5,8 @@ Panel **interno** del equipo de CONTAX para manejar el **Portal de repartidores*
 Los repartidores nunca lo ven. Desde aquí se revisan las facturas que suben, se arma la planilla de pago,
 se publican anuncios/avisos/preguntas y notificaciones, y se ven los chats del asistente con IA.
 
-Secciones: Tablero, Facturas (incluye cruce con el Excel de Impuestos Nacionales), Pagos, Historial de pagos,
-Repartidores, DBYango, Trámites, Anuncios / Avisos / Preguntas, Notificaciones, Chats del asistente,
+Secciones: Tablero, Facturas (incluye cruce con el Excel de Impuestos Nacionales), Buscar repartidor (informe general en PDF, marca CONTAX), Pagos pendientes, Historial de pagos,
+Repartidores, DBYango, Códigos de banco, Trámites, Anuncios / Avisos / Preguntas, Notificaciones, Chats del asistente,
 Clientes CONTAX, Excepciones, Equipo y Bitácora. El detalle de cada una está en `README.md`.
 
 ## Para qué empresa
@@ -45,7 +45,7 @@ El permiso se elige en **Panel → Usuarios → columna CONTROL**. Las reglas de
 - GitHub Pages desde la rama `main` (raíz): https://jmenachocntx.github.io/CONTROL-NUMMEROS/
 - Todavía **no hay archivo `CNAME`**. El dominio previsto es `controlnummeros.contaxbolivia.com` (pasos en `README.md`).
 - `firestore.rules` **no se publica solo**: hay que copiarlo y pegarlo en la consola de Firebase del proyecto `control--nummeros` → Firestore → Reglas → Publicar.
-- Versiones: `version` en `config.js` (hoy 1.9), el `?v=` de los scripts en `index.html` y el mensaje del commit dice la versión (ej. "... (v1.4)").
+- Versiones: `version` en `config.js` (hoy 2.0.1), el `?v=` de los scripts en `index.html` y el mensaje del commit dice la versión (ej. "... (v1.4)").
 
 ## Cuidados importantes
 - **El repositorio es PÚBLICO.** Nunca subir contraseñas, archivos `.json` de cuentas de servicio ni datos de clientes.
@@ -58,5 +58,7 @@ El permiso se elige en **Panel → Usuarios → columna CONTROL**. Las reglas de
 - **NIT de cada repartidor** (`portal-nummeros/perfiles/{uid}`: `nit`, `razonSocial`): lo registra él una sola vez en el Portal; solo el equipo lo corrige (detalle del repartidor → «Corregir NIT»). Las facturas leídas por IA traen `autorizacion` (CUF), `razonEmisor` y `leidaIA`; el cruce busca primero por el código de autorización.
 - **Corte de facturas: jueves 18:00 (Bolivia).** Una factura aprobada subida después del último corte queda «después del corte» y entra a la planilla siguiente (las emitidas por CONTAX no tienen corte).
 - **Datos bancarios: salen de BDYango** («BOL Registro Activación», hojas Activation/Deactivation SCZ, CBBA, LPZ). **Se lee en vivo** al abrir CONTROL por el puente del Panel (acción `admin_ctrl_hoja`, `hoja: 'bdyango'`) y se ve en la pestaña **DBYango**; la planilla usa esas cuentas sin apretar nada (una cuenta corregida a mano en «Cuentas bancarias», `origen: 'manual'`, manda sobre BDYango). «Importar BDYango» (Excel) queda como respaldo. Usa ID, Nombre/Apellido, CI, NIT, Teléfono, Banco, Cta Banco y Telegram; la última fila de cada ID manda. Bancos → código: BNB 1001, BMSC 1003, BCP 1005, BISA 1009, Unión 1014, Económico 1016, Sol 1017, FIE 1033, Fortaleza 1034; Ganadero y Yolo = Banco Ganadero (forma 1). Si a un repartidor listo le falta nombre, carnet, banco o cuenta, no entra a la planilla y su semana guarda `fueraDePlanilla.motivo`, que el repartidor ve en su portal.
-- **No cambiar `fuentePagos` a `'control'`** hasta que: (1) estén publicadas las reglas de `semanas` en el Portal, (2) se haya hecho la migración desde Sheets, y (3) el Portal lea `semanas`. Ese mismo día el equipo deja de cargar PPendientes/HistPagosMTG y Control pasa a mandar los avisos «Semana N registrada» y «Recibiste tu pago».
-- **Historial de pagos propio** (ya no la hoja HistPagosMTG): colección `historialPagos` del Portal, un documento por fecha de pago (`{fecha}_{parte}`, máx. 2000 pagos; `{fecha}_c` = confirmados en CONTROL) con los pagos en `filas` (texto JSON) para ahorrar escrituras: Firebase está en plan **Spark** (20 mil escrituras y 50 mil lecturas por día), no guardar un documento por pago. Pagos → «Migrar desde Sheets» lee HistPagosMTG y PPendientes en vivo (`admin_ctrl_hoja`, `hoja: 'pagos'`, solo admin), reescribe el historial y pasa los pendientes a `semanas`. Migrado el 31/10/2026: 31.766 pagos · Bs 28.755.672,67 y 1.100 pendientes · Bs 254.614,46 (igual a las hojas).
+- **`fuentePagos: 'control'` desde el 31/10/2026 (v2.0)** en CONTROL y en el Portal: ya no se usan PPendientes ni HistPagosMTG (no volver a 'sheets'). Única hoja que se sigue leyendo: BDYango (la mantiene Yango). Lo demás (ASEGURADOS, Habilitados, trámites…) todavía viene del robot y se migrará después.
+- **Historial de pagos propio** (ya no la hoja HistPagosMTG): colección `historialPagos` del Portal, un documento por fecha de pago (`{fecha}_{parte}`, máx. 2000 pagos; `{fecha}_c` = confirmados en CONTROL) con los pagos en `filas` (texto JSON, columnas de HistPagosMTG: semana, rango, ID, nombre, importe, comentarios, N.º/fecha/NIT/autorización de factura, nro, mes de pago, gestión) para ahorrar escrituras. Cada repartidor tiene `historialRider/{uid}` (lo lee su portal). Cada vez que se abre CONTROL se leen ~5 mil documentos (repartidores, semanas abiertas, historial): Firebase está en plan **Spark** (20 mil escrituras y 50 mil lecturas por día), no guardar un documento por pago. Pagos → «Migrar desde Sheets» lee HistPagosMTG y PPendientes en vivo (`admin_ctrl_hoja`, `hoja: 'pagos'`, solo admin), reescribe el historial y pasa los pendientes a `semanas`. Migrado el 31/10/2026: 31.766 pagos · Bs 28.755.672,67 y 1.100 pendientes · Bs 254.614,46 (igual a las hojas).
+- **Códigos de banco:** cuadro «Códigos de Banco para Envío vía ACH» en `TABLA_BANCOS` de `js/banco.js` (pestaña «Códigos de banco»). Yape = BCP 1005; Yolo = Ganadero. «Banco no reconocido» = el texto de BDYango no está en el cuadro.
+- **Menú plegable** (solo escritorio): se guarda en el navegador (`ctrl_menu_mini`).
