@@ -5,8 +5,8 @@ Panel **interno** del equipo de CONTAX para manejar el **Portal de repartidores*
 Los repartidores nunca lo ven. Desde aquí se revisan las facturas que suben, se arma la planilla de pago,
 se publican anuncios/avisos/preguntas y notificaciones, y se ven los chats del asistente con IA.
 
-Secciones: Tablero, Facturas (incluye cruce con el Excel de Impuestos Nacionales), Buscar repartidor (informe general en PDF, marca CONTAX), Pagos pendientes, Historial de pagos,
-Repartidores, DBYango, Códigos de banco, Trámites, Anuncios / Avisos / Preguntas, Notificaciones, Chats del asistente,
+Secciones: Tablero, Facturas (incluye cruce con el Excel de Impuestos Nacionales), Pagos pendientes (con botón «Códigos de banco»), Historial de pagos,
+Repartidores (al tocar uno se abre su informe con PDF), DBYango, Trámites, Anuncios / Avisos / Preguntas, Notificaciones, Chats del asistente,
 Clientes CONTAX, Excepciones, Equipo y Bitácora. El detalle de cada una está en `README.md`.
 
 ## Para qué empresa
@@ -45,12 +45,12 @@ El permiso se elige en **Panel → Usuarios → columna CONTROL**. Las reglas de
 - GitHub Pages desde la rama `main` (raíz): https://jmenachocntx.github.io/CONTROL-NUMMEROS/
 - Todavía **no hay archivo `CNAME`**. El dominio previsto es `controlnummeros.contaxbolivia.com` (pasos en `README.md`).
 - `firestore.rules` **no se publica solo**: hay que copiarlo y pegarlo en la consola de Firebase del proyecto `control--nummeros` → Firestore → Reglas → Publicar.
-- Versiones: `version` en `config.js` (hoy 2.1.2), el `?v=` de los scripts en `index.html` y el mensaje del commit dice la versión (ej. "... (v1.4)").
+- Versiones: `version` en `config.js` (hoy 2.2), el `?v=` de los scripts en `index.html` y el mensaje del commit dice la versión (ej. "... (v1.4)").
 
 ## Cuidados importantes
 - **El repositorio es PÚBLICO.** Nunca subir contraseñas, archivos `.json` de cuentas de servicio ni datos de clientes.
 - Los datos de Firebase de `config.js` no son secretos (la seguridad la dan las reglas); no cambiarlos sin motivo.
-- La sección Clientes CONTAX guarda datos sensibles de repartidores (NIT y accesos). Ver aviso de seguridad.
+- **Clientes CONTAX** = clientes «Activos» de Panel → Clientes (`bdclientes` de `crm-contax`, títulos con número adelante como «2. NIT»; se leen al abrir la pestaña, ~1.000 lecturas). Solo lectura: se editan en el Panel. Se marca quién es repartidor de Yango por NIT (BDYango) o celular. La colección propia `clientes` de CONTROL (vacía) sigue siendo la que usa `clienteDe` para «CONTAX debe emitir» en Pagos. Muestra contraseñas: datos sensibles.
 - Si cambias reglas que afectan al Portal, el archivo correcto es `firestore.rules` de `PortalNUMMEROS`, no este.
 - Este panel depende del puente del Panel NUMMEROS: si se cambia la URL `/exec` del puente, actualizar `puenteUrl` en `config.js`.
 - Agregar un `.gitignore` con `.DS_Store` antes de subir archivos desde la Mac.
@@ -60,9 +60,9 @@ El permiso se elige en **Panel → Usuarios → columna CONTROL**. Las reglas de
 - **Datos bancarios: salen de BDYango** («BOL Registro Activación», hojas Activation/Deactivation SCZ, CBBA, LPZ). **Se lee en vivo** al abrir CONTROL por el puente del Panel (acción `admin_ctrl_hoja`, `hoja: 'bdyango'`) y se ve en la pestaña **DBYango**; la planilla usa esas cuentas sin apretar nada (una cuenta corregida a mano en «Cuentas bancarias», `origen: 'manual'`, manda sobre BDYango). «Importar BDYango» (Excel) queda como respaldo. Usa ID, Nombre/Apellido, CI, NIT, Teléfono, Banco, Cta Banco y Telegram; la última fila de cada ID manda. Bancos → código: BNB 1001, BMSC 1003, BCP 1005, BISA 1009, Unión 1014, Económico 1016, Sol 1017, FIE 1033, Fortaleza 1034; Ganadero y Yolo = Banco Ganadero (forma 1). Si a un repartidor listo le falta nombre, carnet, banco o cuenta, no entra a la planilla y su semana guarda `fueraDePlanilla.motivo`, que el repartidor ve en su portal.
 - **`fuentePagos: 'control'` desde el 31/10/2026 (v2.0)** en CONTROL y en el Portal: ya no se usan PPendientes ni HistPagosMTG (no volver a 'sheets'). Única hoja que se sigue leyendo: BDYango (la mantiene Yango). Lo demás (ASEGURADOS, Habilitados, trámites…) todavía viene del robot y se migrará después.
 - **Historial de pagos propio** (ya no la hoja HistPagosMTG): colección `historialPagos` del Portal, un documento por fecha de pago (`{fecha}_{parte}`, máx. 2000 pagos; `{fecha}_c` = confirmados en CONTROL) con los pagos en `filas` (texto JSON, columnas de HistPagosMTG: semana, rango, ID, nombre, importe, comentarios, N.º/fecha/NIT/autorización de factura, nro, mes de pago, gestión) para ahorrar escrituras. Cada repartidor tiene `historialRider/{uid}` (lo lee su portal). Cada vez que se abre CONTROL se leen ~5 mil documentos (repartidores, semanas abiertas, historial): Firebase está en plan **Spark** (20 mil escrituras y 50 mil lecturas por día), no guardar un documento por pago. Pagos → «Migrar desde Sheets» lee HistPagosMTG y PPendientes en vivo (`admin_ctrl_hoja`, `hoja: 'pagos'`, solo admin), reescribe el historial y pasa los pendientes a `semanas`. Migrado el 31/10/2026: 31.766 pagos · Bs 28.755.672,67 y 1.100 pendientes · Bs 254.614,46 (igual a las hojas).
-- **Códigos de banco:** cuadro «Códigos de Banco para Envío vía ACH» en `TABLA_BANCOS` de `js/banco.js` (pestaña «Códigos de banco»). Yape = BCP 1005; Yolo = Ganadero. «Banco no reconocido» = el texto de BDYango no está en el cuadro.
-- **Menú plegable** (solo escritorio): se guarda en el navegador (`ctrl_menu_mini`). Plegado, al pasar el cursor muestra el nombre (`.menu-tip`).
-- **Gráficos en 3D:** todos pasan por `X.grafico` (Chart.js + plugin `nm3d` en `js/base.js`: barras con cara de arriba y costado, líneas/tortas con sombra, animación y botón «ampliar»). En SVG (reporte de pago y PDF) usar `X.barraSvg`.
-- **Historial de pagos:** gráficos arriba y subpestañas «Fechas de pago» / «Todos los pagos», ambas con las 13 columnas de HistPagosMTG.
-- **Buscar repartidor:** en pantalla se ve con el diseño del sistema; «Descargar PDF» arma el informe con formato NUMMEROS y logo de CONTAX.
+- **Códigos de banco:** cuadro «Códigos de Banco para Envío vía ACH» en `TABLA_BANCOS` de `js/banco.js` (página oculta del menú; se abre desde Pagos pendientes → «Códigos de banco»). Yape = BCP 1005; Yolo = Ganadero. «Banco no reconocido» = el texto de BDYango no está en el cuadro.
+- **Menú plegable** (solo escritorio): se guarda en el navegador (`ctrl_menu_mini`). Plegado, al pasar el cursor muestra el nombre (`.menu-tip`) y el contenido usa todo el ancho. Páginas con `oculta: true` no tienen botón en el menú; `padre` dice qué botón queda marcado.
+- **Gráficos en 3D:** todos pasan por `X.grafico` (Chart.js + plugin `nm3d` en `js/base.js`: barras con cara de arriba y costado, líneas/tortas con sombra, animación; clic en el gráfico = verlo en grande, se cierra con Esc o clic fuera). En SVG (reporte de pago y PDF) usar `X.barraSvg`.
+- **Historial de pagos:** subpestañas «Gráficos», «Fechas de pago» y «Todos los pagos» (las dos últimas con las 13 columnas de HistPagosMTG).
+- **Repartidores + informe (antes «Buscar repartidor»):** al tocar un repartidor se abre su informe (página `informe`, oculta del menú) con el diseño del sistema; «Descargar PDF» arma el informe con formato NUMMEROS y logo de CONTAX.
 - **Fotos de colaboración** (`marca/colaboracion/`): la fuente es `EdiThor-Nummeros/colaboracion/`.

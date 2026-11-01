@@ -174,6 +174,7 @@
         (SM ? '<button class="btn sec" id="btnImportaciones">' + ic('historial') + 'Importaciones</button>' : '') +
         (SM && X.esAdmin() ? '<button class="btn sec" id="btnMigrar">Migrar desde Sheets</button>' : '') +
         (X.banco && X.puedeEditar() ? '<button class="btn sec" id="btnCuentas">' + ic('cliente') + 'Cuentas bancarias</button>' : '') +
+        (X.banco ? '<button class="btn sec" data-ir="codigosBanco">' + ic('banco') + 'Códigos de banco</button>' : '') +
         '<button class="btn sec" id="btnCierres">' + ic('historial') + 'Planillas generadas</button><button class="btn" id="btnPlanilla"' + (X.puedeEditar() ? '' : ' disabled') + '>' + ic('descargar') + 'Planilla de pago</button>');
       if (!S.portalUsuario) return cab + '<div class="card">' + sinPortal() + '</div>';
       if (!D.repartidores) return cab + X.esqueleto(3);
@@ -400,7 +401,7 @@
   }
 
   /* ══════════ HISTORIAL DE PAGOS ══════════ */
-  var H = { buscar: '', pagT: 0, sub: 'fechas', fecha: '', buscarF: '', pagF: 0 };
+  var H = { buscar: '', pagT: 0, sub: 'graficos', fecha: '', buscarF: '', pagF: 0 };
   /* Todos los pagos con las columnas de HistPagosMTG (lo que puede pedir auditoría) */
   var COLS_HIST = [['Fecha de pago', function (h) { return X.fecha(h.fecha); }], ['Semana', 'semana'], ['Rango (Días)', 'rango'], ['ID del mensajero', 'id'], ['Nombre completo', 'nombre'],
     ['Importe total', 'importe'], ['Comentarios', 'comentario'], ['Nro Factura', 'factura'], ['Fecha Factura', 'fechaFactura'], ['NIT Factura', 'nit'],
@@ -458,7 +459,7 @@
           '<div class="kpi"><small>Promedio por fecha</small><b class="num">' + bs(l.length ? total / l.length : 0) + '</b><em>sobre ' + entero(l.length) + ' fechas</em></div>' +
           '<div class="kpi"><small>Total histórico</small><b class="num">' + bs(total) + '</b><em>' + entero(nPagos) + ' pagos</em></div>' +
         '</div>';
-      var graficos = '<div class="graf-rejilla mb">' +
+      var graficos = '<div class="graf-rejilla">' +
         '<div class="card"><div class="h2">Pagado por fecha de pago <small>últimas 20 fechas</small></div><div class="grafico"><canvas id="gHist"></canvas></div></div>' +
         '<div class="card"><div class="h2">Pagado por mes <small>últimos 12 meses</small></div><div class="grafico"><canvas id="gMes"></canvas></div></div>' +
         '<div class="card"><div class="h2">Repartidores pagados <small>por fecha de pago</small></div><div class="grafico"><canvas id="gCant"></canvas></div></div>' +
@@ -467,10 +468,12 @@
       var nF = l.filter(function (x) { return (x.iso || x.fecha) === H.fecha; })[0];
       var todos = filtrarHist(); H.lista = todos;
       var sub = '<div class="subpestanas" role="tablist">' +
+        '<button role="tab" data-sub="graficos" aria-selected="' + (H.sub === 'graficos') + '">' + ic('grafico') + 'Gráficos</button>' +
         '<button role="tab" data-sub="fechas" aria-selected="' + (H.sub === 'fechas') + '">' + ic('reloj') + 'Fechas de pago <em class="num">' + entero(l.length) + '</em></button>' +
         '<button role="tab" data-sub="todos" aria-selected="' + (H.sub === 'todos') + '">' + ic('historial') + 'Todos los pagos <em class="num">' + entero(nPagos) + '</em></button></div>';
       var cuerpo;
-      if (H.sub === 'fechas') {
+      if (H.sub === 'graficos') cuerpo = graficos;
+      else if (H.sub === 'fechas') {
         var filasF = filasFecha(nF); H.listaF = filasF;
         var totF = filasF.reduce(function (s, h) { return s + (Number(h.importe) || 0); }, 0);
         cuerpo = '<div class="herr">' +
@@ -485,7 +488,7 @@
           '<p class="muted" style="margin:0 0 10px"><b>' + entero(todos.length) + ' pagos · ' + bs(todos.reduce(function (s, h) { return s + h.importe; }, 0)) + '</b> · toca un pago para ver el informe del repartidor</p>' +
           tablaHist(todos, H.pagT);
       }
-      return cab + kpis + graficos + '<div class="card">' + sub + cuerpo + '</div>';
+      return cab + kpis + sub + (H.sub === 'graficos' ? cuerpo : '<div class="card">' + cuerpo + '</div>');
     },
     despues: function (el) {
       if (!D.repartidores) return;
@@ -561,7 +564,7 @@
   X.pagina('repartidores', {
     t: 'Repartidores', i: 'repartidor', orden: 5, sec: 'Operación',
     render: function () {
-      var cab = X.titulo('Repartidores', 'Quiénes pueden entrar al portal (hoja BDYANGO) y cómo están sus pagos.', (X.puedeEditar() ? '<button class="btn sec" id="btnImpNit">' + ic('subir') + 'Importar NIT</button>' : '') + '<button class="btn sec" id="btnExpRep">' + ic('descargar') + 'Excel</button>');
+      var cab = X.titulo('Repartidores', 'Busca por nombre, ID o celular y toca a un repartidor para ver su informe (pagos, facturas, gráficos y PDF).', (X.puedeEditar() ? '<button class="btn sec" id="btnImpNit">' + ic('subir') + 'Importar NIT</button>' : '') + '<button class="btn sec" id="btnExpRep">' + ic('descargar') + 'Excel</button>');
       if (!S.portalUsuario) return cab + '<div class="card">' + sinPortal() + '</div>';
       if (!D.repartidores) return cab + X.esqueleto(3);
       var f = filtrarRep(), l = lista();
@@ -584,7 +587,7 @@
       var bq = el.querySelector('#bRep'); if (bq) bq.addEventListener('input', debounce(function () { R.buscar = bq.value; R.pag = 0; X.refrescar(); setFoco('#bRep'); }, 300));
       el.querySelectorAll('[data-pag]').forEach(function (b) { b.addEventListener('click', function () { R.pag = Number(b.getAttribute('data-pag')); X.refrescar(); }); });
       var f = filtrarRep();
-      el.querySelectorAll('tr[data-fila]').forEach(function (tr) { tr.addEventListener('click', function () { var r = f[Number(tr.getAttribute('data-fila'))]; if (r) detalleRepartidor(r.uid); }); });
+      el.querySelectorAll('tr[data-fila]').forEach(function (tr) { tr.addEventListener('click', function () { var r = f[Number(tr.getAttribute('data-fila'))]; if (r && X.informe) X.informe.abrir(r.id); else if (r) detalleRepartidor(r.uid); }); });
       var bin = el.querySelector('#btnImpNit'); if (bin) bin.addEventListener('click', importarNits);
       var be = el.querySelector('#btnExpRep');
       if (be) be.addEventListener('click', function () {

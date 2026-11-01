@@ -158,6 +158,7 @@ img{max-width:100%}
 .menu-iso{display:none!important}
 @media (min-width:981px){
 .app.menu-mini{grid-template-columns:76px minmax(0,1fr)}
+.app.menu-mini .contenido{max-width:none}
 .app.menu-mini .menu{padding:16px 10px;overflow-x:visible;align-items:center}
 .app.menu-mini .menu-plegar{align-self:center;margin:0 0 8px}
 .app.menu-mini .menu-logo{padding:2px 0 14px}
@@ -305,9 +306,6 @@ td .sub{display:block;font-size:12px;color:var(--suave)}
 .con-graf{transition:transform .2s ease,box-shadow .2s ease}
 .con-graf:hover{transform:translateY(-3px);box-shadow:var(--sombra-alta)}
 .con-graf .grafico{cursor:zoom-in}
-.ampliar{border:0;background:transparent;color:var(--suave);font:600 12px var(--display);letter-spacing:.04em;display:inline-flex;align-items:center;gap:4px;margin-left:10px;cursor:pointer;padding:2px 6px;border-radius:999px;vertical-align:middle;text-transform:lowercase}
-.ampliar .ic{width:14px;height:14px}
-.ampliar:hover{background:var(--campo);color:var(--texto)}
 .ventana.ventana-graf{width:min(1100px,100%);animation:crecer .38s cubic-bezier(.2,.9,.3,1.15)}
 @keyframes crecer{from{transform:scale(.72) translateY(30px);opacity:0}to{transform:none;opacity:1}}
 .grafico.grande{height:min(62vh,560px);cursor:default}
@@ -418,20 +416,20 @@ td .sub{display:block;font-size:12px;color:var(--suave)}
   </div>
 </div>
 
-<script src="config.js?v=2.1.2"></script>
+<script src="config.js?v=2.2"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" defer></script>
-<script src="js/base.js?v=2.1.2"></script>
-<script src="js/operacion.js?v=2.1.2"></script>
-<script src="js/facturas.js?v=2.1.2"></script>
-<script src="js/portal.js?v=2.1.2"></script>
-<script src="js/gestion.js?v=2.1.2"></script>
-<script src="js/semanas.js?v=2.1.2"></script>
-<script src="js/banco.js?v=2.1.2"></script>
-<script src="js/documentos.js?v=2.1.2"></script>
-<script src="js/informe.js?v=2.1.2"></script>
+<script src="js/base.js?v=2.2"></script>
+<script src="js/operacion.js?v=2.2"></script>
+<script src="js/facturas.js?v=2.2"></script>
+<script src="js/portal.js?v=2.2"></script>
+<script src="js/gestion.js?v=2.2"></script>
+<script src="js/semanas.js?v=2.2"></script>
+<script src="js/banco.js?v=2.2"></script>
+<script src="js/documentos.js?v=2.2"></script>
+<script src="js/informe.js?v=2.2"></script>
 <script>CTRL.iniciar();</script>
 </body>
 </html>

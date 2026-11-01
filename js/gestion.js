@@ -9,131 +9,103 @@
   var X = window.CTRL, S = X.S, D = X.D, C = X.C;
   var esc = X.esc, ic = X.ic, entero = X.entero;
 
-  /* ══════════ CLIENTES CONTAX ══════════ */
-  var CL = { buscar: '', ver: {}, pag: 0 };
-  var CAMPOS_CLIENTE = [
-    { k: 'idYango', t: 'ID de Yango', max: 30, obligatorio: true },
-    { k: 'nombre', t: 'Nombre completo', max: 120, obligatorio: true },
-    { k: 'celular', t: 'Celular', max: 20 },
-    { k: 'nit', t: 'NIT', max: 20 },
-    { k: 'usuarioSiat', t: 'Usuario SIAT', max: 80, auto: 'off' },
-    { k: 'claveSiat', t: 'Contraseña SIAT', max: 80, auto: 'off' },
-    { k: 'usuarioPortal', t: 'Usuario portal (Impuestos / otro)', max: 80, auto: 'off' },
-    { k: 'clavePortal', t: 'Contraseña portal', max: 80, auto: 'off' },
-    { k: 'estado', t: 'Estado', tipo: 'select', opciones: [['ACTIVO', 'Activo'], ['INACTIVO', 'Inactivo']] },
-    { k: 'notas', t: 'Notas', tipo: 'textarea', filas: 2, max: 500 }
-  ];
-  function filtrarClientes() {
-    var b = X.normal(CL.buscar);
-    return (D.clientes || []).filter(function (c) { return !b || (X.normal(c.nombre) + ' ' + c.idYango + ' ' + c.nit + ' ' + c.celular).indexOf(b) >= 0; })
-      .sort(function (a, c) { return X.normal(a.nombre).localeCompare(X.normal(c.nombre)); });
+  /* ══════════ CLIENTES CONTAX ══════════
+     Son los clientes «Activos» de Panel NUMMEROS → Clientes (colección `bdclientes` de crm-contax).
+     Se editan en el Panel; aquí solo se ven, y se reconoce cuáles son repartidores de Yango
+     (por NIT o celular, cruzando con BDYango y el portal). */
+  var CL = { buscar: '', filtro: 'todos', pag: 0 };
+  var cargandoPanel = null;
+  function cargarPanelClientes(forzar) {
+    if (cargandoPanel && !forzar) return cargandoPanel;
+    if (forzar) D.panelClientes = null;
+    cargandoPanel = X.dbPn.collection('bdclientes').get().then(function (q) {
+      var l = [];
+      q.forEach(function (d) { if (d.id === '_meta') return; var x = d.data(); x._id = d.id; l.push(x); });
+      D.panelClientes = { lista: l, leido: new Date() };
+    }, function (e) { console.warn('Clientes del Panel:', e); D.panelClientes = { lista: [], error: 'No se pudo leer la base de clientes del Panel. Revisa que tu usuario del Panel tenga permiso para ver Clientes.' }; })
+      .then(function () { if (S.pagina === 'clientes') X.refrescar(); });
+    return cargandoPanel;
   }
-  function secreto(v, k) {
+  // Valor de una columna de BDCONTAX aunque el título tenga número adelante («2. NIT»)
+  function pv(x, titulo) {
+    var t = X.normal(titulo);
+    for (var k in x) if (X.normal(String(k).replace(/^\s*\d+\s*[.\-)]\s*/, '')) === t) return String(x[k] == null ? '' : x[k]).trim();
+    return '';
+  }
+  var digitos = function (v, n) { var d = String(v || '').replace(/\D/g, ''); return n ? d.slice(-n) : d; };
+  function activosPanel() {
+    var P = D.panelClientes; if (!P || !P.lista) return [];
+    var porNit = {}, porCel = {};
+    ((D.bdyango && D.bdyango.lista) || []).forEach(function (y) { if (y.nit) porNit[digitos(y.nit)] = y; if (y.telefono) porCel[digitos(y.telefono, 8)] = porCel[digitos(y.telefono, 8)] || y; });
+    if (D.repartidores) X.lista().forEach(function (r) { var c = digitos(r.celular, 8); if (c) porCel[c] = r; });
+    return P.lista.filter(function (x) { return X.normal(pv(x, 'Estado Usuario')) === 'ACTIVO'; }).map(function (x) {
+      var c = { x: x, nombre: pv(x, 'NOMBRE') || pv(x, 'Nombre o Razón Social'), codigo: pv(x, 'Codigo de ID'), nit: pv(x, 'NIT'), ci: pv(x, 'C.I.'), celular: pv(x, 'Celular'),
+        usuario: pv(x, 'Usuario'), clave: pv(x, 'Contraseña'), claveSiat: pv(x, 'Contraseña SIAT'), brinda: pv(x, 'Brinda Servicios A'), costo: pv(x, 'Costo Servicio Mensual') };
+      var y = (c.nit && porNit[digitos(c.nit)]) || (digitos(c.celular, 8).length === 8 && porCel[digitos(c.celular, 8)]);
+      c.idYango = y ? String(y.id) : '';
+      return c;
+    });
+  }
+  function filtrarClientes(l) {
+    var b = X.normal(CL.buscar);
+    return l.filter(function (c) {
+      if (CL.filtro === 'yango' && !c.idYango) return false;
+      if (CL.filtro === 'otros' && c.idYango) return false;
+      return !b || (X.normal(c.nombre) + ' ' + c.codigo + ' ' + c.nit + ' ' + c.ci + ' ' + c.celular + ' ' + c.idYango + ' ' + X.normal(c.brinda)).indexOf(b) >= 0;
+    }).sort(function (a, c) { return X.normal(a.nombre).localeCompare(X.normal(c.nombre)); });
+  }
+  function secreto(v) {
     if (!v) return '<span class="muted">—</span>';
     return '<span class="secreto"><code>' + esc(v) + '</code><button class="icono-btn" data-copiar="' + esc(v) + '" aria-label="Copiar">' + ic('copiar') + '</button></span>';
   }
   X.pagina('clientes', {
     t: 'Clientes CONTAX', i: 'cliente', sec: 'CONTAX',
     render: function () {
-      var ed = X.puedeEditar();
-      var cab = X.titulo('Clientes CONTAX', 'Repartidores a quienes CONTAX les emite la factura. Sus semanas aparecen como «CONTAX debe emitir» en Pagos.',
-        (ed ? '<button class="btn sec" id="impCl">' + ic('subir') + 'Importar Excel</button><button class="btn" id="nuevoCl">' + ic('mas') + 'Nuevo cliente</button>' : '') + '<button class="btn sec" id="expCl">' + ic('descargar') + 'Excel</button>');
-      if (!D.clientes) return cab + X.esqueleto(3);
-      var l = filtrarClientes(), act = (D.clientes || []).filter(function (c) { return c.estado !== 'INACTIVO'; }).length;
+      var P = D.panelClientes;
+      var cab = X.titulo('Clientes CONTAX', 'Los clientes «Activos» de Panel NUMMEROS → Clientes' + (P && P.leido ? ' · leídos ' + X.hace(P.leido) : '') + '. Se agregan y corrigen en el Panel; aquí se ven y se marca quiénes son repartidores de Yango.',
+        '<a class="btn sec" href="' + esc(C.panelUrl) + '" target="_blank" rel="noopener">' + ic('cliente') + 'Abrir el Panel</a><button class="btn sec" id="recCl">' + ic('recargar') + 'Leer de nuevo</button><button class="btn sec" id="expCl">' + ic('descargar') + 'Excel</button>');
+      if (!P) return cab + '<div class="card">' + X.cargaBarra('Clientes', 'Leyendo los clientes del Panel…') + '</div>';
+      if (P.error) return cab + '<div class="card">' + X.vacio('No se pudo leer', P.error) + '</div>';
+      var todos = activosPanel(), l = filtrarClientes(todos); CL.lista = l;
+      var n = { todos: todos.length, yango: todos.filter(function (c) { return c.idYango; }).length };
+      n.otros = n.todos - n.yango;
       return cab +
-        '<div class="rejilla r4 mb"><div class="kpi"><small>Clientes activos</small><b class="num">' + entero(act) + '</b><em>de ' + entero((D.clientes || []).length) + ' registrados</em></div>' +
-          '<div class="kpi"><small>En el portal</small><b class="num">' + entero(D.repartidores ? X.lista().filter(function (r) { return X.clienteDe(r); }).length : 0) + '</b><em>coinciden con un repartidor</em></div></div>' +
-        '<div class="aviso-caja">' + ic('candado') + '<div><b>Datos sensibles</b>Las contraseñas se ven completas para poder copiarlas. Solo las ve el equipo de CONTROL; los repartidores no tienen acceso a este proyecto.</div></div>' +
-        '<div class="card"><div class="herr"><div class="buscar">' + ic('buscar') + '<input type="search" id="bCl" placeholder="Buscar por nombre, ID, NIT o celular" value="' + esc(CL.buscar) + '"></div></div>' +
+        '<div class="aviso-caja mb">' + ic('candado') + '<div><b>Datos sensibles</b>Las contraseñas se ven completas para poder copiarlas. Solo las ve el equipo; los repartidores no tienen acceso.</div></div>' +
+        '<div class="card"><div class="pestanas" role="tablist">' + [['todos', 'Activos'], ['yango', 'Son repartidores de Yango'], ['otros', 'No están en Yango']].map(function (p) {
+          return '<button role="tab" aria-selected="' + (CL.filtro === p[0]) + '" data-fcl="' + p[0] + '">' + p[1] + ' <em class="num">' + entero(n[p[0]]) + '</em></button>';
+        }).join('') + '</div>' +
+        '<div class="herr"><div class="buscar">' + ic('buscar') + '<input type="search" id="bCl" placeholder="Buscar por nombre, código, NIT, CI, celular o ID de Yango" value="' + esc(CL.buscar) + '"></div></div>' +
         (l.length ? X.tabla([
-          { t: 'Cliente', html: function (c) { return '<b>' + esc(c.nombre) + '</b><span class="sub num">ID ' + esc(c.idYango) + (c.celular ? ' · ' + esc(X.telVisible(c.celular)) : '') + '</span>'; } },
+          { t: 'Cliente', html: function (c) { return '<b>' + esc(c.nombre || 'Sin nombre') + '</b><span class="sub num">' + (c.codigo ? 'Código ' + esc(c.codigo) : '') + (c.celular ? ' · ' + esc(c.celular) : '') + '</span>'; } },
           { t: 'NIT', html: function (c) { return secreto(c.nit); } },
-          { t: 'SIAT', html: function (c) { return (c.usuarioSiat ? secreto(c.usuarioSiat) + '<br>' : '') + secreto(c.claveSiat); } },
-          { t: 'Portal', html: function (c) { return (c.usuarioPortal ? secreto(c.usuarioPortal) + '<br>' : '') + secreto(c.clavePortal); } },
-          { t: 'Estado', html: function (c) { return c.estado === 'INACTIVO' ? X.chip('neutro', 'Inactivo') : X.chip('contax', 'Activo'); } },
-          { t: '', html: function (c) { return ed ? '<span class="fila-acc"><button class="icono-btn" data-ed="' + esc(c._id) + '" aria-label="Editar">' + ic('editar') + '</button><button class="icono-btn" data-bo="' + esc(c._id) + '" aria-label="Borrar">' + ic('borrar') + '</button></span>' : ''; } }
-        ], l, { pag: CL.pag }) : X.vacio('Todavía no hay clientes CONTAX', 'Agrégalos uno por uno o importa el Excel de la hoja BDYANGO (columna CONTADOR = CONTAX).', 'marca/graficos/rel-equipo-' + (S.oscuro ? 'oscuro' : 'claro') + '.png')) + '</div>';
+          { t: 'Accesos SIAT', html: function (c) { return (c.usuario ? secreto(c.usuario) + '<br>' : '') + secreto(c.claveSiat || c.clave); } },
+          { t: 'Trabaja para', html: function (c) { return esc(c.brinda || '—'); } },
+          { t: 'Yango', html: function (c) { return c.idYango ? X.chip('contax', 'ID ' + c.idYango) : '<span class="muted">—</span>'; } }
+        ], l, { clic: true, pag: CL.pag }) : X.vacio('Nadie con este filtro')) + '</div>';
     },
     despues: function (el) {
+      if (!D.panelClientes) cargarPanelClientes();
       var bq = el.querySelector('#bCl'); if (bq) bq.addEventListener('input', X.debounce(function () { CL.buscar = bq.value; CL.pag = 0; X.refrescar(); X.setFoco('#bCl'); }, 300));
+      el.querySelectorAll('[data-fcl]').forEach(function (b) { b.addEventListener('click', function () { CL.filtro = b.getAttribute('data-fcl'); CL.pag = 0; X.refrescar(); }); });
       el.querySelectorAll('[data-pag]').forEach(function (b) { b.addEventListener('click', function () { CL.pag = Number(b.getAttribute('data-pag')); X.refrescar(); }); });
-      var n = el.querySelector('#nuevoCl'); if (n) n.addEventListener('click', function () { editarCliente(null); });
-      el.querySelectorAll('[data-ed]').forEach(function (b) { b.addEventListener('click', function () { editarCliente(D.clientes.filter(function (c) { return c._id === b.getAttribute('data-ed'); })[0]); }); });
-      el.querySelectorAll('[data-bo]').forEach(function (b) {
-        b.addEventListener('click', function () {
-          var c = D.clientes.filter(function (x) { return x._id === b.getAttribute('data-bo'); })[0];
-          X.confirmar('Borrar cliente', '¿Borrar a <b>' + esc(c.nombre) + '</b> de Clientes CONTAX? Si solo dejó de ser cliente, mejor ponlo como Inactivo.', function () {
-            X.dbC.collection('clientes').doc(c._id).delete().then(function () { D.clientes = D.clientes.filter(function (x) { return x._id !== c._id; }); X.bitacora('Borró cliente CONTAX', c.idYango + ' · ' + c.nombre); X.refrescar(); }, function () { X.aviso('No se pudo borrar.'); });
-          }, 'Borrar', true);
-        });
-      });
+      var rc = el.querySelector('#recCl'); if (rc) rc.addEventListener('click', function () { cargarPanelClientes(true); X.refrescar(); });
+      el.querySelectorAll('tr[data-fila]').forEach(function (tr) { tr.addEventListener('click', function () { var c = (CL.lista || [])[Number(tr.getAttribute('data-fila'))]; if (c) fichaCliente(c); }); });
       var e = el.querySelector('#expCl');
       if (e) e.addEventListener('click', function () {
-        X.excel([{ nombre: 'Clientes CONTAX', filas: [['ID Yango', 'Nombre', 'Celular', 'NIT', 'Usuario SIAT', 'Contraseña SIAT', 'Usuario portal', 'Contraseña portal', 'Estado', 'Notas']].concat(filtrarClientes().map(function (c) {
-          return [c.idYango, c.nombre, c.celular, c.nit, c.usuarioSiat, c.claveSiat, c.usuarioPortal, c.clavePortal, c.estado || 'ACTIVO', c.notas];
+        X.excel([{ nombre: 'Clientes CONTAX', filas: [['Código', 'Nombre', 'NIT', 'CI', 'Celular', 'Usuario', 'Contraseña', 'Contraseña SIAT', 'Trabaja para', 'Costo mensual', 'ID Yango']].concat((CL.lista || []).map(function (c) {
+          return [c.codigo, c.nombre, c.nit, c.ci, c.celular, c.usuario, c.clave, c.claveSiat, c.brinda, c.costo, c.idYango];
         })) }], 'Clientes-CONTAX-' + X.hoyISO());
       });
-      var im = el.querySelector('#impCl'); if (im) im.addEventListener('click', importarClientes);
     }
   });
-  function editarCliente(c) {
-    var nuevo = !c; c = c ? Object.assign({}, c) : { estado: 'ACTIVO' };
-    X.formulario(nuevo ? 'Nuevo cliente CONTAX' : 'Editar cliente', 'Se reconoce en el portal por el ID de Yango o por el celular.', CAMPOS_CLIENTE, c, function (v) {
-      var id = v._id || X.idSeguro(v.idYango) || X.nuevoId(), datos = {};
-      CAMPOS_CLIENTE.forEach(function (k) { datos[k.k] = v[k.k] == null ? '' : String(v[k.k]); });
-      datos.actualizado = X.servidor(); datos.quien = S.usuario.email;
-      return X.dbC.collection('clientes').doc(id).set(datos, { merge: true }).then(function () {
-        datos._id = id; datos.actualizado = new Date();
-        D.clientes = (D.clientes || []).filter(function (x) { return x._id !== id; }).concat([datos]);
-        X.bitacora(nuevo ? 'Agregó cliente CONTAX' : 'Editó cliente CONTAX', datos.idYango + ' · ' + datos.nombre); X.refrescar();
-      });
+  function fichaCliente(c) {
+    var x = c.x, html = '<div class="datos">' + Object.keys(x).filter(function (k) { return k.charAt(0) !== '_' && String(x[k] == null ? '' : x[k]).trim(); })
+      .sort(function (a, b) { return (parseInt(a, 10) || 99) - (parseInt(b, 10) || 99); })
+      .map(function (k) { var t = k.replace(/^\s*\d+\s*[.\-)]\s*/, ''); return '<div class="dato"><small>' + esc(t) + '</small>' + (/contrase|usuario|nit/i.test(t) ? secreto(String(x[k])) : '<b>' + esc(x[k]) + '</b>') + '</div>'; }).join('') + '</div>' +
+      (c.idYango ? '<button class="btn" id="clInf">' + ic('persona') + 'Ver informe del repartidor (ID ' + esc(c.idYango) + ')</button>' : '');
+    X.cajon(esc(c.nombre || 'Cliente'), 'Cliente activo de CONTAX · datos del Panel NUMMEROS', html, function (cu, cerrar) {
+      var b = cu.querySelector('#clInf'); if (b) b.addEventListener('click', function () { cerrar(); X.informe.abrir(c.idYango); });
     });
-  }
-  function importarClientes() {
-    X.ventana('Importar clientes CONTAX', 'Sube un Excel o CSV (por ejemplo, la hoja BDYANGO filtrada por CONTADOR = CONTAX).',
-      '<div class="fm"><div class="fila"><label for="imArch">Archivo</label><input id="imArch" type="file" accept=".xlsx,.xls,.csv"></div><div id="imMapa"></div></div>',
-      '<button class="btn sec" data-cerrar>Cancelar</button><button class="btn" data-ok disabled>Importar</button>', function (v, cerrar) {
-        var filas, enc, ok = v.querySelector('[data-ok]'), mapa = v.querySelector('#imMapa');
-        var CAMPOS = [['idYango', 'ID de Yango', /ID.*YANGO|^ID$|IDYANGO/], ['nombre', 'Nombre', /NOMBRE|CONDUCTOR|REPARTIDOR/], ['celular', 'Celular', /CEL|TELEF/], ['nit', 'NIT', /^NIT/], ['usuarioSiat', 'Usuario SIAT', /USUARIO.*SIAT/], ['claveSiat', 'Contraseña SIAT', /(CLAVE|CONTRAS).*SIAT/], ['usuarioPortal', 'Usuario portal', /USUARIO(?!.*SIAT)/], ['clavePortal', 'Contraseña portal', /(CLAVE|CONTRAS)(?!.*SIAT)/], ['estado', 'Estado', /ESTADO/], ['contador', 'Contador (solo los CONTAX)', /CONTADOR/]];
-        v.querySelector('#imArch').addEventListener('change', function (e) {
-          var a = e.target.files[0]; if (!a) return; mapa.innerHTML = X.anillo('Leyendo…');
-          X.cargarXLSX().then(function (XL) {
-            return a.arrayBuffer().then(function (buf) {
-              var lb = XL.read(buf, { type: 'array' }), ws = lb.Sheets[lb.SheetNames[0]];
-              var t = XL.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '' });
-              var i0 = 0; for (var i = 0; i < Math.min(t.length, 15); i++) { if (t[i].filter(function (c) { return /[a-z]/i.test(String(c)); }).length >= 3) { i0 = i; break; } }
-              enc = t[i0].map(function (h) { return String(h).trim(); }); filas = t.slice(i0 + 1).filter(function (f) { return f.some(function (c) { return String(c).trim(); }); });
-              mapa.innerHTML = '<p class="muted">' + entero(filas.length) + ' filas. Revisa cada columna:</p><div class="dos">' + CAMPOS.map(function (c) {
-                var j = enc.findIndex(function (h) { return c[2].test(X.normal(h)); });
-                return '<div class="fila"><label for="im_' + c[0] + '">' + c[1] + '</label><select id="im_' + c[0] + '"><option value="-1">(no usar)</option>' + enc.map(function (h, k) { return '<option value="' + k + '"' + (k === j ? ' selected' : '') + '>' + esc(h || 'Columna ' + (k + 1)) + '</option>'; }).join('') + '</select></div>';
-              }).join('') + '</div>';
-              ok.disabled = false;
-            });
-          }).catch(function (ex) { mapa.innerHTML = '<p class="login-err">' + esc(ex.message || 'No se pudo leer.') + '</p>'; });
-        });
-        ok.addEventListener('click', function () {
-          var col = {}; CAMPOS.forEach(function (c) { col[c[0]] = Number(v.querySelector('#im_' + c[0]).value); });
-          if (col.idYango < 0 || col.nombre < 0) { X.aviso('Elige al menos las columnas de ID y Nombre.'); return; }
-          var val = function (f, k) { return col[k] >= 0 ? String(f[col[k]] == null ? '' : f[col[k]]).trim() : ''; };
-          var usar = filas.filter(function (f) { return val(f, 'idYango') && (col.contador < 0 || /CONTAX/.test(X.normal(val(f, 'contador')))); });
-          ok.disabled = true; ok.innerHTML = X.anilloBoton() + 'Importando ' + usar.length;
-          var trozos = []; for (var i = 0; i < usar.length; i += 400) trozos.push(usar.slice(i, i + 400));
-          trozos.reduce(function (p, tr) {
-            return p.then(function () {
-              var lote = X.dbC.batch();
-              tr.forEach(function (f) {
-                var d = { idYango: val(f, 'idYango'), nombre: val(f, 'nombre'), celular: val(f, 'celular'), nit: val(f, 'nit'), usuarioSiat: val(f, 'usuarioSiat'), claveSiat: val(f, 'claveSiat'),
-                  usuarioPortal: val(f, 'usuarioPortal'), clavePortal: val(f, 'clavePortal'), estado: /INACT|BAJA/.test(X.normal(val(f, 'estado'))) ? 'INACTIVO' : 'ACTIVO', actualizado: X.servidor(), quien: S.usuario.email };
-                lote.set(X.dbC.collection('clientes').doc(X.idSeguro(d.idYango)), d, { merge: true });
-              });
-              return lote.commit();
-            });
-          }, Promise.resolve()).then(function () {
-            X.bitacora('Importó clientes CONTAX', usar.length + ' filas'); cerrar(); X.aviso(usar.length + ' clientes importados');
-            return X.cargarControl().then(X.refrescar);
-          }, function (e) { console.error(e); ok.disabled = false; ok.textContent = 'Importar'; X.aviso('No se pudo importar. Revisa tus permisos.'); });
-        });
-      });
   }
 
   /* ══════════ EXCEPCIONES ══════════ */

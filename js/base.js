@@ -369,7 +369,7 @@
 
   /* ══════════ PÁGINAS Y MENÚ ══════════ */
   var PAG = {};
-  /* opciones: { t: título en el menú, i: ícono, sec: sección, render(), despues(el), cuenta(), soloAdmin } */
+  /* opciones: { t: título en el menú, i: ícono, sec: sección, render(), despues(el), cuenta(), soloAdmin, oculta (sin botón en el menú), padre (qué botón queda marcado) } */
   function pagina(id, o) { PAG[id] = o; }
   var SECCIONES = ['Operación', 'Portal de repartidores', 'CONTAX', 'Sistema'];
 
@@ -378,13 +378,13 @@
     var html = '<button class="menu-plegar" data-accion="plegar" title="' + (S.menuMini ? 'Dejar el menú abierto' : 'Ocultar el menú (quedan los íconos)') + '" aria-label="Ocultar o mostrar el menú">' + ic('plegar') + '</button>' +
       '<a class="menu-logo" href="#/tablero" data-ir="tablero"><img src="marca/logos/nummeros-logotipo-horizontal-' + (S.oscuro ? 'claro' : 'principal') + '.svg" alt="NUMMEROS"><img class="menu-iso" src="marca/logos/nummeros-isotipo-' + (S.oscuro ? 'claro' : 'principal') + '.svg" alt="NUMMEROS"><small>CONTROL</small></a>';
     SECCIONES.forEach(function (sec) {
-      var items = Object.keys(PAG).filter(function (k) { return PAG[k].sec === sec && (!PAG[k].soloAdmin || esAdmin()); });
+      var items = Object.keys(PAG).filter(function (k) { return PAG[k].sec === sec && !PAG[k].oculta && (!PAG[k].soloAdmin || esAdmin()); });
       items.sort(function (a, b) { return (PAG[a].orden || 50) - (PAG[b].orden || 50); });
       if (!items.length) return;
       html += '<span class="menu-sec">' + sec + '</span>';
       items.forEach(function (k) {
         var p = PAG[k], n = p.cuenta ? p.cuenta() : 0;
-        html += '<button class="menu-link' + (S.pagina === k ? ' activo' : '') + '" data-ir="' + k + '" aria-label="' + esc(p.t) + '">' + ic(p.i) + '<span>' + p.t + '</span>' + (n ? '<span class="cuenta num">' + n + '</span>' : '') + '</button>';
+        html += '<button class="menu-link' + (S.pagina === k || (PAG[S.pagina] && PAG[S.pagina].padre === k) ? ' activo' : '') + '" data-ir="' + k + '" aria-label="' + esc(p.t) + '">' + ic(p.i) + '<span>' + p.t + '</span>' + (n ? '<span class="cuenta num">' + n + '</span>' : '') + '</button>';
       });
     });
     html += '<div class="menu-pie"><img src="marca/logos/nummeros-logotipo-firma-' + (S.oscuro ? 'claro' : 'principal') + '.svg" alt="NUMMEROS by CONTAX">CONTROL · v' + esc(C.version) + '</div>';
@@ -521,12 +521,10 @@
       CTRL.graficos.push(g);
     };
     hacer();
-    // «ampliar»: el mismo gráfico en grande, en una ventana
+    // clic en el gráfico: el mismo gráfico en grande (se cierra con Esc o clic fuera)
     var card = canvas.closest('.card, .graf'), h = card && card.querySelector('.h2');
-    if (!card || card.querySelector('.ampliar')) return;
+    if (!card || canvas.parentNode.dataset.ampliar) return;
     card.classList.add('con-graf');
-    var b = document.createElement('button'); b.type = 'button'; b.className = 'ampliar'; b.innerHTML = ic('ampliar') + 'ampliar';
-    (h || card).appendChild(b);
     var abrir = function () {
       var tit = h ? h.childNodes[0].textContent : 'Gráfico';
       var v = ventana(esc(tit), h && h.querySelector('small') ? esc(h.querySelector('small').textContent) : '', '<div class="grafico grande"><canvas></canvas></div>', null, function (w) {
@@ -538,8 +536,7 @@
       });
       return v;
     };
-    b.addEventListener('click', function (e) { e.stopPropagation(); abrir(); });
-    var area = canvas.parentNode; area.title = 'Toca para ampliar';
+    var area = canvas.parentNode; area.title = 'Clic para ver en grande'; area.dataset.ampliar = '1';
     area.addEventListener('click', function (e) { if (!e.target.closest('.card .tabla')) abrir(); });
   }
   /* Barra 3D en SVG (reportes y PDF): frente, cara de arriba y costado */

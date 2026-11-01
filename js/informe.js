@@ -241,9 +241,9 @@
     }, function () { });
   }
   X.pagina('informe', {
-    t: 'Buscar repartidor', i: 'persona', orden: 2.5, sec: 'Operación',
+    t: 'Repartidor', i: 'persona', sec: 'Operación', oculta: true, padre: 'repartidores',
     render: function () {
-      var cab = X.titulo('Buscar repartidor', 'Escribe el nombre o el ID para ver su informe general (pagos, facturas e impuestos). Con «Descargar PDF» sale el informe para enviárselo.');
+      var cab = X.titulo('Informe del repartidor', 'Pagos, facturas e impuestos. Con «Descargar PDF» sale el informe para enviárselo.', '<button class="btn sec" data-ir="repartidores">' + ic('repartidor') + 'Volver a Repartidores</button>');
       if (!D.repartidores) return cab + X.esqueleto(2);
       var res = buscar(IN.buscar);
       var caja = '<div class="card mb"><div class="herr"><div class="buscar">' + ic('buscar') + '<input type="search" id="bInf" placeholder="Nombre o ID del repartidor" value="' + esc(IN.buscar) + '" autocomplete="off"></div>' +

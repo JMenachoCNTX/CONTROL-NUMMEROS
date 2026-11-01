@@ -509,7 +509,7 @@
       // Repartidores sin nombre (por ejemplo los que no están en la hoja BDYANGO del robot): se toma el de BDYango
       if (D.repartidores) D.repartidores.forEach(function (x) { var t = b.todos[x.id]; if (!x.nombre && t && t.nombre) x.nombre = t.nombre; });
     }, function (e) { console.warn('BDYango:', e); D.bdyango = { cuentas: {}, lista: [], error: e.message || 'No se pudo leer BDYango.' }; })
-      .then(function () { if (['bdyango', 'pagos', 'repartidores', 'informe', 'historial', 'tablero'].indexOf(S.pagina) >= 0 && !document.querySelector('.velo') && !/INPUT|SELECT|TEXTAREA/.test((document.activeElement || {}).tagName)) X.refrescar(); });
+      .then(function () { if (['bdyango', 'pagos', 'repartidores', 'informe', 'historial', 'tablero', 'clientes'].indexOf(S.pagina) >= 0 && !document.querySelector('.velo') && !/INPUT|SELECT|TEXTAREA/.test((document.activeElement || {}).tagName)) X.refrescar(); });
     return bdyPromesa;
   }
   var BY = { ciudad: '', filtro: 'todos', buscar: '', pag: 0 };
@@ -540,7 +540,7 @@
         '</div><div class="card"><div class="pestanas" role="tablist">' + [['todos', 'Todos'], ['activos', 'Activados'], ['sinbanco', 'Sin datos bancarios'], ['sincodigo', 'Banco no reconocido']].map(function (p) {
           return '<button role="tab" aria-selected="' + (BY.filtro === p[0]) + '" data-fby="' + p[0] + '">' + p[1] + ' <em class="num">' + entero(cuenta[p[0]]) + '</em></button>';
         }).join('') + '</div>' +
- (BY.filtro === 'sincodigo' ? '<div class="aviso-caja mb">' + ic('ayuda') + '<div><b>¿Qué es «banco no reconocido»?</b>El banco que figura en BDYango no está en el cuadro de códigos del Banco Ganadero (pestaña «Códigos de banco»), o en esa columna escribieron otra cosa (por ejemplo un número). Sin código no se puede transferir: hay que pedir a Yango que lo corrija.</div></div>' : '') +
+ (BY.filtro === 'sincodigo' ? '<div class="aviso-caja mb">' + ic('ayuda') + '<div><b>¿Qué es «banco no reconocido»?</b>El banco que figura en BDYango no está en el cuadro de códigos del Banco Ganadero (Pagos pendientes → «Códigos de banco»), o en esa columna escribieron otra cosa (por ejemplo un número). Sin código no se puede transferir: hay que pedir a Yango que lo corrija.</div></div>' : '') +
         '<div class="herr"><div class="buscar">' + ic('buscar') + '<input type="search" id="bBy" placeholder="Buscar por nombre, ID, CI, NIT, teléfono o cuenta" value="' + esc(BY.buscar) + '"></div>' +
           '<select id="sByCiudad" aria-label="Ciudad"><option value="">Todas las ciudades</option>' + ['SCZ', 'CBBA', 'LPZ'].map(function (c) { return '<option value="' + c + '"' + (BY.ciudad === c ? ' selected' : '') + '>' + esc(X.semanas.CIUDADES[c]) + '</option>'; }).join('') + '</select></div>' +
         (l.length ? X.tabla([
@@ -581,11 +581,11 @@
 
   /* ══════════ CÓDIGOS DE BANCO (cuadro con el que se arma la planilla) ══════════ */
   X.pagina('codigosBanco', {
-    t: 'Códigos de banco', i: 'banco', orden: 5.5, sec: 'Operación',
+    t: 'Códigos de banco', i: 'banco', sec: 'Operación', oculta: true, padre: 'pagos',
     render: function () {
       var uso = {};
       ((D.bdyango && D.bdyango.lista) || []).forEach(function (x) { if (!x.cuenta || x.desconocido) return; var k = Number(x.forma) === 1 ? 'G' : String(x.entidad); uso[k] = (uso[k] || 0) + 1; });
-      return X.titulo('Códigos de banco', 'Cuadro «Códigos de Banco para Envío vía ACH» con el que se arma la planilla del Banco Ganadero. Forma de pago 1 = cuenta del Banco Ganadero; 3 = transferencia ACH a otro banco con su código.') +
+      return X.titulo('Códigos de banco', 'Cuadro «Códigos de Banco para Envío vía ACH» con el que se arma la planilla del Banco Ganadero. Forma de pago 1 = cuenta del Banco Ganadero; 3 = transferencia ACH a otro banco con su código.', '<button class="btn sec" data-ir="pagos">' + ic('pagos') + 'Volver a Pagos pendientes</button>') +
         '<div class="card">' + X.tabla([
           { t: 'Código', html: function (b) { return '<b class="num">' + esc(b[0] || '—') + '</b>'; } },
           { t: 'Nombre del banco', html: function (b) { return esc(b[1]); } },
