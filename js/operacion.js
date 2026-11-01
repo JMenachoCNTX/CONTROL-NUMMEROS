@@ -406,7 +406,17 @@
     ['Importe total', 'importe'], ['Comentarios', 'comentario'], ['Nro Factura', 'factura'], ['Fecha Factura', 'fechaFactura'], ['NIT Factura', 'nit'],
     ['Nro Autorización', 'autorizacion'], ['Mes de Pago', 'mes'], ['Gestión SEM', 'gestion']];
   function valorHist(h, c) { return typeof c[1] === 'function' ? c[1](h) : (h[c[1]] == null ? '' : h[c[1]]); }
+  /* Pagos del historial que vinieron sin nombre: se completa con el del portal o el de BDYango */
+  function completarNombres() {
+    var by = {}; ((D.bdyango && D.bdyango.lista) || []).forEach(function (b) { by[b.id] = b.nombre; });
+    (D.hist || []).forEach(function (h) {
+      if (h.nombre) return;
+      var r = D.repartidores && D.repartidores.get(X.idSeguro(h.id));
+      h.nombre = (r && r.nombre) || by[h.id] || '';
+    });
+  }
   function filtrarHist() {
+    completarNombres();
     var b = X.normal(H.buscar);
     return (D.hist || []).filter(function (h) { return !b || (X.normal(h.nombre) + ' ' + h.id + ' ' + h.semana + ' ' + h.factura + ' ' + h.nit).indexOf(b) >= 0; })
       .sort(function (a, z) { return String(z.fecha).localeCompare(String(a.fecha)) || X.normal(a.nombre).localeCompare(X.normal(z.nombre)); });
@@ -415,6 +425,7 @@
     var m = {};
     // Historial propio de CONTROL («historialPagos», migrado de HistPagosMTG)
     if (D.hist && D.hist.length) {
+      completarNombres();
       D.hist.forEach(function (h) {
         var k = h.fecha;
         m[k] = m[k] || { fecha: X.fecha(k), iso: k, total: 0, filas: [], semanas: {} };
@@ -490,7 +501,7 @@
       if (cm) X.grafico(cm, { type: 'bar', data: { labels: meses.map(function (k) { return NOM[Number(k.slice(5)) - 1] + ' ' + k.slice(2, 4); }), datasets: [{ label: 'Pagado', data: meses.map(function (k) { return X.redondear(mes[k]); }), backgroundColor: meses.map(function (k, i) { return i % 2 ? col.medio : col.fuerte; }) }] },
         options: { maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: tipBs }, scales: eje } });
       var cc = el.querySelector('#gCant');
-      if (cc) X.grafico(cc, { type: 'line', data: { labels: g.map(function (x) { return x.fecha.slice(0, 5); }), datasets: [{ label: 'Repartidores', data: g.map(function (x) { return x.filas.length; }), borderColor: col.fuerte, fill: true, tension: .35 }] },
+      if (cc) X.grafico(cc, { type: 'line', data: { labels: g.map(function (x) { return x.fecha.slice(0, 5); }), datasets: [{ label: 'Repartidores', data: g.map(function (x) { return x.filas.length; }), borderColor: col.fuerte, fill: true, cubicInterpolationMode: 'monotone' }] },
         options: { maintainAspectRatio: false, plugins: { legend: { display: false } } } });
       var por = {}; (D.hist || []).forEach(function (h) { var k = String(h.id); por[k] = por[k] || { n: h.nombre || k, t: 0 }; por[k].t += h.importe; });
       var top = Object.keys(por).map(function (k) { return por[k]; }).sort(function (a, z) { return z.t - a.t; }).slice(0, 8);

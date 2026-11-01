@@ -272,5 +272,5 @@
     if (S.pagina === 'informe') X.refrescar(); else X.ir('informe');
   }
 
-  X.informe = { abrir: abrir, _puro: { buscar: buscar, datos: datos, htmlPdf: htmlPdf, cifras: cifras } };
+  X.informe = { abrir: abrir, _puro: { buscar: buscar, datos: datos, htmlPdf: htmlPdf, cifras: cifras, css: function (b) { return INF_CSS.replace(/BASE/g, b); } } };
 })();
