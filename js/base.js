@@ -603,7 +603,7 @@
       document.querySelector('.app').classList.remove('menu-abierto');
     // Menú plegado y abierto un momento: al tocar fuera vuelve a quedar solo con los íconos
     var ap = document.querySelector('.app.menu-mini.menu-ver');
-    if (ap && !e.target.closest('.menu')) ap.classList.remove('menu-ver');
+    if (ap && document.contains(e.target) && !e.target.closest('.menu')) ap.classList.remove('menu-ver');
   });
   /* Menú plegable: con el menú abierto, el botón lo deja solo con íconos. Plegado, el botón lo abre encima
      del contenido; tocar fuera lo vuelve a plegar y «Dejar abierto» lo fija otra vez. */
