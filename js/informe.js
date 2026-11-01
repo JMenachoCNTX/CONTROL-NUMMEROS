@@ -91,9 +91,9 @@
 
   /* ══════════ PDF (formato NUMMEROS, con el logo de CONTAX) ══════════ */
   /* Barras 3D en SVG: una o dos series (agrupadas) */
-  function barrasSvg(etq, series) {
+  function barrasSvg(etq, series, ancho) {
     if (!etq.length) return '<p class="inf-vacio">Todavía no hay pagos para graficar.</p>';
-    var W = 760, H = 230, iz = 60, de = 22, ar = 26, ab = 30, max = 0;
+    var W = ancho || 760, H = ancho ? 250 : 230, iz = 50, de = 22, ar = 26, ab = 30, max = 0;
     series.forEach(function (s) { s.v.forEach(function (v) { if (v > max) max = v; }); });
     var paso = Math.pow(10, Math.floor(Math.log10(Math.max(max, 1)))), tope = Math.ceil((max * 1.15 || 1) / paso) * paso;
     var y = function (v) { return ar + (H - ar - ab) * (1 - v / tope); }, hueco = (W - iz - de) / etq.length;
@@ -152,8 +152,8 @@
         '<div><b>Póliza de seguro</b>' + est(d.poliza, 'Registrada', 'No registrada') + '</div><div><b>Estado en Yango</b><span>' + esc(d.estadoYango || '—') + '</span></div><div><b>Contador</b><span>' + esc(d.contador) + '</span></div>' +
       '</div>' +
       '<div class="inf-h">Evolución</div><div class="inf-graf">' +
-        '<div><p class="inf-ht">Ingresos por fecha de pago</p>' + barrasSvg(c.fechas.etq, [{ nombre: 'Pagado', color: '#235347', v: c.fechas.v }]) + '</div>' +
-        '<div><p class="inf-ht">Ingresos por mes</p>' + barrasSvg(c.meses.etq, [{ nombre: 'Total del mes', color: '#2F6F5A', v: c.meses.v }]) + '</div>' +
+        '<div><p class="inf-ht">Ingresos por fecha de pago</p>' + barrasSvg(c.fechas.etq, [{ nombre: 'Pagado', color: '#235347', v: c.fechas.v }], 400) + '</div>' +
+        '<div><p class="inf-ht">Ingresos por mes</p>' + barrasSvg(c.meses.etq, [{ nombre: 'Total del mes', color: '#2F6F5A', v: c.meses.v }], 400) + '</div>' +
         '<div class="ancho"><p class="inf-ht">Proyección impositiva (por mes de la factura)</p>' + barrasSvg(c.imp.etq, [{ nombre: 'Débito Fiscal (13%)', color: '#235347', v: c.imp.df }, { nombre: 'IT (3%)', color: '#8EB69B', v: c.imp.it }]) + '</div>' +
       '</div>' +
       '<div class="inf-h">Historial de pagos y facturación</div>' +

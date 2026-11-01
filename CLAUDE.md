@@ -45,7 +45,7 @@ El permiso se elige en **Panel → Usuarios → columna CONTROL**. Las reglas de
 - GitHub Pages desde la rama `main` (raíz): https://jmenachocntx.github.io/CONTROL-NUMMEROS/
 - Todavía **no hay archivo `CNAME`**. El dominio previsto es `controlnummeros.contaxbolivia.com` (pasos en `README.md`).
 - `firestore.rules` **no se publica solo**: hay que copiarlo y pegarlo en la consola de Firebase del proyecto `control--nummeros` → Firestore → Reglas → Publicar.
-- Versiones: `version` en `config.js` (hoy 2.1), el `?v=` de los scripts en `index.html` y el mensaje del commit dice la versión (ej. "... (v1.4)").
+- Versiones: `version` en `config.js` (hoy 2.1.2), el `?v=` de los scripts en `index.html` y el mensaje del commit dice la versión (ej. "... (v1.4)").
 
 ## Cuidados importantes
 - **El repositorio es PÚBLICO.** Nunca subir contraseñas, archivos `.json` de cuentas de servicio ni datos de clientes.
@@ -61,4 +61,8 @@ El permiso se elige en **Panel → Usuarios → columna CONTROL**. Las reglas de
 - **`fuentePagos: 'control'` desde el 31/10/2026 (v2.0)** en CONTROL y en el Portal: ya no se usan PPendientes ni HistPagosMTG (no volver a 'sheets'). Única hoja que se sigue leyendo: BDYango (la mantiene Yango). Lo demás (ASEGURADOS, Habilitados, trámites…) todavía viene del robot y se migrará después.
 - **Historial de pagos propio** (ya no la hoja HistPagosMTG): colección `historialPagos` del Portal, un documento por fecha de pago (`{fecha}_{parte}`, máx. 2000 pagos; `{fecha}_c` = confirmados en CONTROL) con los pagos en `filas` (texto JSON, columnas de HistPagosMTG: semana, rango, ID, nombre, importe, comentarios, N.º/fecha/NIT/autorización de factura, nro, mes de pago, gestión) para ahorrar escrituras. Cada repartidor tiene `historialRider/{uid}` (lo lee su portal). Cada vez que se abre CONTROL se leen ~5 mil documentos (repartidores, semanas abiertas, historial): Firebase está en plan **Spark** (20 mil escrituras y 50 mil lecturas por día), no guardar un documento por pago. Pagos → «Migrar desde Sheets» lee HistPagosMTG y PPendientes en vivo (`admin_ctrl_hoja`, `hoja: 'pagos'`, solo admin), reescribe el historial y pasa los pendientes a `semanas`. Migrado el 31/10/2026: 31.766 pagos · Bs 28.755.672,67 y 1.100 pendientes · Bs 254.614,46 (igual a las hojas).
 - **Códigos de banco:** cuadro «Códigos de Banco para Envío vía ACH» en `TABLA_BANCOS` de `js/banco.js` (pestaña «Códigos de banco»). Yape = BCP 1005; Yolo = Ganadero. «Banco no reconocido» = el texto de BDYango no está en el cuadro.
-- **Menú plegable** (solo escritorio): se guarda en el navegador (`ctrl_menu_mini`).
+- **Menú plegable** (solo escritorio): se guarda en el navegador (`ctrl_menu_mini`). Plegado, al pasar el cursor muestra el nombre (`.menu-tip`).
+- **Gráficos en 3D:** todos pasan por `X.grafico` (Chart.js + plugin `nm3d` en `js/base.js`: barras con cara de arriba y costado, líneas/tortas con sombra, animación y botón «ampliar»). En SVG (reporte de pago y PDF) usar `X.barraSvg`.
+- **Historial de pagos:** gráficos arriba y subpestañas «Fechas de pago» / «Todos los pagos», ambas con las 13 columnas de HistPagosMTG.
+- **Buscar repartidor:** en pantalla se ve con el diseño del sistema; «Descargar PDF» arma el informe con formato NUMMEROS y logo de CONTAX.
+- **Fotos de colaboración** (`marca/colaboracion/`): la fuente es `EdiThor-Nummeros/colaboracion/`.
