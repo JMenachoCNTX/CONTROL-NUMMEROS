@@ -69,7 +69,12 @@
     if (!/^\d{4,20}$/.test(String(c.cuenta || '').trim())) f.push('falta tu número de cuenta');
     return f;
   }
-  function cuentaDe(id) { return D.cuentas ? D.cuentas.get(X.idSeguro(id)) || null : null; }
+  /* Cuenta para pagar: la corregida a mano en CONTROL manda; si no, la de BDYango en vivo; si no, la guardada */
+  function cuentaDe(id) {
+    var k = X.idSeguro(id), g = D.cuentas ? D.cuentas.get(k) || null : null;
+    if (g && g.origen === 'manual') return g;
+    return (D.bdyango && D.bdyango.cuentas[k]) || g;
+  }
   function escribirC(ops, progreso) {
     var i = 0;
     var paso = function () {
@@ -155,13 +160,18 @@
     hojas.forEach(function (h) {
       var enc = h.enc.map(X.normal), c = function (re) { for (var i = 0; i < enc.length; i++) if (re.test(enc[i])) return i; return -1; };
       var k = { id: c(/^ID\b/), nom: c(/^NOMBRE \(COMPLETO\)|^NOMBRE$/), ape: c(/^APELLIDO/), ci: c(/^CI$/), nit: c(/^NIT$/), tel: c(/^TELEFONO/),
-        banco: c(/^BANCO$/), cuenta: c(/^CTA|^CUENTA/), tg: c(/^TELEGRAM/), est: c(/^ESTADO$/) };
+        banco: c(/^BANCO$/), cuenta: c(/^CTA|^CUENTA/), tg: c(/^TELEGRAM/), est: c(/^ESTADO$/), fecha: c(/^FECHA$/), correo: c(/^CORREO/), esp: c(/^ESPECIALISTA/),
+        mat: c(/^MATRICULA DE COMERCIO NR/), roe: c(/^ROE/), seg: c(/^FECHA CADUCIDAD SEGURO/) };
+      if (k.fecha < 0 && !enc[0]) k.fecha = 0;
       if (k.id < 0 || k.banco < 0 || k.cuenta < 0) return;
       hojasUsadas.push(h.nombre);
+      var ciudad = /SCZ/i.test(h.nombre) ? 'SCZ' : /CBBA/i.test(h.nombre) ? 'CBBA' : /LPZ/i.test(h.nombre) ? 'LPZ' : '';
       h.filas.forEach(function (f) {
         var id = String(f[k.id] == null ? '' : f[k.id]).trim().replace(/\.0+$/, ''); if (!/^\d{4,}$/.test(id)) return;
-        var x = porId[id] || (porId[id] = { id: id });
+        var x = porId[id] || (porId[id] = { id: id, registros: 0 });
         var pon = function (campo, v) { v = String(v == null ? '' : v).trim(); if (v) x[campo] = v; };
+        x.registros++; x.ciudad = ciudad;
+        [['fecha', 'fecha'], ['correo', 'correo'], ['esp', 'especialista'], ['mat', 'matricula'], ['roe', 'roe'], ['seg', 'seguroVence']].forEach(function (p) { if (k[p[0]] >= 0) pon(p[1], f[k[p[0]]]); });
         pon('nombre', [k.nom >= 0 ? f[k.nom] : '', k.ape >= 0 ? f[k.ape] : ''].join(' ').replace(/\s+/g, ' ').trim());
         if (k.ci >= 0) pon('ci', String(f[k.ci]).replace(/\.0+$/, ''));
         if (k.nit >= 0) pon('nit', String(f[k.nit]).replace(/\D/g, ''));
@@ -175,6 +185,7 @@
     var cuentas = {};
     Object.keys(porId).forEach(function (id) {
       var x = porId[id];
+      if (x.cuenta) { var bb = bancoDe(x.bancoTexto); x.forma = bb.forma; x.entidad = bb.entidad; x.desconocido = !!bb.desconocido; }
       if (!x.cuenta) { sinBanco++; return; }
       var b = bancoDe(x.bancoTexto);
       if (b.desconocido) desconocidos[x.bancoTexto] = (desconocidos[x.bancoTexto] || 0) + 1;
@@ -182,7 +193,7 @@
       cuentas[X.idSeguro(id)] = { id: id, nombre: x.nombre || '', ci: x.ci || '', cuenta: x.cuenta, forma: b.forma, moneda: b.forma === 1 ? 0 : 1, entidad: b.entidad,
         sucursal: b.forma === 1 ? 0 : 'SCZ', banco: x.bancoTexto, telefono: x.telefono || '', telegram: x.telegram || '', estadoYango: x.estadoYango || '', nit: x.nit || '' };
     });
-    return { cuentas: cuentas, total: Object.keys(porId).length, sinBanco: sinBanco, desconocidos: desconocidos, yolo: yolo, hojas: hojasUsadas };
+    return { cuentas: cuentas, todos: porId, total: Object.keys(porId).length, sinBanco: sinBanco, desconocidos: desconocidos, yolo: yolo, hojas: hojasUsadas };
   }
   function importarBDYango(alTerminar) {
     X.ventana('Importar desde BDYango', 'Sube el Excel de «BOL Registro Activación» (Archivo → Descargar → Microsoft Excel). Se actualizan los datos bancarios de cada repartidor.',
@@ -448,14 +459,20 @@
     var lee = mc ? Promise.all(docs.map(function (k) { return col.doc(k).get(); })) : Promise.resolve([]);
     return lee.then(function (snaps) {
       var est = {}; snaps.forEach(function (d) { if (d.exists) est[d.id] = d.data(); });
-      var ops = [], pagadosUid = {}, rebotadosUid = {};
+      var ops = [], pagadosUid = {}, rebotadosUid = {}, hist = [];
       var vale = function (k) { return mc && k && est[k] && est[k].estado === 'en_planilla' && est[k].planilla === p._id; };
-      cr.pagados.forEach(function (x) { if (vale(x.l.doc)) { ops.push({ tipo: 'update', ref: col.doc(x.l.doc), datos: { estado: 'pagado', fechaPago: fecha, rebote: null, actualizado: X.servidor(), quien: quien } }); pagadosUid[x.l.uid || X.idSeguro(x.l.id)] = 1; } });
+      cr.pagados.forEach(function (x) {
+        if (!vale(x.l.doc)) return;
+        var s = est[x.l.doc];
+        ops.push({ tipo: 'update', ref: col.doc(x.l.doc), datos: { estado: 'pagado', fechaPago: fecha, rebote: null, actualizado: X.servidor(), quien: quien } });
+        hist.push([String(s.semana || ''), s.rango || '', String(s.id), s.nombre || '', X.redondear(Number(s.importe) || 0), s.ciudad || '', x.l.factura || '', '', '', '', '']);
+        pagadosUid[x.l.uid || X.idSeguro(x.l.id)] = 1;
+      });
       cr.rebotados.forEach(function (x) {
         if (vale(x.l.doc)) ops.push({ tipo: 'update', ref: col.doc(x.l.doc), datos: { estado: 'pendiente', planilla: null, rebote: { fecha: fecha, estadoBanco: x.f.estado, banco: x.f.banco, planilla: p._id }, actualizado: X.servidor(), quien: quien } });
         rebotadosUid[x.l.uid || X.idSeguro(x.l.id)] = 1;
       });
-      return X.semanas.escribir(ops).then(function () {
+      return X.semanas.escribir(ops).then(function () { return X.semanas.agregarAlHistorial(fecha, hist); }).then(function () {
         var completa = !cr.faltan.length;
         return Promise.all([
           X.dbC.collection('pagos').doc(p._id).update({
@@ -471,8 +488,79 @@
     });
   }
 
+  /* ══════════ BDYANGO EN VIVO ══════════
+     Se lee «BOL Registro Activación» por el puente del Panel al abrir CONTROL (sin botones). Sus cuentas
+     son las que usa la planilla del banco, salvo las corregidas a mano en «Cuentas bancarias». */
+  var bdyPromesa = null;
+  function cargarBDYango(forzar) {
+    if (bdyPromesa && !forzar) return bdyPromesa;
+    if (!forzar) D.bdyango = null;
+    bdyPromesa = X.puente('admin_ctrl_hoja', { hoja: 'bdyango' }).then(function (r) {
+      var b = filasBDYango(r.hojas.map(function (h) { return { nombre: h.nombre, enc: h.filas[0] || [], filas: h.filas.slice(1) }; }));
+      D.bdyango = { cuentas: b.cuentas, lista: Object.keys(b.todos).map(function (id) { return b.todos[id]; }), sinBanco: b.sinBanco, desconocidos: b.desconocidos, leido: r.leido };
+    }, function (e) { console.warn('BDYango:', e); D.bdyango = { cuentas: {}, lista: [], error: e.message || 'No se pudo leer BDYango.' }; })
+      .then(function () { if (S.pagina === 'bdyango' || S.pagina === 'pagos') X.refrescar(); });
+    return bdyPromesa;
+  }
+  var BY = { ciudad: '', filtro: 'todos', buscar: '', pag: 0 };
+  X.pagina('bdyango', {
+    t: 'DBYango', i: 'cliente', orden: 5, sec: 'Operación',
+    render: function () {
+      var B = D.bdyango;
+      var cab = X.titulo('DBYango', 'Datos de «BOL Registro Activación» (Yango), leídos en vivo' + (B && B.leido ? ' · ' + X.hace(B.leido) : '') + '. Una fila por repartidor (su último registro). Sus cuentas son las que usa la planilla del banco.',
+        '<button class="btn sec" id="byRec">' + ic('historial') + 'Leer de nuevo</button>');
+      if (!B) return cab + '<div class="card">' + X.cargaBarra('BDYango', 'Leyendo la hoja de Yango…') + '</div>';
+      if (B.error) return cab + '<div class="card">' + X.vacio('No se pudo leer BDYango', B.error) + '</div>';
+      var conCta = B.lista.filter(function (x) { return x.cuenta; }), bq = X.normal(BY.buscar);
+      var cuenta = { todos: B.lista.length, activos: B.lista.filter(function (x) { return /ACTIV/.test(X.normal(x.estadoYango)) && !/DESACTIV/.test(X.normal(x.estadoYango)); }).length,
+        sinbanco: B.lista.length - conCta.length, sincodigo: conCta.filter(function (x) { return x.desconocido; }).length };
+      var l = B.lista.filter(function (x) {
+        if (BY.ciudad && x.ciudad !== BY.ciudad) return false;
+        if (BY.filtro === 'activos' && !(/ACTIV/.test(X.normal(x.estadoYango)) && !/DESACTIV/.test(X.normal(x.estadoYango)))) return false;
+        if (BY.filtro === 'sinbanco' && x.cuenta) return false;
+        if (BY.filtro === 'sincodigo' && !(x.cuenta && x.desconocido)) return false;
+        return !bq || (X.normal(x.nombre) + ' ' + x.id + ' ' + (x.ci || '') + ' ' + (x.telefono || '') + ' ' + (x.cuenta || '') + ' ' + (x.nit || '')).indexOf(bq) >= 0;
+      }).sort(function (a, z) { return X.normal(a.nombre).localeCompare(X.normal(z.nombre)); });
+      BY.lista = l;
+      return cab + '<div class="rejilla r4 mb">' +
+          '<div class="kpi"><small>Repartidores</small><b class="num">' + entero(cuenta.todos) + '</b><em>' + entero(cuenta.activos) + ' activados</em></div>' +
+          '<div class="kpi"><small>Con cuenta bancaria</small><b class="num">' + entero(conCta.length) + '</b><em>' + entero(conCta.filter(function (x) { return Number(x.forma) === 1; }).length) + ' Banco Ganadero</em></div>' +
+          '<div class="kpi"><small>Sin banco o cuenta</small><b class="num">' + entero(cuenta.sinbanco) + '</b><em>no entran a la planilla</em></div>' +
+          '<div class="kpi"><small>Banco sin código</small><b class="num">' + entero(cuenta.sincodigo) + '</b><em>' + esc(Object.keys(B.desconocidos || {}).slice(0, 3).join(', ')) + '</em></div>' +
+        '</div><div class="card"><div class="pestanas" role="tablist">' + [['todos', 'Todos'], ['activos', 'Activados'], ['sinbanco', 'Sin banco o cuenta'], ['sincodigo', 'Banco sin código']].map(function (p) {
+          return '<button role="tab" aria-selected="' + (BY.filtro === p[0]) + '" data-fby="' + p[0] + '">' + p[1] + ' <em class="num">' + entero(cuenta[p[0]]) + '</em></button>';
+        }).join('') + '</div>' +
+        '<div class="herr"><div class="buscar">' + ic('buscar') + '<input type="search" id="bBy" placeholder="Buscar por nombre, ID, CI, NIT, teléfono o cuenta" value="' + esc(BY.buscar) + '"></div>' +
+          '<select id="sByCiudad" aria-label="Ciudad"><option value="">Todas las ciudades</option>' + ['SCZ', 'CBBA', 'LPZ'].map(function (c) { return '<option value="' + c + '"' + (BY.ciudad === c ? ' selected' : '') + '>' + esc(X.semanas.CIUDADES[c]) + '</option>'; }).join('') + '</select></div>' +
+        (l.length ? X.tabla([
+          { t: 'Repartidor', html: function (x) { return '<b>' + esc(x.nombre || '—') + '</b><span class="sub num">ID ' + esc(x.id) + (x.ci ? ' · CI ' + esc(x.ci) : '') + '</span>'; } },
+          { t: 'Ciudad · Estado', html: function (x) { return esc(X.semanas.CIUDADES[x.ciudad] || x.ciudad || '') + '<span class="sub">' + esc(x.estadoYango || '') + (x.fecha ? ' · ' + esc(x.fecha) : '') + '</span>'; } },
+          { t: 'Contacto', html: function (x) { return '<span class="num">' + esc(x.telefono || '—') + '</span>' + (x.telegram ? '<span class="sub">@' + esc(x.telegram) + '</span>' : ''); } },
+          { t: 'Banco · Cuenta', html: function (x) { return x.cuenta ? esc(x.desconocido ? x.bancoTexto + ' (sin código)' : nombreBanco(x)) + '<span class="sub num">' + esc(x.cuenta) + '</span>' : X.chip('mal', 'Sin datos bancarios'); } },
+          { t: 'NIT', html: function (x) { return '<span class="num">' + esc(x.nit || '—') + '</span>'; } }
+        ], l, { clic: true, pag: BY.pag }) : X.vacio('Nada con este filtro')) + '</div>';
+    },
+    despues: function (el) {
+      if (!D.bdyango && !bdyPromesa) cargarBDYango();
+      var br = el.querySelector('#byRec'); if (br) br.addEventListener('click', function () { br.disabled = true; br.innerHTML = X.anilloBoton() + 'Leyendo'; cargarBDYango(true); });
+      el.querySelectorAll('[data-fby]').forEach(function (b) { b.addEventListener('click', function () { BY.filtro = b.getAttribute('data-fby'); BY.pag = 0; X.refrescar(); }); });
+      var sc = el.querySelector('#sByCiudad'); if (sc) sc.addEventListener('change', function () { BY.ciudad = sc.value; BY.pag = 0; X.refrescar(); });
+      var bq = el.querySelector('#bBy'); if (bq) bq.addEventListener('input', X.debounce(function () { BY.buscar = bq.value; BY.pag = 0; X.refrescar(); X.setFoco('#bBy'); }, 300));
+      el.querySelectorAll('[data-pag]').forEach(function (b) { b.addEventListener('click', function () { BY.pag = Number(b.getAttribute('data-pag')); X.refrescar(); }); });
+      el.querySelectorAll('tr[data-fila]').forEach(function (tr) { tr.addEventListener('click', function () { var x = (BY.lista || [])[Number(tr.getAttribute('data-fila'))]; if (x) detalleBDYango(x); }); });
+    }
+  });
+  function detalleBDYango(x) {
+    var g = D.cuentas && D.cuentas.get(X.idSeguro(x.id)), dato = function (t, v) { return '<div class="dato"><small>' + t + '</small><b>' + esc(v || '—') + '</b></div>'; };
+    X.cajon(esc(x.nombre || 'Repartidor'), 'ID ' + esc(x.id) + ' · ' + esc(X.semanas.CIUDADES[x.ciudad] || '') + (x.registros > 1 ? ' · ' + entero(x.registros) + ' registros en BDYango (se muestra el último)' : ''),
+      '<div class="rejilla r2 mb">' + dato('Estado en Yango', x.estadoYango) + dato('Fecha de registro', x.fecha) + dato('CI', x.ci) + dato('NIT', x.nit) +
+        dato('Teléfono', x.telefono) + dato('Telegram', x.telegram ? '@' + x.telegram : '') + dato('Correo', x.correo) + dato('Especialista', x.especialista) +
+        dato('Banco', x.bancoTexto) + dato('Cuenta', x.cuenta) + dato('Matrícula de Comercio', x.matricula) + dato('Caducidad del seguro', x.seguroVence) + '</div>' +
+      (g && g.origen === 'manual' ? '<div class="aviso-caja">' + ic('ayuda') + '<div><b>Cuenta corregida a mano en CONTROL</b>La planilla usa ' + esc(nombreBanco(g)) + ' ' + esc(g.cuenta) + ', no la de BDYango.</div></div>' : ''));
+  }
+
   X.banco = {
-    cargar: cargar, cuentaDe: cuentaDe, faltaEnCuenta: faltaEnCuenta, nombreBanco: nombreBanco, verCuentas: verCuentas, importarCuentas: importarCuentas,
+    cargar: cargar, cargarBDYango: cargarBDYango, cuentaDe: cuentaDe, faltaEnCuenta: faltaEnCuenta, nombreBanco: nombreBanco, verCuentas: verCuentas, importarCuentas: importarCuentas,
     armar: armar, descargarBanco: descargarBanco, semanaPrincipal: semanaPrincipal, detalleExcel: detalleExcel, conciliar: conciliar,
     importarBDYango: importarBDYango,
     _puro: { bancoDe: bancoDe, filasBDYango: filasBDYango, leerGlosa: leerGlosa, glosa: glosa, semBanco: semBanco, serialExcel: serialExcel, rangoLargo: rangoLargo, numOTexto: numOTexto, cuentasDePlanilla: cuentasDePlanilla, filasBanco: filasBanco, leerExtracto: leerExtracto, cruzar: cruzar, ENC_BANCO: ENC_BANCO }

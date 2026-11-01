@@ -224,7 +224,11 @@
         });
       });
       // Se recalcula al hacer clic: las facturas llegan en vivo y pueden haber cambiado desde que se pintó la página
-      var bp = el.querySelector('#btnPlanilla'); if (bp) bp.addEventListener('click', function () { planilla(lista().map(evaluar).filter(function (e) { return e.semanas.length; })); });
+      var bp = el.querySelector('#btnPlanilla'); if (bp) bp.addEventListener('click', function () {
+        // Las cuentas salen de BDYango en vivo: se espera a que termine de leerse
+        bp.disabled = true; bp.innerHTML = X.anilloBoton() + 'Leyendo BDYango';
+        (X.banco ? X.banco.cargarBDYango() : Promise.resolve()).then(function () { bp.disabled = false; bp.innerHTML = ic('descargar') + 'Planilla de pago'; planilla(lista().map(evaluar).filter(function (e) { return e.semanas.length; })); });
+      });
       var bc = el.querySelector('#btnCierres'); if (bc) bc.addEventListener('click', verCierres);
       var bi = el.querySelector('#btnImportar'); if (bi) bi.addEventListener('click', function () { X.semanas.importar(); });
       var bl = el.querySelector('#btnImportaciones'); if (bl) bl.addEventListener('click', function () { X.semanas.verImportaciones(); });
@@ -399,6 +403,15 @@
   var H = { buscar: '' };
   function pagosPorFecha() {
     var m = {};
+    // Historial propio de CONTROL («historialPagos», migrado de HistPagosMTG)
+    if (D.hist && D.hist.length) {
+      D.hist.forEach(function (h) {
+        var k = h.fecha;
+        m[k] = m[k] || { fecha: X.fecha(k), iso: k, total: 0, filas: [], semanas: {} };
+        m[k].total += h.importe; m[k].filas.push({ r: { id: h.id, nombre: h.nombre }, h: h }); m[k].semanas[h.semana] = 1;
+      });
+      return Object.keys(m).map(function (k) { m[k].total = X.redondear(m[k].total); return m[k]; }).sort(function (a, b) { return String(b.iso).localeCompare(String(a.iso)); });
+    }
     lista().forEach(function (r) {
       (r.historial || []).forEach(function (h) {
         var k = String(h.fechaPago || '—');
@@ -411,17 +424,18 @@
   X.pagina('historial', {
     t: 'Historial de pagos', i: 'historial', orden: 4, sec: 'Operación',
     render: function () {
-      var cab = X.titulo('Historial de pagos', (X.semanas && X.semanas.modoControl() ? 'Pagos ya realizados (confirmados en CONTROL y migrados de HistPagosMTG), del último año, agrupados por fecha de pago.' : 'Pagos ya realizados (hoja HistPagosMTG), agrupados por fecha de pago.'), '<button class="btn sec" id="btnExpHist">' + ic('descargar') + 'Excel</button>');
+      var propio = D.hist && D.hist.length;
+      var cab = X.titulo('Historial de pagos', (propio ? 'Pagos ya realizados, guardados en CONTROL (migrados de HistPagosMTG y confirmados aquí), agrupados por fecha de pago.' : 'Pagos ya realizados (copia de la hoja HistPagosMTG). Usa Pagos → «Migrar desde Sheets» para guardarlos en CONTROL.'), '<button class="btn sec" id="btnExpHist">' + ic('descargar') + 'Excel</button>');
       if (!S.portalUsuario) return cab + '<div class="card">' + sinPortal() + '</div>';
       if (!D.repartidores) return cab + X.esqueleto(3);
-      var l = pagosPorFecha(), total = X.redondear(l.reduce(function (s, x) { return s + x.total; }, 0));
+      var l = pagosPorFecha(), total = X.redondear(l.reduce(function (s, x) { return s + x.total; }, 0)), nPagos = l.reduce(function (s, x) { return s + x.filas.length; }, 0);
       var anio = new Date().getFullYear(), delAnio = l.filter(function (x) { var d = X.aFecha(x.fecha); return d && d.getFullYear() === anio; });
       return cab +
         '<div class="rejilla r4 mb">' +
           '<div class="kpi"><small>Pagado ' + anio + '</small><b class="num">' + bs(delAnio.reduce(function (s, x) { return s + x.total; }, 0)) + '</b><em>' + entero(delAnio.length) + ' fechas de pago</em></div>' +
           '<div class="kpi"><small>Último pago</small><b class="num">' + (l[0] ? bs(l[0].total) : '—') + '</b><em>' + (l[0] ? esc(l[0].fecha) + ' · ' + entero(l[0].filas.length) + ' pagos' : '') + '</em></div>' +
           '<div class="kpi"><small>Promedio por pago</small><b class="num">' + bs(l.length ? total / l.length : 0) + '</b><em>sobre ' + entero(l.length) + ' fechas</em></div>' +
-          '<div class="kpi"><small>Total histórico</small><b class="num">' + bs(total) + '</b><em>todo lo registrado</em></div>' +
+          '<div class="kpi"><small>Total histórico</small><b class="num">' + bs(total) + '</b><em>' + entero(nPagos) + ' pagos</em></div>' +
         '</div>' +
         '<div class="card mb"><div class="h2">Evolución <small>por fecha de pago</small></div><div class="grafico"><canvas id="gHist"></canvas></div></div>' +
         '<div class="card"><div class="h2">Fechas de pago <small>toca una para ver el detalle</small></div>' +
@@ -442,8 +456,8 @@
       el.querySelectorAll('tr[data-fila]').forEach(function (tr) { tr.addEventListener('click', function () { detallePago(l[Number(tr.getAttribute('data-fila'))]); }); });
       var be = el.querySelector('#btnExpHist');
       if (be) be.addEventListener('click', function () {
-        var filas = [['Fecha de pago', 'Semana', 'Período', 'ID Yango', 'Nombre', 'Importe (Bs)']];
-        l.forEach(function (x) { x.filas.forEach(function (f) { filas.push([x.fecha, f.h.semana, f.h.rango, f.r.id, f.r.nombre, Number(f.h.importe) || 0]); }); });
+        var filas = [['Fecha de pago', 'Semana', 'Período', 'ID Yango', 'Nombre', 'Importe (Bs)', 'Ciudad', 'Nro Factura', 'Fecha Factura', 'NIT Factura', 'Nro Autorización']];
+        l.forEach(function (x) { x.filas.forEach(function (f) { filas.push([x.fecha, f.h.semana, f.h.rango, f.r.id, f.r.nombre, Number(f.h.importe) || 0, f.h.ciudad || '', f.h.factura || '', f.h.fechaFactura || '', f.h.nit || '', f.h.autorizacion || '']); }); });
         X.excel([{ nombre: 'Por fecha', filas: [['Fecha de pago', 'Pagos', 'Total (Bs)']].concat(l.map(function (x) { return [x.fecha, x.filas.length, x.total]; })) }, { nombre: 'Detalle', filas: filas }], 'Historial-pagos-' + X.hoyISO());
       });
     }

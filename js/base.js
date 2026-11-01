@@ -510,6 +510,16 @@
       return r;
     });
   }
+  /* Otras acciones del puente con la sesión del Panel (p. ej. leer BDYango o las hojas de pagos) */
+  function puente(accion, datos) {
+    if (!authPn || !authPn.currentUser) return Promise.reject(new Error('Sin sesión del Panel.'));
+    return authPn.currentUser.getIdToken().then(function (idToken) {
+      return fetch(C.puenteUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(Object.assign({ action: accion, idToken: idToken }, datos || {})) });
+    }).then(function (r) { return r.json(); }).then(function (r) {
+      if (!r || !r.ok) throw new Error((r && r.error) || 'El puente no respondió.');
+      return r;
+    });
+  }
   function abrirEspejos(r) {
     return Promise.all([authC.signInWithEmailAndPassword(r.correo, r.llave), authP.signInWithEmailAndPassword(r.correo, r.llave)]);
   }
@@ -596,8 +606,8 @@
       var m = new Map();
       q.forEach(function (d) { var x = d.data(); x.uid = d.id; m.set(d.id, x); });
       D.repartidores = m; D.cargadoEn = new Date();
-      // Con fuentePagos 'control', pendientes e historial salen de «semanas» (js/semanas.js)
-      return CTRL.semanas ? CTRL.semanas.cargar() : null;
+      // Con fuentePagos 'control', los pendientes salen de «semanas»; el historial, de «historialPagos» (js/semanas.js)
+      return CTRL.semanas ? Promise.all([CTRL.semanas.cargar(), CTRL.semanas.cargarHistorial()]) : null;
     });
   }
   function cargarSync() {
@@ -627,8 +637,8 @@
       dbC.collection('clientes').get().then(function (q) { D.clientes = []; q.forEach(function (d) { var x = d.data(); x._id = d.id; D.clientes.push(x); }); }, function (e) { console.warn(e); D.clientes = []; }),
       dbC.collection('excepciones').get().then(function (q) { D.excepciones = []; q.forEach(function (d) { var x = d.data(); x._id = d.id; D.excepciones.push(x); }); }, function (e) { console.warn(e); D.excepciones = []; }),
       dbC.collection('notas').get().then(function (q) { D.notas = {}; q.forEach(function (d) { D.notas[d.id] = d.data(); }); }, function () { D.notas = {}; }),
-      // Cuentas bancarias de los repartidores (js/banco.js)
-      CTRL.banco ? CTRL.banco.cargar() : null
+      // Cuentas bancarias de los repartidores (js/banco.js); BDYango llega aparte, en vivo
+      CTRL.banco ? CTRL.banco.cargar().then(function () { CTRL.banco.cargarBDYango(); }) : null
     ]);
   }
   function recargarTodo(conAviso) {
@@ -707,7 +717,7 @@
     servidor: servidor, puedeEditar: puedeEditar, esAdmin: esAdmin, esDueno: esDueno, ic: ic,
     cargaN: cargaN, cargaCifras: cargaCifras, cargaBarra: cargaBarra, anillo: anillo, anilloBoton: anilloBoton, esqueleto: esqueleto, clasicos: clasicos, textoClasicos: textoClasicos,
     cajon: cajon, ventana: ventana, confirmar: confirmar, formulario: formulario, activarComunes: activarComunes,
-    csv: csv, excel: excel, cargarXLSX: cargarXLSX, bajarArchivo: bajarArchivo, bitacora: bitacora,
+    csv: csv, excel: excel, cargarXLSX: cargarXLSX, bajarArchivo: bajarArchivo, bitacora: bitacora, puente: puente,
     titulo: titulo, vacio: vacio, chip: chip, tabla: tabla, grafico: grafico, colores: colores, clienteDe: clienteDe
   };
 })();

@@ -87,13 +87,10 @@
      (lo que antes copiaba el robot desde Sheets). El resto del panel no cambia. */
   function cargar() {
     if (!modoControl() || !S.portalUsuario) { D.semanas = null; return Promise.resolve(); }
-    // Abiertas (pendientes, en planilla, no habilitadas) + todo lo del último año (el historial reciente)
-    var w = isoSemana(new Date()), m = {};
+    // Solo las abiertas (pendientes, en planilla, no habilitadas): el historial sale de «historialPagos»
+    var m = {};
     var junta = function (q) { q.forEach(function (d) { var x = d.data(); x._id = d.id; m[d.id] = x; }); };
-    return Promise.all([
-      col().where('estado', 'in', ABIERTOS).get().then(junta),
-      col().where('orden', '>=', (w.anio - 1) * 100 + w.semana).get().then(junta)
-    ]).then(function () {
+    return col().where('estado', 'in', ABIERTOS).get().then(junta).then(function () {
       D.semanas = Object.keys(m).map(function (k) { return m[k]; });
       aplicar();
     }, function (e) {
@@ -117,7 +114,6 @@
       var item = { semana: s.semana, rango: s.rango || '', importe: Number(s.importe) || 0, ciudad: s.ciudad || '', _doc: s._id, _orden: s.orden || 0, rebote: s.rebote || null };
       if (s.estado === 'pendiente') { item.estado = 'Pendiente'; r.pendientes.push(item); }
       else if (s.estado === 'en_planilla') { item.estado = 'En planilla'; item.planilla = s.planilla || ''; r.enPlanilla.push(item); }
-      else if (s.estado === 'pagado') { item.fechaPago = X.fecha(s.fechaPago); item._o = X.aFecha(s.fechaPago) ? X.aFecha(s.fechaPago).getTime() : 0; r.historial.push(item); }
       if ((s.orden || 0) >= r._ultima) { r._ultima = s.orden || 0; r._ultimaNoHab = s.estado === 'no_habilitado'; }
       if (s.ciudad && (s.orden || 0) >= (r._ultCiudad || 0)) { r._ultCiudad = s.orden || 0; r.ciudad = s.ciudad; }
     });
@@ -127,6 +123,57 @@
       r.historial.sort(function (a, b) { return (b._o - a._o) || (b._orden - a._orden); });
       r.habilitado = !r._ultimaNoHab;
       r.resumen = { pendientes: { cantidad: r.pendientes.length, total: suma(r.pendientes) }, pagados: { cantidad: r.historial.length, total: suma(r.historial) } };
+    });
+    aplicarHistorial();
+  }
+
+  /* ══════════ HISTORIAL DE PAGOS («historialPagos» del Portal) ══════════
+     Reemplaza a la hoja HistPagosMTG. Un documento por fecha de pago (y parte, máx. 2000 pagos),
+     con los pagos en «filas» (texto JSON) para no gastar una escritura por pago:
+     [semana, rango, idYango, nombre, importe, ciudad, nroFactura, fechaFactura, nitFactura, autorizacion, nro]. */
+  var TAM_PARTE = 2000;
+  function colH() { return X.dbP.collection('historialPagos'); }
+  function cargarHistorial() {
+    if (!S.portalUsuario) { D.hist = null; return Promise.resolve(); }
+    return colH().get().then(function (q) {
+      var l = [], partes = [];
+      q.forEach(function (d) {
+        var x = d.data(), filas = [];
+        try { filas = JSON.parse(x.filas || '[]'); } catch (e) { console.warn('historialPagos ' + d.id, e); }
+        partes.push({ id: d.id, fecha: x.fecha, origen: x.origen || '' });
+        filas.forEach(function (f) {
+          l.push({ fecha: x.fecha, semana: f[0], rango: f[1], id: String(f[2]), nombre: f[3], importe: Number(f[4]) || 0, ciudad: f[5] || '',
+            factura: f[6] || '', fechaFactura: f[7] || '', nit: f[8] || '', autorizacion: f[9] || '', nro: f[10] || '' });
+        });
+      });
+      D.hist = l; D.histPartes = partes;
+      aplicarHistorial();
+    }, function (e) { console.warn('Historial:', e); D.hist = null; });
+  }
+  /* El historial de cada repartidor sale de «historialPagos» (ya no de la copia de la hoja) */
+  function aplicarHistorial() {
+    if (!D.repartidores || !D.hist || !D.hist.length) return;
+    var por = {};
+    D.hist.forEach(function (h) { var u = X.idSeguro(h.id); (por[u] = por[u] || []).push(h); });
+    D.repartidores.forEach(function (r) {
+      var l = (por[r.uid] || []).map(function (h) {
+        var d = X.aFecha(h.fecha);
+        return { semana: h.semana, rango: h.rango, importe: h.importe, ciudad: h.ciudad, factura: h.factura, fechaPago: X.fecha(h.fecha), _o: d ? d.getTime() : 0 };
+      }).sort(function (a, b) { return b._o - a._o; });
+      r.historial = l;
+      r.resumen = r.resumen || {};
+      r.resumen.pagados = { cantidad: l.length, total: X.redondear(l.reduce(function (t, x) { return t + x.importe; }, 0)) };
+    });
+  }
+  /* Agrega pagos confirmados en CONTROL a su fecha (documento «{fecha}_c») */
+  function agregarAlHistorial(fecha, filas) {
+    if (!filas.length) return Promise.resolve();
+    var ref = colH().doc(fecha + '_c');
+    return ref.get().then(function (d) {
+      var ant = []; try { ant = d.exists ? JSON.parse(d.data().filas || '[]') : []; } catch (e) { ant = []; }
+      var todas = ant.concat(filas);
+      return ref.set({ fecha: fecha, parte: 'c', origen: 'control', cantidad: todas.length, total: X.redondear(todas.reduce(function (t, f) { return t + (Number(f[4]) || 0); }, 0)),
+        filas: JSON.stringify(todas), actualizado: X.servidor(), quien: S.usuario.email });
     });
   }
 
@@ -416,62 +463,120 @@
     }, function (e) { console.error(e); X.aviso('No se pudo consultar Firebase.'); });
   }
 
-  /* ══════════ MIGRACIÓN ÚNICA DESDE GOOGLE SHEETS ══════════
-     Lo que el robot copió de PPendientes e HistPagosMTG a cada repartidor pasa a «semanas».
-     No pisa nada que ya exista. */
-  function armarMigracion(repartidores, existentes, hoy) {
-    var docs = {}, sinSemana = 0, hist = 0, pend = 0;
-    repartidores.forEach(function (r) {
-      if (r.prueba || r.sinCuenta) return;
-      var o = r._sheets || r, uid = r.uid || X.idSeguro(r.id);
-      var agregar = function (x, estado) {
-        var n = numSemana(x.semana); if (!n) { sinSemana++; return; }
-        var ref = estado === 'pagado' ? X.aFecha(x.fechaPago) || hoy : hoy;
-        var anio = anioDe(x.semana) || inferirAnio(n, ref), k = idDoc(uid, anio, n);
-        if (existentes[k]) return;
-        var imp = X.redondear(Number(x.importe) || 0), d = docs[k];
-        if (d) { d.importe = X.redondear(d.importe + imp); if (estado === 'pagado') d.estado = 'pagado'; return; }
-        docs[k] = { id: String(r.id), uid: uid, nombre: r.nombre || '', celular: String(r.celular || ''), ciudad: '', semana: String(x.semana), anio: anio, orden: anio * 100 + n,
-          rango: x.rango || '', importe: imp, estado: estado, planilla: null, fechaPago: estado === 'pagado' ? fechaISO(x.fechaPago) : null, origen: 'migracion' };
-        if (estado === 'pagado') hist++; else pend++;
-      };
-      (o.historial || []).forEach(function (h) { agregar(h, 'pagado'); });
-      (o.pendientes || []).forEach(function (p) { agregar(p, 'pendiente'); });
+  /* ══════════ MIGRACIÓN DESDE GOOGLE SHEETS (HistPagosMTG y PPendientes) ══════════
+     Se leen las hojas en vivo (puente del Panel). El historial va a «historialPagos» (se reescribe entero:
+     se puede repetir hasta el día del cambio) y los pendientes a «semanas». No pisa semanas en planilla o pagadas. */
+  var CIUDAD_HOJA = { SC: 'SCZ', SCZ: 'SCZ', CBBA: 'CBBA', CB: 'CBBA', LP: 'LPZ', LPZ: 'LPZ' };
+  function numHoja(v) {
+    if (typeof v === 'number') return v;
+    var t = String(v == null ? '' : v).replace(/[^\d.,-]/g, '');
+    if (/,\d{1,2}$/.test(t)) t = t.replace(/\./g, '').replace(',', '.'); else t = t.replace(/,/g, '');
+    return Number(t) || 0;
+  }
+  /* «SEM43G2026» → 2026 · «SEM50G25» → 2025 · si no, la columna «Gestión SEM» */
+  function anioSemana(t, gestion, ref) {
+    var m = String(t || '').match(/G\s*(\d{2,4})\s*$/i);
+    if (m) return Number(m[1].length === 2 ? '20' + m[1] : m[1]);
+    return anioDe(t) || (/^20\d\d$/.test(String(gestion).trim()) ? Number(gestion) : inferirAnio(numSemana(t), ref));
+  }
+  /* filas A:N desde la fila 3: Nro, Fecha de pago, Semana, Rango, ID, Nombre, Importe, Comentarios, Nro factura, Fecha factura, NIT, Autorización, Mes/Estado, Gestión */
+  function leerHojasPagos(hojas) {
+    var hist = [], pend = [], de = function (n) { return (hojas.filter(function (h) { return h.nombre === n; })[0] || { filas: [] }).filas; };
+    de('HistPagosMTG').forEach(function (f) {
+      var id = String(f[4] || '').trim(); if (!id && !f[6]) return;
+      var fecha = fechaISO(f[1]);
+      hist.push({ fecha: fecha || 'sin-fecha', fila: [String(f[2] || '').trim(), String(f[3] || '').trim(), id, String(f[5] || '').trim(), X.redondear(numHoja(f[6])),
+        String(f[7] || '').trim(), String(f[8] || '').trim(), String(f[9] || '').trim(), String(f[10] || '').trim(), String(f[11] || '').trim(), String(f[0] || '').trim()], gestion: f[13] });
     });
-    return { docs: docs, pendientes: pend, pagados: hist, sinSemana: sinSemana };
+    de('PPendientes').forEach(function (f) {
+      var id = String(f[4] || '').trim(); if (!id && !f[6]) return;
+      pend.push({ semana: String(f[2] || '').trim(), rango: String(f[3] || '').trim(), id: id, nombre: String(f[5] || '').trim(), importe: X.redondear(numHoja(f[6])),
+        comentario: String(f[7] || '').trim(), estadoHoja: String(f[12] || f[1] || '').trim(), gestion: f[13] });
+    });
+    return { hist: hist, pend: pend };
+  }
+  function armarMigracion(datos, existentes, hoy) {
+    var suma = function (l, k) { return X.redondear(l.reduce(function (t, x) { return t + (k ? x[k] : x.fila[4]); }, 0)); };
+    // Historial agrupado por fecha de pago, en partes de TAM_PARTE
+    var porFecha = {}, partes = [];
+    datos.hist.forEach(function (h) { (porFecha[h.fecha] = porFecha[h.fecha] || []).push(h.fila); });
+    Object.keys(porFecha).sort().forEach(function (f) {
+      for (var i = 0, n = 1; i < porFecha[f].length; i += TAM_PARTE, n++) {
+        var filas = porFecha[f].slice(i, i + TAM_PARTE);
+        partes.push({ id: f + '_' + n, fecha: f, parte: n, filas: filas, total: X.redondear(filas.reduce(function (t, x) { return t + x[4]; }, 0)) });
+      }
+    });
+    // Semanas abiertas que la hoja ya muestra pagadas pasan a «pagado»
+    var pagadas = [], vistas = {};
+    datos.hist.forEach(function (h) {
+      var n = numSemana(h.fila[0]); if (!n) return;
+      var k = idDoc(X.idSeguro(h.fila[2]), anioSemana(h.fila[0], h.gestion, X.aFecha(h.fecha) || hoy), n), e = existentes[k];
+      if (e && e.estado !== 'pagado' && !vistas[k]) { vistas[k] = 1; pagadas.push({ k: k, fecha: h.fecha }); }
+    });
+    // Pendientes (retenidos) → «semanas»
+    var nuevas = {}, aPendiente = [], yaEstaban = 0, sinSemana = 0;
+    datos.pend.forEach(function (p) {
+      var n = numSemana(p.semana); if (!n) { sinSemana++; return; }
+      var uid = X.idSeguro(p.id), anio = anioSemana(p.semana, p.gestion, hoy), k = idDoc(uid, anio, n), e = existentes[k];
+      if (vistas[k]) return;
+      if (e && e.estado === 'no_habilitado') { aPendiente.push({ k: k, importe: p.importe }); return; }
+      if (e) { yaEstaban++; return; }
+      if (nuevas[k]) { nuevas[k].importe = X.redondear(nuevas[k].importe + p.importe); return; }
+      nuevas[k] = { id: p.id, uid: uid, nombre: p.nombre, celular: '', ciudad: CIUDAD_HOJA[X.normal(p.comentario)] || '', semana: p.semana, anio: anio, orden: anio * 100 + n,
+        rango: p.rango, importe: p.importe, estado: 'pendiente', planilla: null, fechaPago: null, retenido: true, origen: 'migracion' };
+    });
+    return { partes: partes, pagadas: pagadas, nuevas: nuevas, aPendiente: aPendiente, yaEstaban: yaEstaban, sinSemana: sinSemana,
+      hoja: { hist: datos.hist.length, histTotal: suma(datos.hist), pend: datos.pend.length, pendTotal: suma(datos.pend, 'importe') } };
   }
   function migrar() {
     if (!X.esAdmin()) { X.aviso('Solo un administrador puede migrar.'); return; }
-    if (!D.repartidores) { X.aviso('Espera a que carguen los datos.'); return; }
-    var c = X.ventana('Migrar desde Google Sheets', 'Paso único: copia a «semanas» los pendientes (PPendientes) y el historial (HistPagosMTG) que hoy ve el Portal.', X.anillo('Revisando lo que ya existe…'), '<button class="btn sec" data-cerrar>Cancelar</button>');
-    col().get().then(function (q) {
-      var ex = {}; q.forEach(function (d) { ex[d.id] = 1; });
-      var m = armarMigracion(D.repartidores, ex, new Date()), lista = Object.keys(m.docs);
-      var tot = function (e) { return X.redondear(lista.reduce(function (s, k) { return s + (m.docs[k].estado === e ? m.docs[k].importe : 0); }, 0)); };
+    var c = X.ventana('Migrar desde Google Sheets', 'HistPagosMTG → historial de CONTROL · PPendientes → pagos pendientes.', X.anillo('Leyendo las hojas en vivo…'), '<button class="btn sec" data-cerrar>Cancelar</button>');
+    Promise.all([X.puente('admin_ctrl_hoja', { hoja: 'pagos' }), col().get()]).then(function (r) {
+      var ex = {}; r[1].forEach(function (d) { ex[d.id] = d.data(); });
+      var m = armarMigracion(leerHojasPagos(r[0].hojas), ex, new Date()), nuevas = Object.keys(m.nuevas), h = m.hoja;
+      var viejas = (D.histPartes || []).filter(function (p) { return p.origen === 'HistPagosMTG' && !m.partes.some(function (x) { return x.id === p.id; }); });
       c.cerrar();
-      X.ventana('Migrar desde Google Sheets', 'Revisa los números antes de guardar.',
-        '<div class="rejilla r2 mb"><div class="dato"><small>Semanas pendientes</small><b class="num">' + entero(m.pendientes) + ' · ' + bs(tot('pendiente')) + '</b></div>' +
-        '<div class="dato"><small>Semanas pagadas (historial)</small><b class="num">' + entero(m.pagados) + ' · ' + bs(tot('pagado')) + '</b></div></div>' +
-        '<div class="aviso-caja">' + ic('ayuda') + '<div><b>Es seguro repetirla</b>' + entero(Object.keys(ex).length) + ' semanas ya existen en «semanas» y no se tocan.' +
-        (m.sinSemana ? ' ' + entero(m.sinSemana) + ' filas no tienen número de semana y se omiten.' : '') + ' La ciudad queda vacía en lo migrado (las hojas no la tienen).</div></div>',
-        '<button class="btn sec" data-cerrar>Cancelar</button><button class="btn" data-ok' + (lista.length ? '' : ' disabled') + '>' + ic('check') + 'Migrar ' + entero(lista.length) + (lista.length === 1 ? ' semana' : ' semanas') + '</button>',
+      X.ventana('Migrar desde Google Sheets', 'Leído ' + X.fechaHora(r[0].leido) + '. Revisa los números antes de guardar.',
+        '<div class="rejilla r2 mb"><div class="dato"><small>Historial (HistPagosMTG)</small><b class="num">' + entero(h.hist) + ' pagos · ' + bs(h.histTotal) + '</b><em>' + entero(m.partes.length) + ' fechas de pago</em></div>' +
+        '<div class="dato"><small>Pendientes (PPendientes)</small><b class="num">' + entero(h.pend) + ' pagos · ' + bs(h.pendTotal) + '</b><em>' + entero(nuevas.length) + ' nuevas · ' + entero(m.yaEstaban) + ' ya estaban</em></div></div>' +
+        '<div class="aviso-caja">' + ic('ayuda') + '<div><b>Qué se guarda</b>El historial se reescribe completo (se puede repetir). ' +
+          (m.pagadas.length ? entero(m.pagadas.length) + ' semanas abiertas en CONTROL figuran pagadas en la hoja y pasan a «pagado». ' : '') +
+          (m.aPendiente.length ? entero(m.aPendiente.length) + ' semanas «no habilitadas» pasan a pendientes. ' : '') +
+          (m.sinSemana ? entero(m.sinSemana) + ' filas de PPendientes no tienen semana y se omiten. ' : '') + '</div></div>',
+        '<button class="btn sec" data-cerrar>Cancelar</button><button class="btn" data-ok>' + ic('check') + 'Migrar</button>',
         function (v, cerrar) {
           var ok = v.querySelector('[data-ok]');
           ok.addEventListener('click', function () {
             ok.disabled = true;
-            var lote = 'migracion-' + X.hoyISO(), quien = S.usuario.email;
-            var ops = lista.map(function (k) { var d = m.docs[k]; d.lote = lote; d.loteCreado = lote; d.creado = X.servidor(); d.actualizado = X.servidor(); d.quien = quien; return { ref: col().doc(k), datos: d }; });
-            escribir(ops, function (h, t) { ok.innerHTML = X.anilloBoton() + entero(h) + ' de ' + entero(t); }).then(function () {
-              return X.bitacora('Migró semanas desde Sheets', m.pendientes + ' pendientes · ' + m.pagados + ' pagadas');
-            }).then(function () { cerrar(); X.aviso('Migración guardada'); X.recargarTodo(); }, function (e) {
+            var lote = 'migracion-' + X.hoyISO(), quien = S.usuario.email, i = 0;
+            // Historial: un documento a la vez (cada uno puede pesar cientos de KB)
+            var paso = function () {
+              if (i >= m.partes.length) return Promise.resolve();
+              var p = m.partes[i++];
+              ok.innerHTML = X.anilloBoton() + 'Historial ' + entero(i) + ' de ' + entero(m.partes.length);
+              return colH().doc(p.id).set({ fecha: p.fecha, parte: p.parte, origen: 'HistPagosMTG', cantidad: p.filas.length, total: p.total, filas: JSON.stringify(p.filas), actualizado: X.servidor(), quien: quien }).then(paso);
+            };
+            var ops = nuevas.map(function (k) { var d = m.nuevas[k]; d.lote = lote; d.loteCreado = lote; d.creado = X.servidor(); d.actualizado = X.servidor(); d.quien = quien; return { ref: col().doc(k), datos: d }; })
+              .concat(m.pagadas.map(function (x) { return { tipo: 'update', ref: col().doc(x.k), datos: { estado: 'pagado', fechaPago: x.fecha, actualizado: X.servidor(), quien: quien } }; }))
+              .concat(m.aPendiente.map(function (x) { return { tipo: 'update', ref: col().doc(x.k), datos: { estado: 'pendiente', importe: x.importe, retenido: true, actualizado: X.servidor(), quien: quien } }; }))
+              .concat(viejas.map(function (p) { return { tipo: 'delete', ref: colH().doc(p.id) }; }));
+            paso().then(function () {
+              return escribir(ops, function (a, t) { ok.innerHTML = X.anilloBoton() + 'Pendientes ' + entero(a) + ' de ' + entero(t); });
+            }).then(function () {
+              return X.bitacora('Migró desde Sheets', h.hist + ' pagos del historial (' + h.histTotal + ') · ' + h.pend + ' pendientes (' + h.pendTotal + ')');
+            }).then(cargarHistorial).then(function () {
+              var n = (D.hist || []).length, t = X.redondear((D.hist || []).reduce(function (s, x) { return s + x.importe; }, 0));
+              cerrar(); X.aviso(n === h.hist && t === h.histTotal ? 'Migración lista: ' + entero(n) + ' pagos · ' + bs(t) : 'Ojo: el historial guardado no cuadra (' + entero(n) + ' · ' + bs(t) + ')');
+              X.recargarTodo();
+            }, function (e) {
               console.error(e); ok.disabled = false; ok.innerHTML = ic('check') + 'Reintentar';
-              X.aviso('Se cortó la migración. Reintenta: lo ya guardado no se repite.');
+              X.aviso(/quota|resource-exhausted/i.test(e && (e.code + e.message)) ? 'Firebase llegó a su límite diario de escrituras. Reintenta mañana: lo ya guardado no se repite.' : 'Se cortó la migración. Reintenta: lo ya guardado no se repite.');
             });
           });
         });
     }, function (e) {
       console.error(e); c.cerrar();
-      X.aviso(/permission|insufficient/i.test(e && e.message) ? 'Sin permiso sobre «semanas»: falta publicar las reglas del Portal.' : 'No se pudo consultar Firebase.');
+      X.aviso(/permission|insufficient/i.test(e && e.message) ? 'Sin permiso sobre «semanas» o «historialPagos»: falta publicar las reglas del Portal.' : (e && e.message) || 'No se pudo leer las hojas.');
     });
   }
 
@@ -500,15 +605,16 @@
           var f = v.querySelector('#cpFecha').value; if (!f) { X.aviso('Elige la fecha del pago.'); return; }
           ok.disabled = true; ok.innerHTML = X.anilloBoton() + 'Guardando';
           Promise.all(docs.map(function (k) { return col().doc(k).get(); })).then(function (snaps) {
-            var ops = [], uids = {}, raras = 0;
+            var ops = [], uids = {}, raras = 0, hist = [];
             snaps.forEach(function (d) {
               if (!d.exists) return;
               var x = d.data();
               if (x.estado !== 'en_planilla' || x.planilla !== p._id) { raras++; return; }
               ops.push({ tipo: 'update', ref: d.ref, datos: { estado: 'pagado', fechaPago: f, rebote: null, actualizado: X.servidor(), quien: S.usuario.email } });
+              hist.push([String(x.semana || ''), x.rango || '', String(x.id), x.nombre || '', X.redondear(Number(x.importe) || 0), x.ciudad || '', x.factura || '', '', '', '', '']);
               uids[x.uid] = 1;
             });
-            return escribir(ops).then(function () {
+            return escribir(ops).then(function () { return agregarAlHistorial(f, hist); }).then(function () {
               return Promise.all([
                 X.dbC.collection('pagos').doc(p._id).update({ estado: 'pagada', fechaPago: f, confirmadoPor: S.usuario.email, confirmado: X.servidor(), semanasPagadas: ops.length }),
                 X.bitacora('Confirmó pago de Miltagor', p.fecha + ' · ' + ops.length + ' semanas · ' + bs(p.total) + (raras ? ' · ' + raras + ' semanas ya no estaban en esta planilla' : '')),
@@ -594,11 +700,11 @@
   }
 
   X.semanas = {
-    modoControl: modoControl, cargar: cargar, aplicar: aplicar, importar: importar, verImportaciones: verImportaciones, migrar: migrar,
+    modoControl: modoControl, cargar: cargar, aplicar: aplicar, cargarHistorial: cargarHistorial, aplicarHistorial: aplicarHistorial, agregarAlHistorial: agregarAlHistorial, importar: importar, verImportaciones: verImportaciones, migrar: migrar,
     marcarEnPlanilla: marcarEnPlanilla, marcarFuera: marcarFuera, confirmarPago: confirmarPago, anularPlanilla: anularPlanilla, porConfirmar: porConfirmar, reporte: reporte,
     // piezas que usa js/banco.js
     leerLibro: leerLibro, escribir: escribir, encolarNotif: encolarNotif, CIUDADES: CIUDADES, fechaISO: fechaISO,
     // lógica pura (para pruebas)
-    _puro: { semanaDeArchivo: semanaDeArchivo, numSemana: numSemana, anioDe: anioDe, isoSemana: isoSemana, inferirAnio: inferirAnio, idDoc: idDoc, patronSemana: patronSemana, textoSemana: textoSemana, ciudadDeArchivo: ciudadDeArchivo, analizar: analizar, armarMigracion: armarMigracion, adivinar: adivinar, CAMPOS: CAMPOS }
+    _puro: { semanaDeArchivo: semanaDeArchivo, numSemana: numSemana, anioDe: anioDe, isoSemana: isoSemana, inferirAnio: inferirAnio, idDoc: idDoc, patronSemana: patronSemana, textoSemana: textoSemana, ciudadDeArchivo: ciudadDeArchivo, analizar: analizar, armarMigracion: armarMigracion, leerHojasPagos: leerHojasPagos, anioSemana: anioSemana, numHoja: numHoja, adivinar: adivinar, CAMPOS: CAMPOS }
   };
 })();
