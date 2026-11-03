@@ -376,7 +376,7 @@
   function pintarMenu() {
     var m = document.getElementById('menu'); if (!m) return;
     var html = '<button class="menu-plegar" data-accion="plegar" title="' + (S.menuMini ? 'Dejar el menú abierto' : 'Ocultar el menú (quedan los íconos)') + '" aria-label="Ocultar o mostrar el menú">' + ic('plegar') + '</button>' +
-      '<a class="menu-logo" href="#/tablero" data-ir="tablero"><img src="marca/logos/nummeros-logotipo-horizontal-' + (S.oscuro ? 'claro' : 'principal') + '.svg" alt="NUMMEROS"><img class="menu-iso" src="marca/logos/nummeros-isotipo-' + (S.oscuro ? 'claro' : 'principal') + '.svg" alt="NUMMEROS"><small>CONTROL</small></a>';
+      '<a class="menu-logo" href="#/tablero" data-ir="tablero"><img src="marca/logos/nummeros-logotipo-horizontal-' + (S.oscuro ? 'claro' : 'principal') + '.svg" alt="NUMMEROS"><img class="menu-iso" src="marca/logos/nummeros-isotipo-' + (S.oscuro ? 'claro' : 'principal') + '.svg" alt="NUMMEROS"><small>CONTROL <span class="ctrl-ver">v' + esc(C.version) + '</span></small></a>';
     SECCIONES.forEach(function (sec) {
       var items = Object.keys(PAG).filter(function (k) { return PAG[k].sec === sec && !PAG[k].oculta && (!PAG[k].soloAdmin || esAdmin()); });
       items.sort(function (a, b) { return (PAG[a].orden || 50) - (PAG[b].orden || 50); });
@@ -408,7 +408,7 @@
     activarComunes(el);
     if (PAG[p].despues) PAG[p].despues(el);
     pintarMenu(); pintarCabecera();
-    document.title = PAG[p].t.replace(/<[^>]+>/g, '') + ' · CONTROL NUMMEROS';
+    document.title = PAG[p].t.replace(/<[^>]+>/g, '') + ' · CONTROL NUMMEROS v' + C.version;
     if (!sinHistorial) history.pushState(null, '', '#/' + p);
     else history.replaceState(null, '', '#/' + p);
     document.querySelector('.app').classList.remove('menu-abierto');
