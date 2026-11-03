@@ -764,6 +764,71 @@
         });
       });
   }
+  /* ══════════ CAMBIAR LA FECHA DE UN PAGO (solo administrador) ══════════
+     Por ejemplo, los pagos marcados el 31/10 que Miltagor recién pagó el 03/11. Mueve todo lo de esa fecha:
+     «historialPagos» (las partes de esa fecha pasan a la nueva y se juntan si ya había), «semanas» pagadas,
+     las planillas de «pagos» y el historial de cada repartidor en el Portal («historialRider»). */
+  function cambiarFecha(vieja, alTerminar) {
+    if (!X.esAdmin()) { X.aviso('Solo un administrador puede cambiar la fecha de pago.'); return; }
+    var filas = (D.hist || []).filter(function (h) { return h.fecha === vieja; });
+    X.ventana('Cambiar fecha de pago', entero(filas.length) + ' pagos del ' + X.fecha(vieja) + ' · ' + bs(filas.reduce(function (s, h) { return s + h.importe; }, 0)),
+      '<div class="fm"><div class="fila"><label for="cfFecha">Nueva fecha de pago</label><input id="cfFecha" type="date" value="' + X.hoyISO() + '"></div></div>' +
+      '<div class="aviso-caja">' + ic('ayuda') + '<div><b>Qué cambia</b>Todos los pagos del ' + esc(X.fecha(vieja)) + ' pasan a la nueva fecha: en el historial, en las semanas pagadas, en las planillas y en lo que ve cada repartidor en su portal. Si en la nueva fecha ya hay pagos, se juntan.</div></div>',
+      '<button class="btn sec" data-cerrar>Cancelar</button><button class="btn" data-ok>' + ic('check') + 'Cambiar fecha</button>',
+      function (v, cerrar) {
+        var ok = v.querySelector('[data-ok]');
+        ok.addEventListener('click', function () {
+          var nueva = v.querySelector('#cfFecha').value;
+          if (!nueva || nueva === vieja) { X.aviso('Elige una fecha distinta.'); return; }
+          ok.disabled = true; ok.innerHTML = X.anilloBoton() + 'Cambiando';
+          var n = { hist: 0, semanas: 0, planillas: 0, riders: 0 };
+          // 1) Historial de pagos: cada parte de la fecha vieja pasa a la nueva (misma parte), juntándose si ya existe
+          colH().where('fecha', '==', vieja).get().then(function (q) {
+            var docs = []; q.forEach(function (d) { docs.push(d); });
+            return Promise.all(docs.map(function (d) { return colH().doc(d.id.replace(vieja, nueva)).get(); })).then(function (dest) {
+              var ops = [];
+              docs.forEach(function (d, i) {
+                var x = d.data(), ant = [], suyas = []; try { suyas = JSON.parse(x.filas || '[]'); } catch (e) { suyas = []; }
+                if (dest[i].exists) { try { ant = JSON.parse(dest[i].data().filas || '[]'); } catch (e) { ant = []; } }
+                var todas = ant.concat(suyas); n.hist += suyas.length;
+                ops.push({ tipo: 'set', ref: dest[i].ref, datos: Object.assign({}, dest[i].exists ? dest[i].data() : x, { fecha: nueva, filas: JSON.stringify(todas), cantidad: todas.length,
+                  total: X.redondear(todas.reduce(function (t, f) { return t + (Number(f[4]) || 0); }, 0)), actualizado: X.servidor(), quien: S.usuario.email, fechaAnterior: vieja }) });
+                ops.push({ tipo: 'delete', ref: d.ref });
+              });
+              return escribir(ops);
+            });
+          }).then(function () {
+            // 2) Semanas pagadas con esa fecha
+            return col().where('fechaPago', '==', vieja).get().then(function (q) {
+              var ops = []; q.forEach(function (d) { if (d.data().estado === 'pagado') ops.push({ tipo: 'update', ref: d.ref, datos: { fechaPago: nueva, actualizado: X.servidor(), quien: S.usuario.email } }); });
+              n.semanas = ops.length; return escribir(ops);
+            });
+          }).then(function () {
+            // 3) Planillas confirmadas con esa fecha
+            return X.dbC.collection('pagos').where('fechaPago', '==', vieja).get().then(function (q) {
+              var l = []; q.forEach(function (d) { l.push(d.ref.update({ fechaPago: nueva, fechaCambiadaPor: S.usuario.email })); }); n.planillas = l.length; return Promise.all(l);
+            });
+          }).then(function () {
+            // 4) Historial que ve cada repartidor en el Portal (migrado de Sheets)
+            var uids = {}; filas.forEach(function (h) { uids[X.idSeguro(h.id)] = 1; });
+            return Promise.all(Object.keys(uids).map(function (u) {
+              var ref = X.dbP.collection('historialRider').doc(u);
+              return ref.get().then(function (d) {
+                if (!d.exists) return;
+                var l = []; try { l = JSON.parse(d.data().filas || '[]'); } catch (e) { return; }
+                var cambio = false; l.forEach(function (f) { if (f[3] === vieja) { f[3] = nueva; cambio = true; } });
+                if (!cambio) return; n.riders++;
+                return ref.update({ filas: JSON.stringify(l), actualizado: X.servidor() });
+              });
+            }));
+          }).then(function () {
+            return X.bitacora('Cambió fecha de pago', X.fecha(vieja) + ' → ' + X.fecha(nueva) + ' · ' + n.hist + ' pagos · ' + n.semanas + ' semanas · ' + n.planillas + ' planillas · ' + n.riders + ' repartidores');
+          }).then(function () {
+            cerrar(); X.aviso('Listo: ' + entero(n.hist) + ' pagos pasaron al ' + X.fecha(nueva) + '.'); if (alTerminar) alTerminar(nueva); cargarHistorial(); X.recargarTodo();
+          }, function (e) { console.error(e); ok.disabled = false; ok.innerHTML = ic('check') + 'Reintentar'; X.aviso('No se pudo terminar. Reintenta: lo ya movido no se repite.'); });
+        });
+      });
+  }
   function anularPlanilla(p, alTerminar) {
     X.confirmar('Anular planilla', 'Las semanas de esta planilla que sigan «en planilla» vuelven a pendientes, para incluirlas en otra. Úsalo si el banco rechazó la planilla o se generó por error.', function () {
       Promise.all(docsDe(p).map(function (k) { return col().doc(k).get(); })).then(function (snaps) {
@@ -838,7 +903,7 @@
 
   X.semanas = {
     modoControl: modoControl, cargar: cargar, aplicar: aplicar, cargarHistorial: cargarHistorial, aplicarHistorial: aplicarHistorial, agregarAlHistorial: agregarAlHistorial, importar: importar, verImportaciones: verImportaciones, verPorSemana: verPorSemana, migrar: migrar,
-    marcarEnPlanilla: marcarEnPlanilla, marcarFuera: marcarFuera, confirmarPago: confirmarPago, anularPlanilla: anularPlanilla, porConfirmar: porConfirmar, reporte: reporte,
+    marcarEnPlanilla: marcarEnPlanilla, cambiarFecha: cambiarFecha, marcarFuera: marcarFuera, confirmarPago: confirmarPago, anularPlanilla: anularPlanilla, porConfirmar: porConfirmar, reporte: reporte,
     // piezas que usa js/banco.js
     leerLibro: leerLibro, escribir: escribir, encolarNotif: encolarNotif, CIUDADES: CIUDADES, fechaISO: fechaISO,
     // lógica pura (para pruebas)

@@ -480,7 +480,8 @@
         cuerpo = '<div class="herr">' +
             '<select id="sFecha" aria-label="Fecha de pago">' + l.map(function (x) { var k = x.iso || x.fecha; return '<option value="' + esc(k) + '"' + (k === H.fecha ? ' selected' : '') + '>' + esc(x.fecha) + ' · ' + entero(x.filas.length) + ' pagos · ' + bs(x.total) + '</option>'; }).join('') + '</select>' +
             '<div class="buscar">' + ic('buscar') + '<input type="search" id="bHistF" placeholder="Buscar en esta fecha: nombre, ID, semana, factura o NIT" value="' + esc(H.buscarF) + '"></div>' +
-            '<button class="btn sec chico" id="btnExpFecha">' + ic('descargar') + 'Excel de esta fecha</button></div>' +
+            '<button class="btn sec chico" id="btnExpFecha">' + ic('descargar') + 'Excel de esta fecha</button>' +
+            (X.esAdmin() && X.semanas && D.hist && D.hist.length ? '<button class="btn sec chico" id="btnCambiarFecha">' + ic('reloj') + 'Cambiar fecha de pago</button>' : '') + '</div>' +
           (nF ? '<p class="muted" style="margin:0 0 10px">Semanas: ' + esc(Object.keys(nF.semanas).map(semanaCorta).join(', ')) + ' · <b>' + entero(filasF.length) + ' pagos · ' + bs(totF) + '</b> · toca un pago para ver el informe del repartidor</p>' : '') +
           tablaHist(filasF, H.pagF, '<td colspan="5">Total</td><td class="monto">' + bs(totF) + '</td><td colspan="7"></td>');
       } else {
@@ -525,6 +526,7 @@
       var bxf = el.querySelector('#btnExpFecha'); if (bxf) bxf.addEventListener('click', function () {
         X.excel([{ nombre: 'Pago ' + X.fecha(H.fecha).replace(/\//g, '-'), filas: [enc].concat((H.listaF || []).map(fila)) }], 'Pago-' + X.fecha(H.fecha).replace(/\//g, '-'));
       });
+      var bcf = el.querySelector('#btnCambiarFecha'); if (bcf) bcf.addEventListener('click', function () { X.semanas.cambiarFecha(H.fecha, function (nueva) { H.fecha = nueva; }); });
       var bt = el.querySelector('#btnExpTodo'); if (bt) bt.addEventListener('click', function () {
         X.excel([{ nombre: 'HistPagos', filas: [enc].concat((H.lista || []).map(fila)) }], 'Historial-pagos-completo-' + X.hoyISO());
       });
