@@ -580,7 +580,7 @@
   var PORTAL_URL = 'https://portalnummeros.contaxbolivia.com';
   function nombrePropio(t) { return String(t || '').toLowerCase().replace(/(^|\s)\S/g, function (c) { return c.toUpperCase(); }).trim(); }
   function mensajeSemana(x) {
-    var sem = x.semana + (x.rango ? ' (' + x.rango + ')' : ''), hola = 'Hola ' + nombrePropio(x.nombre).split(' ').slice(0, 2).join(' ') + ', te escribe CONTAX.\n\n';
+    var sem = x.semana + (x.rango ? ' (' + x.rango + ')' : ''), hola = 'Hola ' + nombrePropio(x.nombre) + ', te escribe CONTAX.\n\n';   // el nombre viene «Apellidos Nombres»: va completo
     if (x.importe > 0) return hola + 'Tu pago de Yango de la ' + sem + ' es de ' + bs(x.importe) + '.\n\nMira el detalle en el Portal CONTAX: ' + PORTAL_URL;
     return hola + 'En la ' + sem + (x.ganancias > 0 ? ' generaste ' + bs(x.ganancias) : ' tuviste actividad') + ', pero tu pago no está habilitado porque no cumpliste las horas semanales. Por eso esta semana sales en Bs 0.\n\nMira el detalle en el Portal CONTAX: ' + PORTAL_URL;
   }
