@@ -137,17 +137,19 @@
   function cargarHistorial() {
     if (!S.portalUsuario) { D.hist = null; return Promise.resolve(); }
     return colH().get().then(function (q) {
-      var l = [], partes = [];
+      var l = [], partes = [], deuda = [];
       q.forEach(function (d) {
         var x = d.data(), filas = [];
         try { filas = JSON.parse(x.filas || '[]'); } catch (e) { console.warn('historialPagos ' + d.id, e); }
         partes.push({ id: d.id, fecha: x.fecha, origen: x.origen || '' });
+        // «hojaControl»: semanas que deben factura según la hoja CONTROL, sin pago registrado (no cuentan como pagos)
+        var dest = x.origen === 'hojaControl' ? deuda : l;
         filas.forEach(function (f) {
-          l.push({ fecha: x.fecha, semana: f[0], rango: f[1], id: String(f[2]), nombre: f[3], importe: Number(f[4]) || 0, comentario: f[5] || '', ciudad: f[5] || '',
+          dest.push({ fecha: x.fecha, semana: f[0], rango: f[1], id: String(f[2]), nombre: f[3], importe: Number(f[4]) || 0, comentario: f[5] || '', ciudad: f[5] || '',
             factura: f[6] || '', fechaFactura: f[7] || '', nit: f[8] || '', autorizacion: f[9] || '', nro: f[10] || '', mes: f[11] || '', gestion: f[12] || '' });
         });
       });
-      D.hist = l; D.histPartes = partes;
+      D.hist = l; D.histPartes = partes; D.histDeuda = deuda;
       aplicarHistorial();
     }, function (e) { console.warn('Historial:', e); D.hist = null; });
   }

@@ -92,6 +92,7 @@
       if (!/RETENID/.test(X.normal(h.factura))) return;
       agregar(repDe(h.id), h.id, h.nombre, h.semana, h.importe, 'retenido', { rango: h.rango, fechaPago: h.fecha });
     });
+    (D.histDeuda || []).forEach(function (h) { agregar(repDe(h.id), h.id, h.nombre, h.semana, h.importe, 'hoja', { rango: h.rango }); });
     filas.sort(function (a, b) { return X.normal(a.nombre).localeCompare(X.normal(b.nombre)) || (X.ordenSemana(a.semana) - X.ordenSemana(b.semana)); });
     return filas;
   }
@@ -122,14 +123,14 @@
       '<div class="herr"><div class="buscar">' + ic('buscar') + '<input type="search" id="bLf" placeholder="Buscar por nombre, ID, celular o semana" value="' + esc(LF.buscar) + '"></div>' +
         '<select id="sLfVista"><option value="faltan"' + (LF.vista === 'faltan' ? ' selected' : '') + '>Sin factura</option><option value="con"' + (LF.vista === 'con' ? ' selected' : '') + '>Con factura</option><option value=""' + (!LF.vista ? ' selected' : '') + '>Todas</option></select>' +
         '<select id="sLfCont"><option value="">Todos los contadores</option><option value="OTRO"' + (LF.contador === 'OTRO' ? ' selected' : '') + '>Externos (otro)</option><option value="CONTAX"' + (LF.contador === 'CONTAX' ? ' selected' : '') + '>CONTAX</option></select>' +
-        '<select id="sLfTipo"><option value="">Pendientes y retenidos</option><option value="pendiente"' + (LF.tipo === 'pendiente' ? ' selected' : '') + '>Pendientes de pago</option><option value="retenido"' + (LF.tipo === 'retenido' ? ' selected' : '') + '>Pagados con retención</option></select>' +
+        '<select id="sLfTipo"><option value="">Todos los tipos</option><option value="pendiente"' + (LF.tipo === 'pendiente' ? ' selected' : '') + '>Pendientes de pago</option><option value="retenido"' + (LF.tipo === 'retenido' ? ' selected' : '') + '>Pagados con retención</option><option value="hoja"' + (LF.tipo === 'hoja' ? ' selected' : '') + '>De la hoja CONTROL (sin pago registrado)</option></select>' +
         '<button class="btn sec" id="btnExpLf">' + ic('descargar') + 'Excel</button>' +
       '</div>' +
       '<p class="muted mb">' + entero(f.length) + ' filas · ' + bs(X.redondear(f.reduce(function (s, x) { return s + x.importe; }, 0))) + '</p>' +
       (f.length ? X.tabla([
         { t: 'Celular', html: function (x) { return '<span class="num">' + esc(X.telVisible(x.celular) || '—') + '</span>'; } },
         { t: 'ID', html: function (x) { return '<span class="num">' + esc(x.id) + '</span>'; } },
-        { t: 'Nombre', html: function (x) { return '<b>' + esc(x.nombre) + '</b>' + (x.tipo === 'retenido' ? '<span class="sub">' + X.chip('neutro', 'Pagado con retención ' + X.fecha(x.fechaPago)) + '</span>' : ''); } },
+        { t: 'Nombre', html: function (x) { return '<b>' + esc(x.nombre) + '</b>' + (x.tipo === 'retenido' ? '<span class="sub">' + X.chip('neutro', 'Pagado con retención ' + X.fecha(x.fechaPago)) + '</span>' : x.tipo === 'hoja' ? '<span class="sub">' + X.chip('neutro', 'De la hoja CONTROL · sin pago registrado') + '</span>' : ''); } },
         { t: 'Importe', clase: 'monto', html: function (x) { return '<b>' + bs(x.importe) + '</b>'; } },
         { t: 'Contador', html: function (x) { return x.cliente ? X.chip('contax', 'CONTAX') : '<span class="muted">Otro</span>'; } },
         { t: 'Semana', html: function (x) { return esc(X.semanaCorta(x.semana)); } },
@@ -156,7 +157,7 @@
     if (be) be.addEventListener('click', function () {
       X.excel([{ nombre: 'Lista de facturación', filas: [['Celular', 'ID', 'Nombre', 'Importe total', 'Contador', 'Semana', 'Rango', 'Tipo', '¿Emitida?', 'Emisor', 'N.º factura', 'Fecha', 'NIT', 'Autorización', 'Estado']].concat(f.map(function (x) {
         var k = x.f || {};
-        return [X.telVisible(x.celular), x.id, x.nombre, x.importe, x.contador, x.semana, x.rango || '', x.tipo === 'retenido' ? 'Pagado con retención' : 'Pendiente de pago', ESTADO_LF[x.estado][1],
+        return [X.telVisible(x.celular), x.id, x.nombre, x.importe, x.contador, x.semana, x.rango || '', x.tipo === 'retenido' ? 'Pagado con retención' : x.tipo === 'hoja' ? 'De la hoja CONTROL (sin pago registrado)' : 'Pendiente de pago', ESTADO_LF[x.estado][1],
           k.razonEmisor || '', k.numero || '', k.fechaEmision || '', k.nitEmisor || '', k.autorizacion || '', x.f ? (x.f.origen === 'contax' ? 'Emitida por CONTAX' : (ESTADOS[x.f.estado] || [0, x.f.estado])[1]) : ''];
       })) }], 'Lista-facturacion-' + X.hoyISO());
     });
