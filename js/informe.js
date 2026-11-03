@@ -38,7 +38,7 @@
   /* ══════════ DATOS DEL INFORME ══════════ */
   function datos(id) {
     var uid = X.idSeguro(id), r = D.repartidores ? D.repartidores.get(uid) : null;
-    var by = ((D.bdyango && D.bdyango.lista) || []).filter(function (b) { return b.id === id; })[0] || {};
+    var by = ((D.bdyango && D.bdyango.lista) || []).filter(function (b) { return b.id === id; })[0] || (X.padron && X.padron.dato(id)) || {}; // si Yango lo desactivó, sus datos salen de la base propia
     var hist = (D.hist || []).filter(function (h) { return h.id === id; }).sort(function (a, z) { return String(a.fecha).localeCompare(String(z.fecha)); });
     var cta = X.banco ? X.banco.cuentaDe(id) : null, ev = r && (r.pendientes || []).length ? X.evaluar(r) : null;
     var perfil = IN.perfilDe === uid ? IN.perfil : null, cli = r ? X.clienteDe(r) : null;

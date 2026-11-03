@@ -101,9 +101,9 @@
   /* Nombre del repartidor según BDYango (para las planillas que vienen solo con el ID) */
   var BYN = { lista: null, m: {} };
   function nombreBDY(id) {
-    var l = D.bdyango && D.bdyango.lista; if (!l || !l.length) return '';
+    var l = D.bdyango && D.bdyango.lista; if (!l || !l.length) return ((X.padron && X.padron.dato(id)) || {}).nombre || '';
     if (BYN.lista !== l) { BYN = { lista: l, m: {} }; l.forEach(function (b) { if (b.nombre) BYN.m[b.id] = b.nombre; }); }
-    return BYN.m[String(id)] || '';
+    return BYN.m[String(id)] || ((X.padron && X.padron.dato(id)) || {}).nombre || '';
   }
   function aplicar() {
     if (!D.repartidores || !D.semanas) return;

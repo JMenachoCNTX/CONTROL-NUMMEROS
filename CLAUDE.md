@@ -45,7 +45,7 @@ El permiso se elige en **Panel → Usuarios → columna CONTROL**. Las reglas de
 - GitHub Pages desde la rama `main` (raíz): https://jmenachocntx.github.io/CONTROL-NUMMEROS/
 - Todavía **no hay archivo `CNAME`**. El dominio previsto es `controlnummeros.contaxbolivia.com` (pasos en `README.md`).
 - `firestore.rules` **no se publica solo**: hay que copiarlo y pegarlo en la consola de Firebase del proyecto `control--nummeros` → Firestore → Reglas → Publicar.
-- Versiones: `version` en `config.js` (hoy 2.3.9), el `?v=` de los scripts en `index.html` y el mensaje del commit dice la versión (ej. "... (v1.4)").
+- Versiones: `version` en `config.js` (hoy 2.4.0), el `?v=` de los scripts en `index.html` y el mensaje del commit dice la versión (ej. "... (v1.4)").
 
 ## Cuidados importantes
 - **El repositorio es PÚBLICO.** Nunca subir contraseñas, archivos `.json` de cuentas de servicio ni datos de clientes.
@@ -74,3 +74,4 @@ El permiso se elige en **Panel → Usuarios → columna CONTROL**. Las reglas de
 - **Semanas en Bs 0 y planillas por semana (2.3.7):** las semanas `no_habilitado` quedan en `r.noHab` y se ven en el informe del repartidor («No habilitado (Bs 0)») y en Repartidores; las «Enviado a pagar» también salen en el informe. Pagos pendientes muestra semanas y repartidores. Botón «Planillas por semana»: lee `semanas` con `orden == semana` (todas las ciudades y estados) + las filas del historial de esa semana (las migradas de Sheets no tienen los Bs 0), con totales pagados / falta pagar / no habilitados y Excel (Resumen + Detalle).
 - **Nombres desde BDYango (2.3.8):** si la planilla semanal trae solo el ID (sin nombre), al importar se completa con el nombre de BDYango (`nombreBDY` en `js/semanas.js`; antes se espera a que cargue BDYango). También se usa al mostrar semanas guardadas sin nombre.
 - **Sin botón «Migrar desde Sheets» (2.3.9):** la migración ya se hizo; `X.semanas.migrar` sigue en el código por si hiciera falta, pero no hay botón.
+- **Base propia de repartidores (2.4.0):** `js/padron.js`, colección `padron` de CONTROL (partes p1, p2… de 800 repartidores en `filas` JSON). Cada vez que se lee BDYango se guardan todos y los que ya no aparecen quedan `activo:false` con `baja` (no se marca a nadie si BDYango trae menos de 1000). El NIT se completa con el de las facturas aprobadas (historial, `nitOrigen:'factura'`). DBYango → «Base propia» (filtros, Excel) → «Pasar NIT al Portal»: crea `perfiles` en el Portal (`origen:'historial'`) solo para quien no tiene; el Portal no exige la razón social en esos casos. Reglas: `match /padron` solo `puedeEditar`.

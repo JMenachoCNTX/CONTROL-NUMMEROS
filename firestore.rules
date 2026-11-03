@@ -30,6 +30,8 @@ service cloud.firestore {
     match /importaciones/{id} { allow read: if esEquipo(); allow write: if puedeEditar(); }
     // Cuentas bancarias de los repartidores (para la planilla del Banco Ganadero). Datos sensibles: solo quien puede editar.
     match /cuentas/{id} { allow read, write: if puedeEditar(); }
+    // Base propia de repartidores (no se borra a nadie; incluye NIT, CI y cuentas): solo quien puede editar
+    match /padron/{id} { allow read, write: if puedeEditar(); }
 
     // Ajustes generales del panel
     match /config/{doc} { allow read: if esEquipo(); allow write: if esAdmin(); }

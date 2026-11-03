@@ -508,6 +508,8 @@
       D.bdyango = { cuentas: b.cuentas, lista: Object.keys(b.todos).map(function (id) { return b.todos[id]; }), sinBanco: b.sinBanco, desconocidos: b.desconocidos, leido: r.leido };
       // Repartidores sin nombre (por ejemplo los que no están en la hoja BDYANGO del robot): se toma el de BDYango
       if (D.repartidores) D.repartidores.forEach(function (x) { var t = b.todos[x.id]; if (!x.nombre && t && t.nombre) x.nombre = t.nombre; });
+      // Base propia: guarda a todos (y marca inactivos a los que Yango sacó)
+      if (X.padron) X.padron.actualizar(b.todos);
     }, function (e) { console.warn('BDYango:', e); D.bdyango = { cuentas: {}, lista: [], error: e.message || 'No se pudo leer BDYango.' }; })
       .then(function () { if (['bdyango', 'pagos', 'repartidores', 'informe', 'historial', 'tablero', 'clientes'].indexOf(S.pagina) >= 0 && !document.querySelector('.velo') && !/INPUT|SELECT|TEXTAREA/.test((document.activeElement || {}).tagName)) X.refrescar(); });
     return bdyPromesa;
@@ -519,7 +521,7 @@
       var B = D.bdyango;
       var cab = X.titulo('DBYango', 'Datos de «BOL Registro Activación» (Yango), leídos en vivo' + (B && B.leido ? ' · ' + X.hace(B.leido) : '') + '. Una fila por repartidor (su último registro). Sus cuentas son las que usa la planilla del banco.',
         (X.puedeEditar() ? '<button class="btn" id="byAvisar">' + ic('campana') + 'Avisar semana</button>' : '') +
-        '<button class="btn sec" id="byExc">' + ic('descargar') + 'Excel de esta lista</button><button class="btn sec" id="byRec">' + ic('recargar') + 'Leer de nuevo</button>');
+        '<button class="btn sec" id="byPadron">' + ic('cliente') + 'Base propia</button><button class="btn sec" id="byExc">' + ic('descargar') + 'Excel de esta lista</button><button class="btn sec" id="byRec">' + ic('recargar') + 'Leer de nuevo</button>');
       if (!B) return cab + '<div class="card">' + X.cargaBarra('BDYango', 'Leyendo la hoja de Yango…') + '</div>';
       if (B.error) return cab + '<div class="card">' + X.vacio('No se pudo leer BDYango', B.error) + '</div>';
       var conCta = B.lista.filter(function (x) { return x.cuenta; }), bq = X.normal(BY.buscar);
@@ -556,6 +558,7 @@
       if (!D.bdyango && !bdyPromesa) cargarBDYango();
       var br = el.querySelector('#byRec'); if (br) br.addEventListener('click', function () { br.disabled = true; br.innerHTML = X.anilloBoton() + 'Leyendo'; cargarBDYango(true); });
       var ba = el.querySelector('#byAvisar'); if (ba) ba.addEventListener('click', avisarSemana);
+      var bpd = el.querySelector('#byPadron'); if (bpd) bpd.addEventListener('click', function () { X.padron.ver(); });
       var bx = el.querySelector('#byExc'); if (bx) bx.addEventListener('click', function () {
         var nom = { todos: 'Todos', activos: 'Activados', sinbanco: 'Sin datos bancarios', sincodigo: 'Banco no reconocido' }[BY.filtro] + (BY.ciudad ? ' ' + BY.ciudad : '');
         X.excel([{ nombre: nom.slice(0, 30), filas: [['ID Yango', 'Nombre', 'Ciudad', 'Estado', 'Fecha de registro', 'CI', 'NIT', 'Teléfono', 'Telegram', 'Correo', 'Banco (como figura en BDYango)', 'Cuenta', 'Banco para la planilla', 'Código', 'Observación']]
