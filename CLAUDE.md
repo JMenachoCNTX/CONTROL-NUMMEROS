@@ -50,7 +50,7 @@ El permiso se elige en **Panel → Usuarios → columna CONTROL**. Las reglas de
 ## Cuidados importantes
 - **El repositorio es PÚBLICO.** Nunca subir contraseñas, archivos `.json` de cuentas de servicio ni datos de clientes.
 - Los datos de Firebase de `config.js` no son secretos (la seguridad la dan las reglas); no cambiarlos sin motivo.
-- **Clientes CONTAX** = clientes «Activos» de Panel → Clientes (`bdclientes` de `crm-contax`, títulos con número adelante como «2. NIT»; se leen al abrir la pestaña, ~1.000 lecturas). Solo lectura: se editan en el Panel. Se marca quién es repartidor de Yango por NIT (BDYango) o celular. La colección propia `clientes` de CONTROL (vacía) sigue siendo la que usa `clienteDe` para «CONTAX debe emitir» en Pagos. Muestra contraseñas: datos sensibles.
+- **Clientes CONTAX** = clientes «Activos» de Panel → Clientes (`bdclientes` de `crm-contax`, títulos con número adelante como «2. NIT»; se leen al abrir la pestaña, ~1.000 lecturas). Solo lectura: se editan en el Panel. Se marca quién es repartidor de Yango por NIT (BDYango), celular o nombre; `clienteDe` los usa para «CONTAX debe emitir» (ver abajo). Muestra contraseñas: datos sensibles.
 - Si cambias reglas que afectan al Portal, el archivo correcto es `firestore.rules` de `PortalNUMMEROS`, no este.
 - Este panel depende del puente del Panel NUMMEROS: si se cambia la URL `/exec` del puente, actualizar `puenteUrl` en `config.js`.
 - Agregar un `.gitignore` con `.DS_Store` antes de subir archivos desde la Mac.
