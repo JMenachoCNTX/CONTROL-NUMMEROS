@@ -518,6 +518,7 @@
     render: function () {
       var B = D.bdyango;
       var cab = X.titulo('DBYango', 'Datos de «BOL Registro Activación» (Yango), leídos en vivo' + (B && B.leido ? ' · ' + X.hace(B.leido) : '') + '. Una fila por repartidor (su último registro). Sus cuentas son las que usa la planilla del banco.',
+        (X.puedeEditar() ? '<button class="btn" id="byAvisar">' + ic('campana') + 'Avisar semana</button>' : '') +
         '<button class="btn sec" id="byExc">' + ic('descargar') + 'Excel de esta lista</button><button class="btn sec" id="byRec">' + ic('recargar') + 'Leer de nuevo</button>');
       if (!B) return cab + '<div class="card">' + X.cargaBarra('BDYango', 'Leyendo la hoja de Yango…') + '</div>';
       if (B.error) return cab + '<div class="card">' + X.vacio('No se pudo leer BDYango', B.error) + '</div>';
@@ -554,6 +555,7 @@
     despues: function (el) {
       if (!D.bdyango && !bdyPromesa) cargarBDYango();
       var br = el.querySelector('#byRec'); if (br) br.addEventListener('click', function () { br.disabled = true; br.innerHTML = X.anilloBoton() + 'Leyendo'; cargarBDYango(true); });
+      var ba = el.querySelector('#byAvisar'); if (ba) ba.addEventListener('click', avisarSemana);
       var bx = el.querySelector('#byExc'); if (bx) bx.addEventListener('click', function () {
         var nom = { todos: 'Todos', activos: 'Activados', sinbanco: 'Sin datos bancarios', sincodigo: 'Banco no reconocido' }[BY.filtro] + (BY.ciudad ? ' ' + BY.ciudad : '');
         X.excel([{ nombre: nom.slice(0, 30), filas: [['ID Yango', 'Nombre', 'Ciudad', 'Estado', 'Fecha de registro', 'CI', 'NIT', 'Teléfono', 'Telegram', 'Correo', 'Banco (como figura en BDYango)', 'Cuenta', 'Banco para la planilla', 'Código', 'Observación']]
@@ -570,6 +572,71 @@
       el.querySelectorAll('tr[data-fila]').forEach(function (tr) { tr.addEventListener('click', function () { var x = (BY.lista || [])[Number(tr.getAttribute('data-fila'))]; if (x) detalleBDYango(x); }); });
     }
   });
+  /* ══════════ AVISAR LA SEMANA (Telegram + notificación del Portal) ══════════
+     A cada repartidor que salió en la planilla de la semana: con importe → cuánto se le paga;
+     en Bs 0 (no habilitado) → que no cumplió las horas. Por Telegram le llega a quien abrió el bot
+     de CONTAX (se busca por su usuario de Telegram de BDYango) y por el Portal a quien activó los avisos.
+     Se deja en colaNotif; el robot del Portal lo manda en los próximos 15 minutos. */
+  var PORTAL_URL = 'https://portalnummeros.contaxbolivia.com';
+  function nombrePropio(t) { return String(t || '').toLowerCase().replace(/(^|\s)\S/g, function (c) { return c.toUpperCase(); }).trim(); }
+  function mensajeSemana(x) {
+    var sem = x.semana + (x.rango ? ' (' + x.rango + ')' : ''), hola = 'Hola ' + nombrePropio(x.nombre).split(' ').slice(0, 2).join(' ') + ', te escribe CONTAX.\n\n';
+    if (x.importe > 0) return hola + 'Tu pago de Yango de la ' + sem + ' es de ' + bs(x.importe) + '.\n\nMira el detalle en el Portal CONTAX: ' + PORTAL_URL;
+    return hola + 'En la ' + sem + (x.ganancias > 0 ? ' generaste ' + bs(x.ganancias) : ' tuviste actividad') + ', pero tu pago no está habilitado porque no cumpliste las horas semanales. Por eso esta semana sales en Bs 0.\n\nMira el detalle en el Portal CONTAX: ' + PORTAL_URL;
+  }
+  function avisarSemana() {
+    var B = D.bdyango;
+    if (!B || !B.lista) { X.aviso('Espera a que termine de leer BDYango.'); return; }
+    var sem = {}; (D.semanas || []).forEach(function (s) { if (s.orden && !sem[s.orden]) sem[s.orden] = s.semana; });
+    var ordenes = Object.keys(sem).map(Number).sort(function (a, z) { return z - a; }).slice(0, 8);
+    if (!ordenes.length) { X.aviso('No hay semanas cargadas.'); return; }
+    var tgDe = {}; B.lista.forEach(function (x) { if (x.telegram) tgDe[String(x.id)] = String(x.telegram).replace(/^@/, '').trim(); });
+    var datos = null;
+    X.ventana('Avisar semana', 'Le llega a cada repartidor que salió en la planilla: cuánto se le paga, o que está en Bs 0 porque no se habilitó su pago.',
+      '<div class="fm"><div class="fila"><label for="avSem">Semana</label><select id="avSem">' + ordenes.map(function (o) { return '<option value="' + o + '">' + esc(sem[o]) + '</option>'; }).join('') + '</select></div>' +
+        '<div id="avRes"></div></div>',
+      '<button class="btn sec" data-cerrar>Cancelar</button><button class="btn" data-ok disabled>' + ic('campana') + 'Enviar avisos</button>',
+      function (v, cerrar) {
+        var res = v.querySelector('#avRes'), ok = v.querySelector('[data-ok]'), sel = v.querySelector('#avSem');
+        var calcular = function () {
+          var o = Number(sel.value); ok.disabled = true; datos = null;
+          res.innerHTML = '<p class="muted">' + X.anilloBoton() + ' Revisando la semana…</p>';
+          Promise.all([X.dbP.collection('semanas').where('orden', '==', o).get(), X.dbP.collection('colaNotif').where('semanaOrden', '==', o).get()]).then(function (r) {
+            if (Number(sel.value) !== o) return;
+            var l = []; r[0].forEach(function (d) { var x = d.data(); if (!x.uid || !x.id) return;
+              l.push({ uid: x.uid, id: String(x.id), nombre: x.nombre || '', semana: x.semana, rango: x.rango || '', importe: Number(x.importe) || 0, ganancias: Number(x.ganancias) || 0 }); });
+            var pagan = l.filter(function (x) { return x.importe > 0; }), cero = l.filter(function (x) { return !(x.importe > 0); });
+            var conTg = l.filter(function (x) { return tgDe[x.id]; });
+            var antes = []; r[1].forEach(function (d) { if (d.data().canal === 'telegram') antes.push(d.data()); });
+            datos = { o: o, texto: sem[o], l: l, pagan: pagan, cero: cero, conTg: conTg };
+            var ej = pagan[0] || cero[0];
+            res.innerHTML = '<div class="rejilla r3 mb">' +
+                '<div class="kpi"><small>Con importe</small><b class="num">' + entero(pagan.length) + '</b><em>' + bs(X.redondear(pagan.reduce(function (t, x) { return t + x.importe; }, 0))) + '</em></div>' +
+                '<div class="kpi"><small>En Bs 0</small><b class="num">' + entero(cero.length) + '</b><em>no habilitados</em></div>' +
+                '<div class="kpi"><small>Con Telegram en BDYango</small><b class="num">' + entero(conTg.length) + '</b><em>les llega si abrieron el bot</em></div></div>' +
+              (antes.length ? '<div class="aviso-caja mb">' + ic('ayuda') + '<div><b>Esta semana ya se avisó ' + (antes.length === 1 ? 'una vez' : antes.length + ' veces') + '</b>' +
+                antes.map(function (a) { return esc(a.quien || '') + ' · ' + X.fechaHora(a.creado) + (a.estado === 'enviado' ? ' · ' + entero(a.enviados || 0) + ' enviados' : ' · ' + esc(a.estado || '')); }).join('<br>') + '. Si envías de nuevo, les vuelve a llegar.</div></div>' : '') +
+              (ej ? '<p class="muted" style="margin:0 0 6px">Así se ve el mensaje' + (pagan.length && cero.length ? ' (con importe; los de Bs 0 reciben uno parecido)' : '') + ':</p><div class="card" style="white-space:pre-line;font-size:14px;margin:0">' + esc(mensajeSemana(ej)) + '</div>' : X.vacio('Nadie en esta semana'));
+            ok.disabled = !l.length;
+          }, function (e) { console.error(e); res.innerHTML = '<p class="login-err">No se pudo leer la semana: ' + esc(e.message || e) + '</p>'; });
+        };
+        sel.addEventListener('change', calcular); calcular();
+        ok.addEventListener('click', function () {
+          if (!datos) return;
+          ok.disabled = true; ok.innerHTML = X.anilloBoton() + 'Enviando';
+          var t = datos.texto, base = { estado: 'pendiente', creado: X.servidor(), quien: S.usuario.email, semanaOrden: datos.o, semana: t };
+          var docs = [Object.assign({ canal: 'telegram', titulo: 'Pago de la ' + t, paraQuien: 'IDS', ids: '', cantidad: datos.conTg.length,
+            mensajes: JSON.stringify(datos.conTg.map(function (x) { return { u: tgDe[x.id], t: mensajeSemana(x) }; })) }, base)];
+          if (datos.pagan.length) docs.push(Object.assign({ titulo: 'Tu pago de la ' + t + ' está listo', cuerpo: 'Entra al Portal CONTAX para ver cuánto se te paga y el detalle.', paraQuien: 'IDS', ids: datos.pagan.map(function (x) { return x.uid; }).join(','), link: 'pendientes' }, base));
+          if (datos.cero.length) docs.push(Object.assign({ titulo: t + ': tu pago no está habilitado', cuerpo: 'Esta semana sales en Bs 0 porque no cumpliste las horas semanales. Mira el detalle en el portal.', paraQuien: 'IDS', ids: datos.cero.map(function (x) { return x.uid; }).join(','), link: 'pendientes' }, base));
+          var lote = X.dbP.batch(); docs.forEach(function (d) { lote.set(X.dbP.collection('colaNotif').doc(), d); });
+          lote.commit().then(function () {
+            cerrar(); X.aviso('Avisos en cola: salen en los próximos 15 minutos.');
+            X.bitacora('Avisó la semana ' + t, entero(datos.pagan.length) + ' con importe · ' + entero(datos.cero.length) + ' en Bs 0 · ' + entero(datos.conTg.length) + ' con Telegram');
+          }, function (e) { console.error(e); ok.disabled = false; ok.innerHTML = ic('campana') + 'Enviar avisos'; X.aviso('No se pudo enviar: ' + (e.message || e)); });
+        });
+      });
+  }
   function detalleBDYango(x) {
     var g = D.cuentas && D.cuentas.get(X.idSeguro(x.id)), dato = function (t, v) { return '<div class="dato"><small>' + t + '</small><b>' + esc(v || '—') + '</b></div>'; };
     X.cajon(esc(x.nombre || 'Repartidor'), 'ID ' + esc(x.id) + ' · ' + esc(X.semanas.CIUDADES[x.ciudad] || '') + (x.registros > 1 ? ' · ' + entero(x.registros) + ' registros en BDYango (se muestra el último)' : ''),
