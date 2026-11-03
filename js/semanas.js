@@ -98,6 +98,13 @@
       X.aviso(/permission|insufficient/i.test(e && e.message) ? 'Sin permiso para leer «semanas»: falta publicar las reglas del Portal.' : 'No se pudieron traer las semanas de pago.');
     });
   }
+  /* Nombre del repartidor según BDYango (para las planillas que vienen solo con el ID) */
+  var BYN = { lista: null, m: {} };
+  function nombreBDY(id) {
+    var l = D.bdyango && D.bdyango.lista; if (!l || !l.length) return '';
+    if (BYN.lista !== l) { BYN = { lista: l, m: {} }; l.forEach(function (b) { if (b.nombre) BYN.m[b.id] = b.nombre; }); }
+    return BYN.m[String(id)] || '';
+  }
   function aplicar() {
     if (!D.repartidores || !D.semanas) return;
     D.repartidores.forEach(function (r) {
@@ -107,7 +114,7 @@
     D.semanas.forEach(function (s) {
       var uid = s.uid || X.idSeguro(s.id), r = D.repartidores.get(uid);
       if (!r) {
-        r = { uid: uid, id: String(s.id), nombre: s.nombre || '', celular: s.celular || '', sinCuenta: true, habilitado: true, poliza: false,
+        r = { uid: uid, id: String(s.id), nombre: s.nombre || nombreBDY(String(s.id)), celular: s.celular || '', sinCuenta: true, habilitado: true, poliza: false,
           pendientes: [], historial: [], enPlanilla: [], noHab: [], tramites: [], _ultima: 0, _ultimaNoHab: false };
         D.repartidores.set(uid, r);
       }
@@ -284,6 +291,7 @@
     Object.keys(porDoc).forEach(function (k) {
       var r = porDoc[k], ant = o.existentes[k], rep = D.repartidores && D.repartidores.get(r.uid);
       if (!r.nombre && rep) r.nombre = rep.nombre;
+      if (!r.nombre) r.nombre = nombreBDY(r.id); // planillas que vienen solo con el ID
       r.cuenta = !!(rep && !rep.sinCuenta);
       r.estadoNuevo = r.importe > 0 ? 'pendiente' : 'no_habilitado';
       r.texto = ant ? ant.semana : textoSemana(o.patron, r.n, r.anio);
@@ -360,8 +368,9 @@
           else hoja.filas.forEach(function (f) { var sn = numSemana(f[m.semana]); if (sn) ordenes[(anioDe(f[m.semana]) || anio || inferirAnio(sn)) * 100 + sn] = 1; });
           var lista = Object.keys(ordenes).map(Number);
           if (lista.length > 10) { X.aviso('El archivo trae más de 10 semanas distintas. Revisa la columna de semana.'); ok.disabled = false; ok.innerHTML = ic('buscar') + 'Revisar'; return; }
-          col().where('orden', 'in', lista).get().then(function (q) {
-            var ex = {}; q.forEach(function (d) { var x = d.data(); x._id = d.id; ex[d.id] = x; });
+          // BDYango hace falta para completar los nombres que la planilla trae vacíos
+          Promise.all([col().where('orden', 'in', lista).get(), X.banco ? X.banco.cargarBDYango() : null]).then(function (rr) {
+            var q = rr[0], ex = {}; q.forEach(function (d) { var x = d.data(); x._id = d.id; ex[d.id] = x; });
             var res = analizar({ filas: hoja.filas, mapa: m, semanaFija: m.semana < 0 ? n : 0, anioFijo: anio, rangoFijo: rango, ciudad: ciudad, existentes: ex, patron: patronSemana(muestrasSemana()) });
             cerrar(); vistaPrevia(res, { ciudad: ciudad, archivo: archivo.name, hoja: hoja.nombre });
           }, function (e) {
@@ -486,14 +495,14 @@
             var e = ev.semanas.filter(function (z) { return z.p.semana === x.semana; })[0];
             f = e ? (EST_FACT[e.estado] || 'Pago retenido') : 'Falta factura';
           }
-          filas.push({ ciudad: x.ciudad || '', id: id, nombre: x.nombre || (h && h.nombre) || '', semana: x.semana, rango: x.rango || (h && h.rango) || '',
+          filas.push({ ciudad: x.ciudad || '', id: id, nombre: x.nombre || (h && h.nombre) || nombreBDY(id), semana: x.semana, rango: x.rango || (h && h.rango) || '',
             importe: x.estado === 'no_habilitado' ? 0 : Number(x.importe) || 0, ganancias: Number(x.ganancias) || 0,
             estado: { pagado: 'Pagado', pendiente: 'Pendiente', en_planilla: 'Enviado a pagar', no_habilitado: 'No habilitado' }[x.estado] || x.estado,
             fechaPago: x.estado === 'pagado' ? X.fecha(x.fechaPago || (h && h.fecha)) : '', factura: x.estado === 'pagado' ? ((h && h.factura) || '—') : x.estado === 'no_habilitado' ? 'No corresponde' : f });
         });
         hs.forEach(function (h) {
           if (vistos[h.id]) return; vistos[h.id] = 1;
-          filas.push({ ciudad: CIUDADES[h.ciudad] ? h.ciudad : '', id: h.id, nombre: h.nombre, semana: h.semana, rango: h.rango, importe: h.importe, ganancias: 0,
+          filas.push({ ciudad: CIUDADES[h.ciudad] ? h.ciudad : '', id: h.id, nombre: h.nombre || nombreBDY(h.id), semana: h.semana, rango: h.rango, importe: h.importe, ganancias: 0,
             estado: 'Pagado', fechaPago: X.fecha(h.fecha), factura: h.factura || '—' });
         });
         filas.sort(function (a, b) { return String(a.ciudad).localeCompare(String(b.ciudad)) || X.normal(a.nombre).localeCompare(X.normal(b.nombre)); });
