@@ -18,9 +18,11 @@
   function cargarPanelClientes(forzar) {
     if (cargandoPanel && !forzar) return cargandoPanel;
     if (forzar) D.panelClientes = null;
-    cargandoPanel = X.dbPn.collection('bdclientes').get().then(function (q) {
+    // Con copia local: solo se leen los clientes con «_upd» nuevo (el Panel lo pone en cada cambio). Antes se leía toda la base cada vez.
+    var col = X.dbPn.collection('bdclientes');
+    cargandoPanel = X.leerConCopia('bdclientes', { completa: col, cambios: col, campo: '_upd', dueno: S.panelUsuario && S.panelUsuario.uid }).then(function (res) {
       var l = [];
-      q.forEach(function (d) { if (d.id === '_meta') return; var x = d.data(); x._id = d.id; l.push(x); });
+      Object.keys(res.docs).forEach(function (id) { if (id === '_meta') return; var x = res.docs[id]; x._id = id; l.push(x); });
       D.panelClientes = { lista: l, leido: new Date() };
     }, function (e) { console.warn('Clientes del Panel:', e); D.panelClientes = { lista: [], error: 'No se pudo leer la base de clientes del Panel. Revisa que tu usuario del Panel tenga permiso para ver Clientes.' }; })
       .then(function () { if (/^(clientes|facturas|pagos|tablero)$/.test(S.pagina) && !document.querySelector('.velo')) X.refrescar(); });

@@ -743,7 +743,7 @@
       return new Promise(function (ok) { try { var t = bd.transaction('c', 'readwrite'); if (v == null) t.objectStore('c').delete(k); else t.objectStore('c').put(v, k); t.oncomplete = ok; t.onerror = ok; } catch (e) { ok(); } });
     });
   }
-  function copiaClave(nombre) { return nombre + '|' + (S.portalUsuario ? S.portalUsuario.uid : '') + '|v' + COPIA_V; }
+  function copiaClave(nombre, dueno) { return nombre + '|' + (dueno || (S.portalUsuario ? S.portalUsuario.uid : '')) + '|v' + COPIA_V; }
   // Las fechas de Firestore se guardan como {seconds, nanoseconds} y vuelven a ser Timestamp al leer
   function revivir(k, v) {
     if (v && typeof v === 'object' && typeof v.seconds === 'number' && typeof v.nanoseconds === 'number' && Object.keys(v).length <= 3) return new firebase.firestore.Timestamp(v.seconds, v.nanoseconds);
@@ -751,9 +751,10 @@
   }
   function msDe(f) { var d = aFecha(f); return d ? d.getTime() : 0; }
   /* Lee una colección con copia local. o = { completa: query, cambios: query sobre la colección entera,
-     vale: fn(dato) que dice si el documento va (si no, se quita), forzar: true = leer todo } → {docs: {id: dato}, leidos} */
+     vale: fn(dato) que dice si el documento va (si no, se quita), forzar: true = leer todo,
+     campo: fecha de cambio ('actualizado' = Timestamp; '_upd' = milisegundos, como en el Panel), dueno: uid de la sesión } → {docs: {id: dato}, leidos} */
   function leerConCopia(nombre, o) {
-    var k = copiaClave(nombre), hoy = hoyISO();
+    var k = copiaClave(nombre, o.dueno), hoy = hoyISO(), campo = o.campo || 'actualizado', num = campo === '_upd';
     var guardar = function (docs, max, dia) {
       var t; try { t = JSON.stringify(docs); } catch (e) { return; }
       copiaGuardar(k, { dia: dia, max: max, datos: t });
@@ -762,17 +763,18 @@
       if (!c || c.dia !== hoy || o.forzar || !c.datos) {
         return o.completa.get().then(function (q) {
           var docs = {}, max = 0;
-          q.forEach(function (d) { var x = d.data(); docs[d.id] = x; max = Math.max(max, msDe(x.actualizado)); });
+          q.forEach(function (d) { var x = d.data(); docs[d.id] = x; max = Math.max(max, msDe(x[campo])); });
           guardar(docs, max, hoy);
           D.lecturas = (D.lecturas || 0) + q.size;
           return { docs: JSON.parse(JSON.stringify(docs), revivir), leidos: q.size, completa: true };
         });
       }
       var docs = JSON.parse(c.datos, revivir);
-      // 2 minutos de margen por si algo se guardó mientras se hacía la copia
-      return o.cambios.where('actualizado', '>', firebase.firestore.Timestamp.fromMillis(Math.max(0, c.max - 120000))).get().then(function (q) {
+      // Margen por si algo se guardó mientras se hacía la copia (10 min con _upd: lo pone el reloj de cada computadora)
+      var desde = Math.max(0, c.max - (num ? 600000 : 120000));
+      return o.cambios.where(campo, '>', num ? desde : firebase.firestore.Timestamp.fromMillis(desde)).get().then(function (q) {
         var max = c.max;
-        q.forEach(function (d) { var x = d.data(); if (o.vale && !o.vale(x)) delete docs[d.id]; else docs[d.id] = x; max = Math.max(max, msDe(x.actualizado)); });
+        q.forEach(function (d) { var x = d.data(); if (o.vale && !o.vale(x)) delete docs[d.id]; else docs[d.id] = x; max = Math.max(max, msDe(x[campo])); });
         if (q.size) guardar(docs, max, c.dia);
         D.lecturas = (D.lecturas || 0) + q.size;
         return { docs: q.size ? JSON.parse(JSON.stringify(docs), revivir) : docs, leidos: q.size, completa: false };
