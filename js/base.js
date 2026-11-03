@@ -764,6 +764,7 @@
   function recargarTodo(conAviso) {
     clasicos(true);
     textoClasicos('Trayendo los datos del portal…');
+    if (CTRL.clientesCONTAX) CTRL.clientesCONTAX.cargar(true);
     return Promise.all([cargarRepartidores(), cargarSync(), cargarContenido(), cargarControl()]).then(function () {
       escucharFacturas();
       clasicos(false);
@@ -785,7 +786,8 @@
       if (c.estado === 'INACTIVO') continue;
       if ((c.idYango && String(c.idYango).trim() === id) || (cel && c.celular && String(c.celular).replace(/\D/g, '').slice(-8) === cel)) return c;
     }
-    return null;
+    // Clientes «Activos» del Panel reconocidos como repartidores (js/gestion.js)
+    return (CTRL.clientesCONTAX && CTRL.clientesCONTAX.porIdYango()[id]) || null;
   }
 
   /* ══════════ ARRANQUE ══════════ */

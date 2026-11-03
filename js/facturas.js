@@ -41,7 +41,7 @@
     return { r: r, suma: suma, dif: dif, cuadra: encontradas > 0 && Math.abs(dif) <= 0.05 && !faltan.length, faltan: faltan };
   }
 
-  var F = { tab: 'recibida', buscar: '', semana: '', pag: 0, sel: {} };
+  var F = { tab: 'lista', buscar: '', semana: '', pag: 0, sel: {} };
   function filtradas() {
     var b = X.normal(F.buscar);
     return (D.facturas || []).filter(function (f) {
@@ -55,28 +55,139 @@
     });
   }
 
+  /* ══════════ LISTA DE FACTURACIÓN (como la hoja «CONTROL») ══════════
+     Una fila por repartidor y semana que necesita factura para MILTHAGOR:
+     - las semanas pendientes de pago (colección «semanas»), y
+     - las semanas ya pagadas «con retención» (historial con factura «Pago Retenido»): igual deben traer factura.
+     Contador: CONTAX si es cliente activo del Panel (o de la lista propia); si no, «Otro». */
+  var ESTADO_LF = {
+    falta: ['mal', 'Falta ❌'], porEmitir: ['contax', 'CONTAX debe emitir'], subida: ['pend', 'Subida · por revisar'],
+    observada: ['mal', 'Observada'], aprobada: ['ok', 'Emitida ✅'], contax: ['contax', 'Emitida por CONTAX ✅']
+  };
+  function facturaDe(uid, semana) {
+    var m = null;
+    (D.facturas || []).forEach(function (f) {
+      if (f.uid !== uid || f.estado === 'anulada' || (f.semanas || []).indexOf(semana) < 0) return;
+      if (!m || (f.subidoF || 0) > (m.subidoF || 0)) m = f;
+    });
+    return m;
+  }
+  function repDe(id) {
+    var r = D.repartidores && D.repartidores.get(X.idSeguro(id));
+    if (r) return r;
+    var hay = null; if (D.repartidores) D.repartidores.forEach(function (x) { if (!hay && String(x.id) === String(id)) hay = x; });
+    return hay;
+  }
+  function listaFacturacion() {
+    var filas = [], ya = {};
+    var agregar = function (r, id, nombre, semana, importe, tipo, extra) {
+      var k = id + '|' + semana; if (ya[k]) return; ya[k] = 1;
+      var uid = r ? r.uid : X.idSeguro(id), f = facturaDe(uid, semana), cli = r ? X.clienteDe(r) : X.clienteDe({ id: id });
+      var e = !f ? (cli ? 'porEmitir' : 'falta') : f.origen === 'contax' ? 'contax' : f.estado === 'aprobada' ? 'aprobada' : f.estado === 'recibida' ? 'subida' : 'observada';
+      filas.push(Object.assign({ r: r, id: String(id), nombre: nombre || (r && r.nombre) || '', celular: (r && r.celular) || '', semana: semana, importe: Number(importe) || 0,
+        tipo: tipo, cliente: cli, contador: cli ? 'CONTAX' : 'OTRO', f: f, estado: e, tiene: e === 'aprobada' || e === 'contax' || e === 'subida' }, extra || {}));
+    };
+    if (D.repartidores) D.repartidores.forEach(function (r) { (r.pendientes || []).forEach(function (p) { if ((Number(p.importe) || 0) > 0) agregar(r, r.id, r.nombre, p.semana, p.importe, 'pendiente', { rango: p.rango }); }); });
+    (D.hist || []).forEach(function (h) {
+      if (!/RETENID/.test(X.normal(h.factura))) return;
+      agregar(repDe(h.id), h.id, h.nombre, h.semana, h.importe, 'retenido', { rango: h.rango, fechaPago: h.fecha });
+    });
+    filas.sort(function (a, b) { return X.normal(a.nombre).localeCompare(X.normal(b.nombre)) || (X.ordenSemana(a.semana) - X.ordenSemana(b.semana)); });
+    return filas;
+  }
+  var LF = { vista: 'faltan', contador: '', tipo: '', buscar: '', pag: 0 };
+  function lfFiltradas(todas) {
+    var b = X.normal(LF.buscar);
+    return todas.filter(function (x) {
+      if (LF.vista === 'faltan' && x.tiene) return false;
+      if (LF.vista === 'con' && !x.tiene) return false;
+      if (LF.contador && x.contador !== LF.contador) return false;
+      if (LF.tipo && x.tipo !== LF.tipo) return false;
+      if (b && (X.normal(x.nombre) + ' ' + x.id + ' ' + String(x.celular).replace(/\D/g, '') + ' ' + X.normal(x.semana)).indexOf(b) < 0) return false;
+      return true;
+    });
+  }
+  function lfCuadro(t, l) {
+    var falta = l.filter(function (x) { return !x.tiene; }), con = l.length - falta.length;
+    var suma = X.redondear(falta.reduce(function (s, x) { return s + x.importe; }, 0));
+    return '<div class="kpi"><small>' + t + '</small><b class="num">' + entero(falta.length) + ' ❌</b><em>' + bs(suma) + ' sin factura · ' + entero(con) + ' ✅ con factura</em></div>';
+  }
+  function lfHTML() {
+    var todas = listaFacturacion(), f = lfFiltradas(todas);
+    var ext = todas.filter(function (x) { return x.contador === 'OTRO'; }), ctx = todas.filter(function (x) { return x.contador === 'CONTAX'; });
+    var corto = function (v) { v = String(v || ''); return v.length > 14 ? v.slice(0, 6) + '…' + v.slice(-6) : v; };
+    var nf = function (x, k) { return x.f && x.f[k] ? esc(x.f[k]) : '<span class="muted">❌</span>'; };
+    return '<div class="rejilla r3 mb">' + lfCuadro('General', todas) + lfCuadro('Externos (otro contador)', ext) + lfCuadro('CONTAX', ctx) + '</div>' +
+      (D.panelClientes && D.panelClientes.error ? '<div class="aviso-caja mb">' + ic('ayuda') + '<div>' + esc(D.panelClientes.error) + ' Sin eso no se sabe quién es cliente CONTAX.</div></div>' : '') +
+      '<div class="herr"><div class="buscar">' + ic('buscar') + '<input type="search" id="bLf" placeholder="Buscar por nombre, ID, celular o semana" value="' + esc(LF.buscar) + '"></div>' +
+        '<select id="sLfVista"><option value="faltan"' + (LF.vista === 'faltan' ? ' selected' : '') + '>Sin factura</option><option value="con"' + (LF.vista === 'con' ? ' selected' : '') + '>Con factura</option><option value=""' + (!LF.vista ? ' selected' : '') + '>Todas</option></select>' +
+        '<select id="sLfCont"><option value="">Todos los contadores</option><option value="OTRO"' + (LF.contador === 'OTRO' ? ' selected' : '') + '>Externos (otro)</option><option value="CONTAX"' + (LF.contador === 'CONTAX' ? ' selected' : '') + '>CONTAX</option></select>' +
+        '<select id="sLfTipo"><option value="">Pendientes y retenidos</option><option value="pendiente"' + (LF.tipo === 'pendiente' ? ' selected' : '') + '>Pendientes de pago</option><option value="retenido"' + (LF.tipo === 'retenido' ? ' selected' : '') + '>Pagados con retención</option></select>' +
+        '<button class="btn sec" id="btnExpLf">' + ic('descargar') + 'Excel</button>' +
+      '</div>' +
+      '<p class="muted mb">' + entero(f.length) + ' filas · ' + bs(X.redondear(f.reduce(function (s, x) { return s + x.importe; }, 0))) + '</p>' +
+      (f.length ? X.tabla([
+        { t: 'Celular', html: function (x) { return '<span class="num">' + esc(X.telVisible(x.celular) || '—') + '</span>'; } },
+        { t: 'ID', html: function (x) { return '<span class="num">' + esc(x.id) + '</span>'; } },
+        { t: 'Nombre', html: function (x) { return '<b>' + esc(x.nombre) + '</b>' + (x.tipo === 'retenido' ? '<span class="sub">' + X.chip('neutro', 'Pagado con retención ' + X.fecha(x.fechaPago)) + '</span>' : ''); } },
+        { t: 'Importe', clase: 'monto', html: function (x) { return '<b>' + bs(x.importe) + '</b>'; } },
+        { t: 'Contador', html: function (x) { return x.cliente ? X.chip('contax', 'CONTAX') : '<span class="muted">Otro</span>'; } },
+        { t: 'Semana', html: function (x) { return esc(X.semanaCorta(x.semana)); } },
+        { t: '¿Emitida?', html: function (x) { var e = ESTADO_LF[x.estado]; return X.chip(e[0], e[1]); } },
+        { t: 'Emisor', html: function (x) { return x.f ? esc(x.f.razonEmisor || x.f.nombre || '') : '<span class="muted">❌</span>'; } },
+        { t: 'N.º factura', html: function (x) { return nf(x, 'numero'); } },
+        { t: 'Fecha', html: function (x) { return x.f && x.f.fechaEmision ? esc(X.fecha(x.f.fechaEmision)) : '<span class="muted">❌</span>'; } },
+        { t: 'NIT', html: function (x) { return nf(x, 'nitEmisor'); } },
+        { t: 'Autorización', html: function (x) { return x.f && x.f.autorizacion ? '<span class="num" title="' + esc(x.f.autorizacion) + '">' + esc(corto(x.f.autorizacion)) + '</span>' : '<span class="muted">❌</span>'; } },
+        { t: 'Estado', html: function (x) { return x.f ? chipFactura(x.f) + (x.f.verificacion ? '<span class="sub">' + X.chip('ok', 'Verificada en RCV') + '</span>' : '') : '<span class="muted">—</span>'; } }
+      ], f, { clic: true, pag: LF.pag }) : X.vacio(LF.vista === 'faltan' ? 'No falta ninguna factura' : 'Nada con estos filtros', '', 'marca/graficos/rel-aprobado-' + (S.oscuro ? 'oscuro' : 'claro') + '.png'));
+  }
+  function lfDespues(el) {
+    var f = lfFiltradas(listaFacturacion());
+    var bq = el.querySelector('#bLf'); if (bq) bq.addEventListener('input', X.debounce(function () { LF.buscar = bq.value; LF.pag = 0; X.refrescar(); X.setFoco('#bLf'); }, 300));
+    [['#sLfVista', 'vista'], ['#sLfCont', 'contador'], ['#sLfTipo', 'tipo']].forEach(function (s) {
+      var x = el.querySelector(s[0]); if (x) x.addEventListener('change', function () { LF[s[1]] = x.value; LF.pag = 0; X.refrescar(); });
+    });
+    el.querySelectorAll('[data-pag]').forEach(function (b) { b.addEventListener('click', function () { LF.pag = Number(b.getAttribute('data-pag')); X.refrescar(); }); });
+    el.querySelectorAll('tr[data-fila]').forEach(function (tr) {
+      tr.addEventListener('click', function () { var x = f[Number(tr.getAttribute('data-fila'))]; if (!x) return; if (x.f) abrirFactura(x.f._id); else X.informe.abrir(x.id); });
+    });
+    var be = el.querySelector('#btnExpLf');
+    if (be) be.addEventListener('click', function () {
+      X.excel([{ nombre: 'Lista de facturación', filas: [['Celular', 'ID', 'Nombre', 'Importe total', 'Contador', 'Semana', 'Rango', 'Tipo', '¿Emitida?', 'Emisor', 'N.º factura', 'Fecha', 'NIT', 'Autorización', 'Estado']].concat(f.map(function (x) {
+        var k = x.f || {};
+        return [X.telVisible(x.celular), x.id, x.nombre, x.importe, x.contador, x.semana, x.rango || '', x.tipo === 'retenido' ? 'Pagado con retención' : 'Pendiente de pago', ESTADO_LF[x.estado][1],
+          k.razonEmisor || '', k.numero || '', k.fechaEmision || '', k.nitEmisor || '', k.autorizacion || '', x.f ? (x.f.origen === 'contax' ? 'Emitida por CONTAX' : (ESTADOS[x.f.estado] || [0, x.f.estado])[1]) : ''];
+      })) }], 'Lista-facturacion-' + X.hoyISO());
+    });
+  }
+  CTRL.listaFacturacion = listaFacturacion;
+
   X.pagina('facturas', {
     t: 'Facturas', i: 'factura', orden: 2, sec: 'Operación',
     cuenta: function () { return (D.facturas || []).filter(function (f) { return f.estado === 'recibida'; }).length; },
     render: function () {
       var ed = X.puedeEditar();
-      var cab = X.titulo('Facturas', 'Las que suben los repartidores en «Mis facturas» del portal. Llegan al instante; corte: jueves 18:00.',
+      var cab = X.titulo('Facturas', F.tab === 'lista' ? 'Lista de facturación: cada semana que necesita factura para MILTHAGOR (pendientes de pago y pagadas con retención), como la hoja «CONTROL».' : 'Las que suben los repartidores en «Mis facturas» del portal. Llegan al instante; corte: jueves 18:00.',
         (ed ? '<button class="btn sec" id="btnCruce">' + ic('cruzar') + 'Cruzar con Impuestos</button><button class="btn sec" id="btnContax">' + ic('cliente') + 'Registrar emitida por CONTAX</button>' : '') +
-        '<button class="btn sec" id="btnExpFac">' + ic('descargar') + 'Excel</button>');
+        (F.tab !== 'lista' ? '<button class="btn sec" id="btnExpFac">' + ic('descargar') + 'Excel</button>' : ''));
       if (!S.portalUsuario) return cab + '<div class="card">' + X.vacio('Conecta el Portal para ver las facturas', 'Usa el botón «Conectar» de arriba.') + '</div>';
-      if (!D.facturas) return cab + X.cargaN('Trayendo facturas', 'Conectando con el portal…');
+      if (!D.facturas || !D.repartidores) return cab + X.cargaN('Trayendo facturas', 'Conectando con el portal…');
       var todas = D.facturas, f = filtradas();
       var n = function (e) { return todas.filter(function (x) { return e === 'todas' || x.estado === e || (e === 'observada' && x.estado === 'rechazada'); }).length; };
+      var pest = '<div class="pestanas">' + [['lista', 'Lista de facturación'], ['recibida', 'Por revisar'], ['observada', 'Observadas'], ['aprobada', 'Aprobadas'], ['anulada', 'Anuladas'], ['todas', 'Todas']].map(function (p) {
+        var c = p[0] === 'lista' ? listaFacturacion().filter(function (x) { return !x.tiene; }).length : n(p[0]);
+        return '<button aria-selected="' + (F.tab === p[0]) + '" data-tab="' + p[0] + '">' + p[1] + ' <em class="num">' + entero(c) + '</em></button>';
+      }).join('') + '</div>';
+      if (F.tab === 'lista') return cab + '<div class="card">' + pest + lfHTML() + '</div>';
       var semanas = {}; todas.forEach(function (x) { (x.semanas || []).forEach(function (s) { semanas[s] = 1; }); });
       var sel = Object.keys(F.sel).filter(function (k) { return F.sel[k]; });
       var cuadran = f.filter(function (x) { return x.estado === 'recibida' && comparar(x).cuadra; });
       return cab +
-        (todas.length === 0 ? '<div class="card">' +
+        (todas.length === 0 ? '<div class="card">' + pest +
           '<div class="sello"><img src="marca/graficos/ele-sello-de-aprobado.png" alt=""><div><b>Todavía no llegó ninguna factura por el portal</b><span class="muted">Desde ahora los repartidores las suben en «Mis facturas». Apenas suban la primera, aparece aquí sin recargar.</span></div></div>' +
           '<img class="pasos-img" src="marca/graficos/pas-pasos-' + (S.oscuro ? 'oscuro' : 'claro') + '.jpg" alt="Conocemos, diseñamos, probamos y acompañamos"></div>' :
-        '<div class="card"><div class="pestanas">' + [['recibida', 'Por revisar'], ['observada', 'Observadas'], ['aprobada', 'Aprobadas'], ['anulada', 'Anuladas'], ['todas', 'Todas']].map(function (p) {
-          return '<button aria-selected="' + (F.tab === p[0]) + '" data-tab="' + p[0] + '">' + p[1] + ' <em class="num">' + entero(n(p[0])) + '</em></button>';
-        }).join('') + '</div>' +
+        '<div class="card">' + pest +
         '<div class="herr"><div class="buscar">' + ic('buscar') + '<input type="search" id="bFac" placeholder="Buscar por nombre, ID o N.º de factura" value="' + esc(F.buscar) + '"></div>' +
           '<select id="sSemFac"><option value="">Todas las semanas</option>' + Object.keys(semanas).sort(function (a, b) { return X.ordenSemana(b) - X.ordenSemana(a); }).map(function (s) { return '<option' + (s === F.semana ? ' selected' : '') + '>' + esc(s) + '</option>'; }).join('') + '</select>' +
           (ed && F.tab === 'recibida' && cuadran.length ? '<button class="btn" id="btnAprCuadran">' + ic('check') + 'Aprobar las ' + cuadran.length + ' que cuadran</button>' : '') +
@@ -96,6 +207,9 @@
     despues: function (el) {
       var f = filtradas();
       el.querySelectorAll('[data-tab]').forEach(function (b) { b.addEventListener('click', function () { F.tab = b.getAttribute('data-tab'); F.pag = 0; F.sel = {}; X.refrescar(); }); });
+      var bz0 = el.querySelector('#btnCruce'); if (bz0) bz0.addEventListener('click', cruceImpuestos);
+      var bx0 = el.querySelector('#btnContax'); if (bx0) bx0.addEventListener('click', function () { registrarContax(); });
+      if (F.tab === 'lista') return lfDespues(el);
       var bq = el.querySelector('#bFac'); if (bq) bq.addEventListener('input', X.debounce(function () { F.buscar = bq.value; F.pag = 0; X.refrescar(); X.setFoco('#bFac'); }, 300));
       var ss = el.querySelector('#sSemFac'); if (ss) ss.addEventListener('change', function () { F.semana = ss.value; F.pag = 0; X.refrescar(); });
       el.querySelectorAll('[data-pag]').forEach(function (b) { b.addEventListener('click', function () { F.pag = Number(b.getAttribute('data-pag')); X.refrescar(); }); });
@@ -110,8 +224,6 @@
       if (ba) ba.addEventListener('click', function () { aprobarVarias(Object.keys(F.sel).filter(function (k) { return F.sel[k]; })); });
       var bc = el.querySelector('#btnAprCuadran');
       if (bc) bc.addEventListener('click', function () { aprobarVarias(f.filter(function (x) { return x.estado === 'recibida' && comparar(x).cuadra; }).map(function (x) { return x._id; })); });
-      var bx = el.querySelector('#btnContax'); if (bx) bx.addEventListener('click', function () { registrarContax(); });
-      var bz = el.querySelector('#btnCruce'); if (bz) bz.addEventListener('click', cruceImpuestos);
       var be = el.querySelector('#btnExpFac');
       if (be) be.addEventListener('click', function () {
         X.excel([{ nombre: 'Facturas', filas: [['Subida', 'ID Yango', 'Nombre', 'N.º factura', 'Fecha emisión', 'Semanas', 'Importe (Bs)', 'Estado', 'Motivo', 'Revisó', 'Después del corte']].concat(f.map(function (x) {

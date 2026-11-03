@@ -23,7 +23,7 @@
       q.forEach(function (d) { if (d.id === '_meta') return; var x = d.data(); x._id = d.id; l.push(x); });
       D.panelClientes = { lista: l, leido: new Date() };
     }, function (e) { console.warn('Clientes del Panel:', e); D.panelClientes = { lista: [], error: 'No se pudo leer la base de clientes del Panel. Revisa que tu usuario del Panel tenga permiso para ver Clientes.' }; })
-      .then(function () { if (S.pagina === 'clientes') X.refrescar(); });
+      .then(function () { if (/^(clientes|facturas|pagos|tablero)$/.test(S.pagina) && !document.querySelector('.velo')) X.refrescar(); });
     return cargandoPanel;
   }
   // Valor de una columna de BDCONTAX aunque el título tenga número adelante («2. NIT»)
@@ -41,11 +41,36 @@
     return P.lista.filter(function (x) { return X.normal(pv(x, 'Estado Usuario')) === 'ACTIVO'; }).map(function (x) {
       var c = { x: x, nombre: pv(x, 'NOMBRE') || pv(x, 'Nombre o Razón Social'), codigo: pv(x, 'Codigo de ID'), nit: pv(x, 'NIT'), ci: pv(x, 'C.I.'), celular: pv(x, 'Celular'),
         usuario: pv(x, 'Usuario'), clave: pv(x, 'Contraseña'), claveSiat: pv(x, 'Contraseña SIAT'), brinda: pv(x, 'Brinda Servicios A'), costo: pv(x, 'Costo Servicio Mensual') };
-      var y = (c.nit && porNit[digitos(c.nit)]) || (digitos(c.celular, 8).length === 8 && porCel[digitos(c.celular, 8)]);
+      var y = (c.nit && porNit[digitos(c.nit)]) || (digitos(c.celular, 8).length === 8 && porCel[digitos(c.celular, 8)]) || porNombre(c.nombre);
       c.idYango = y ? String(y.id) : '';
       return c;
     });
   }
+  /* Respaldo por nombre (muchos repartidores no tienen NIT en BDYango y cambian de celular):
+     todas las palabras del nombre del repartidor (mín. 2) están en el nombre del cliente, y es uno solo */
+  var NOM = { clave: '', idx: null };
+  function palabras(t) { return X.normal(t).split(/[^A-Z]+/).filter(function (w) { return w.length >= 3; }); }
+  function porNombre(nombre) {
+    if (!D.repartidores || !nombre) return null;
+    if (NOM.clave !== String(D.repartidores.size)) {
+      NOM.idx = {}; NOM.clave = String(D.repartidores.size);
+      D.repartidores.forEach(function (r) { var p = palabras(r.nombre); if (p.length >= 2) (NOM.idx[p[0]] = NOM.idx[p[0]] || []).push({ r: r, p: p }); });
+    }
+    var mias = palabras(nombre), hay = {}, cands = [];
+    mias.forEach(function (w) { hay[w] = 1; });
+    mias.forEach(function (w) { (NOM.idx[w] || []).forEach(function (x) { if (cands.indexOf(x) < 0 && x.p.every(function (q) { return hay[q]; })) cands.push(x); }); });
+    var ids = {}; cands.forEach(function (x) { ids[x.r.id] = x.r; });
+    var k = Object.keys(ids); return k.length === 1 ? ids[k[0]] : null;
+  }
+  /* Clientes CONTAX por ID de Yango (para «CONTAX debe emitir» y la lista de facturación) */
+  var MAPA = { clave: '', m: {} };
+  function porIdYango() {
+    var P = D.panelClientes; if (!P || !P.lista) return {};
+    var clave = (P.leido ? P.leido.getTime() : 0) + '|' + ((D.bdyango && D.bdyango.lista) || []).length + '|' + (D.repartidores ? D.repartidores.size : 0);
+    if (MAPA.clave !== clave) { MAPA.m = {}; activosPanel().forEach(function (c) { if (c.idYango) MAPA.m[c.idYango] = c; }); MAPA.clave = clave; }
+    return MAPA.m;
+  }
+  CTRL.clientesCONTAX = { cargar: cargarPanelClientes, porIdYango: porIdYango };
   function filtrarClientes(l) {
     var b = X.normal(CL.buscar);
     return l.filter(function (c) {
