@@ -719,15 +719,78 @@
     var m = document.querySelector('meta[name=theme-color]'); if (m) m.content = S.oscuro ? '#051F20' : '#F4FAF5';
   }
 
+  /* ══════════ COPIA LOCAL (para no leer todo el portal cada vez) ══════════
+     Repartidores (~3.500) y semanas (~1.200) se guardan en este navegador (IndexedDB). Al abrir CONTROL
+     o apretar ⟳ solo se leen los documentos con «actualizado» posterior a la copia. Una vez al día se lee
+     todo de nuevo (así desaparecen los que se borraron). Cada lectura de Firestore cuenta para la cuota. */
+  var COPIA_V = 1, copiaBd = null;
+  function copiaAbrir() {
+    if (!copiaBd) copiaBd = new Promise(function (ok) {
+      try { var r = indexedDB.open('control-copia', 1); r.onupgradeneeded = function () { r.result.createObjectStore('c'); }; r.onsuccess = function () { ok(r.result); }; r.onerror = function () { ok(null); }; }
+      catch (e) { ok(null); }
+    });
+    return copiaBd;
+  }
+  function copiaLeer(k) {
+    return copiaAbrir().then(function (bd) {
+      if (!bd) return null;
+      return new Promise(function (ok) { try { var t = bd.transaction('c').objectStore('c').get(k); t.onsuccess = function () { ok(t.result || null); }; t.onerror = function () { ok(null); }; } catch (e) { ok(null); } });
+    });
+  }
+  function copiaGuardar(k, v) {
+    return copiaAbrir().then(function (bd) {
+      if (!bd) return;
+      return new Promise(function (ok) { try { var t = bd.transaction('c', 'readwrite'); if (v == null) t.objectStore('c').delete(k); else t.objectStore('c').put(v, k); t.oncomplete = ok; t.onerror = ok; } catch (e) { ok(); } });
+    });
+  }
+  function copiaClave(nombre) { return nombre + '|' + (S.portalUsuario ? S.portalUsuario.uid : '') + '|v' + COPIA_V; }
+  // Las fechas de Firestore se guardan como {seconds, nanoseconds} y vuelven a ser Timestamp al leer
+  function revivir(k, v) {
+    if (v && typeof v === 'object' && typeof v.seconds === 'number' && typeof v.nanoseconds === 'number' && Object.keys(v).length <= 3) return new firebase.firestore.Timestamp(v.seconds, v.nanoseconds);
+    return v;
+  }
+  function msDe(f) { var d = aFecha(f); return d ? d.getTime() : 0; }
+  /* Lee una colección con copia local. o = { completa: query, cambios: query sobre la colección entera,
+     vale: fn(dato) que dice si el documento va (si no, se quita), forzar: true = leer todo } → {docs: {id: dato}, leidos} */
+  function leerConCopia(nombre, o) {
+    var k = copiaClave(nombre), hoy = hoyISO();
+    var guardar = function (docs, max, dia) {
+      var t; try { t = JSON.stringify(docs); } catch (e) { return; }
+      copiaGuardar(k, { dia: dia, max: max, datos: t });
+    };
+    return copiaLeer(k).then(function (c) {
+      if (!c || c.dia !== hoy || o.forzar || !c.datos) {
+        return o.completa.get().then(function (q) {
+          var docs = {}, max = 0;
+          q.forEach(function (d) { var x = d.data(); docs[d.id] = x; max = Math.max(max, msDe(x.actualizado)); });
+          guardar(docs, max, hoy);
+          D.lecturas = (D.lecturas || 0) + q.size;
+          return { docs: JSON.parse(JSON.stringify(docs), revivir), leidos: q.size, completa: true };
+        });
+      }
+      var docs = JSON.parse(c.datos, revivir);
+      // 2 minutos de margen por si algo se guardó mientras se hacía la copia
+      return o.cambios.where('actualizado', '>', firebase.firestore.Timestamp.fromMillis(Math.max(0, c.max - 120000))).get().then(function (q) {
+        var max = c.max;
+        q.forEach(function (d) { var x = d.data(); if (o.vale && !o.vale(x)) delete docs[d.id]; else docs[d.id] = x; max = Math.max(max, msDe(x.actualizado)); });
+        if (q.size) guardar(docs, max, c.dia);
+        D.lecturas = (D.lecturas || 0) + q.size;
+        return { docs: q.size ? JSON.parse(JSON.stringify(docs), revivir) : docs, leidos: q.size, completa: false };
+      });
+    });
+  }
+  function olvidarCopia(nombre) { return copiaGuardar(copiaClave(nombre), null); }
+
   /* ══════════ DATOS ══════════ */
-  function cargarRepartidores() {
+  function cargarRepartidores(forzar) {
     if (!S.portalUsuario) { D.repartidores = new Map(); return Promise.resolve(); }
-    return dbP.collection('repartidores').get().then(function (q) {
+    var col = dbP.collection('repartidores');
+    return leerConCopia('repartidores', { completa: col, cambios: col, forzar: forzar }).then(function (res) {
       var m = new Map();
-      q.forEach(function (d) { var x = d.data(); x.uid = d.id; m.set(d.id, x); });
+      Object.keys(res.docs).forEach(function (id) { var x = res.docs[id]; x.uid = id; m.set(id, x); });
       D.repartidores = m; D.cargadoEn = new Date();
       // Con fuentePagos 'control', los pendientes salen de «semanas»; el historial, de «historialPagos» (js/semanas.js)
-      return CTRL.semanas ? Promise.all([CTRL.semanas.cargar(), CTRL.semanas.cargarHistorial()]) : null;
+      return CTRL.semanas ? Promise.all([CTRL.semanas.cargar(forzar), CTRL.semanas.cargarHistorial()]) : null;
     });
   }
   function cargarSync() {
@@ -761,11 +824,11 @@
       CTRL.banco ? CTRL.banco.cargar().then(function () { CTRL.banco.cargarBDYango(); }) : null
     ]);
   }
-  function recargarTodo(conAviso) {
+  function recargarTodo(conAviso, forzar) {
     clasicos(true);
     textoClasicos('Trayendo los datos del portal…');
     if (CTRL.clientesCONTAX) CTRL.clientesCONTAX.cargar(true);
-    return Promise.all([cargarRepartidores(), cargarSync(), cargarContenido(), cargarControl()]).then(function () {
+    return Promise.all([cargarRepartidores(forzar), cargarSync(), cargarContenido(), cargarControl()]).then(function () {
       escucharFacturas();
       clasicos(false);
       refrescar();
@@ -832,7 +895,7 @@
 
   window.CTRL = {
     C: C, S: S, D: D, graficos: [],
-    iniciar: iniciar, pagina: pagina, ir: ir, refrescar: refrescar, pintarMenu: pintarMenu, recargarTodo: recargarTodo,
+    iniciar: iniciar, pagina: pagina, ir: ir, refrescar: refrescar, pintarMenu: pintarMenu, recargarTodo: recargarTodo, leerConCopia: leerConCopia, olvidarCopia: olvidarCopia,
     cargarRepartidores: cargarRepartidores, cargarContenido: cargarContenido, cargarControl: cargarControl,
     esc: esc, bs: bs, entero: entero, numero: numero, redondear: redondear, fecha: fecha, fechaHora: fechaHora, hace: hace, aFecha: aFecha,
     hoyISO: hoyISO, normal: normal, idSeguro: idSeguro, nuevoId: nuevoId, telVisible: telVisible, wa: wa, aviso: aviso, copiar: copiar,

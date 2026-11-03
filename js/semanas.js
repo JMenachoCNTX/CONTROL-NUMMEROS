@@ -85,13 +85,13 @@
   /* ══════════ CARGA Y ADAPTADOR ══════════
      En modo 'control', los pendientes y el historial de cada repartidor se arman desde «semanas»
      (lo que antes copiaba el robot desde Sheets). El resto del panel no cambia. */
-  function cargar() {
+  function cargar(forzar) {
     if (!modoControl() || !S.portalUsuario) { D.semanas = null; return Promise.resolve(); }
-    // Solo las abiertas (pendientes, en planilla, no habilitadas): el historial sale de «historialPagos»
-    var m = {};
-    var junta = function (q) { q.forEach(function (d) { var x = d.data(); x._id = d.id; m[d.id] = x; }); };
-    return col().where('estado', 'in', ABIERTOS).get().then(junta).then(function () {
-      D.semanas = Object.keys(m).map(function (k) { return m[k]; });
+    // Solo las abiertas (pendientes, en planilla, no habilitadas): el historial sale de «historialPagos».
+    // Con copia local: solo se leen las que cambiaron (las que pasaron a «pagado» salen de la lista)
+    return X.leerConCopia('semanas', { completa: col().where('estado', 'in', ABIERTOS), cambios: col(), forzar: forzar,
+      vale: function (x) { return ABIERTOS.indexOf(x.estado) >= 0; } }).then(function (res) {
+      D.semanas = Object.keys(res.docs).map(function (k) { var x = res.docs[k]; x._id = k; return x; });
       aplicar();
     }, function (e) {
       console.error('Semanas:', e); D.semanas = [];
@@ -462,7 +462,7 @@
       X.confirmar('Deshacer importación', 'Se quitan o devuelven ' + entero(ops.length) + ' semanas.' + (bloqueadas ? ' ' + entero(bloqueadas) + ' ya están en planilla o pagadas y no se tocan.' : ''), function () {
         escribir(ops).then(function () {
           return Promise.all([X.dbC.collection('importaciones').doc(lote).update({ deshecha: true, deshechaPor: S.usuario.email, deshechaEn: X.servidor() }), X.bitacora('Deshizo importación', lote + ' · ' + ops.length + ' semanas')]);
-        }).then(function () { cerrarCajon(); X.aviso('Importación deshecha'); X.recargarTodo(); }, function (e) { console.error(e); X.aviso('No se pudo deshacer. Revisa tus permisos.'); });
+        }).then(function () { return X.olvidarCopia('semanas'); }).then(function () { cerrarCajon(); X.aviso('Importación deshecha'); X.recargarTodo(); }, function (e) { console.error(e); X.aviso('No se pudo deshacer. Revisa tus permisos.'); });
       }, 'Deshacer', true);
     }, function (e) { console.error(e); X.aviso('No se pudo consultar Firebase.'); });
   }
