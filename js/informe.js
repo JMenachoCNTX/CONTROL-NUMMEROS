@@ -77,7 +77,12 @@
     var filas = pend.map(function (x) {
       var p = x.p, t = { lista: 'Listo para pagar', contax: 'Factura CONTAX', excepcion: 'Excepción', revision: 'Factura en revisión', observada: 'Factura observada', tarde: 'Después del corte', porEmitir: 'Por emitir (CONTAX)' }[x.estado] || 'Pago retenido';
       return { pend: true, ok: !!x.ok, estado: t, semana: p.semana, rango: p.rango || '', nombre: d.nombre, importe: Number(p.importe) || 0, fecha: '', factura: '', fechaFactura: '', nit: '', autorizacion: '', mes: '' };
-    }).concat(d.hist.slice().reverse().map(function (h) {
+    }).concat(d.r ? (d.r.enPlanilla || []).map(function (p) {
+      return { pend: true, ok: true, estado: 'Enviado a pagar', semana: p.semana, rango: p.rango || '', nombre: d.nombre, importe: Number(p.importe) || 0, fecha: '', factura: '', fechaFactura: '', nit: '', autorizacion: '', mes: '' };
+    }) : []).concat(d.r ? (d.r.noHab || []).map(function (p) {
+      // Semanas en Bs 0: no cumplió las horas (no se pagan, pero quedan a la vista por si reclama)
+      return { pend: true, ok: true, nohab: true, estado: 'No habilitado (Bs 0)', semana: p.semana, rango: p.rango || '', nombre: d.nombre, importe: 0, fecha: '', factura: '', fechaFactura: '', nit: '', autorizacion: '', mes: '' };
+    }) : []).concat(d.hist.slice().reverse().map(function (h) {
       return { pend: false, ok: true, estado: 'Pagado', semana: h.semana, rango: h.rango, nombre: h.nombre, importe: h.importe, fecha: h.fecha, factura: h.factura, fechaFactura: h.fechaFactura, nit: h.nit, autorizacion: h.autorizacion, mes: mesFactura(h) };
     }));
     return {
@@ -203,7 +208,7 @@
       '<div class="card mb"><div class="h2">Proyección impositiva <small>por mes de la factura</small></div><div class="grafico"><canvas id="gInfI"></canvas></div></div>' +
       '<div class="card"><div class="h2">Historial de pagos y facturación <small>' + entero(c.filas.length) + ' filas · ' + bs(c.tot) + ' pagado</small></div>' +
         (c.filas.length ? '<div class="tabla-ancha">' + X.tabla([
-          { t: 'Estado', html: function (f) { return f.pend ? X.chip(f.ok ? 'pend' : 'mal', f.estado) : X.chip('ok', 'Pagado'); } },
+          { t: 'Estado', html: function (f) { return f.nohab ? X.chip('neutro', f.estado) : f.pend ? X.chip(f.ok ? 'pend' : 'mal', f.estado) : X.chip('ok', 'Pagado'); } },
           { t: 'Semana', html: function (f) { return '<b class="num">' + esc(f.semana) + '</b>'; } },
           { t: 'Rango (días)', html: function (f) { return '<span style="white-space:nowrap">' + esc(f.rango) + '</span>'; } },
           { t: 'Importe', clase: 'monto', html: function (f) { return bs(f.importe); } },

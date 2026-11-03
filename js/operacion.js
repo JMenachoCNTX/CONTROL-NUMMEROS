@@ -172,6 +172,7 @@
       var cab = X.titulo('Pagos pendientes', reglaTxt + ' Las excepciones y los clientes CONTAX se aplican solos.',
         (SM && X.puedeEditar() ? '<button class="btn sec" id="btnImportar">' + ic('subir') + 'Importar planilla semanal</button>' : '') +
         (SM ? '<button class="btn sec" id="btnImportaciones">' + ic('historial') + 'Importaciones</button>' : '') +
+        (SM ? '<button class="btn sec" id="btnPorSemana">' + ic('historial') + 'Planillas por semana</button>' : '') +
         (SM && X.esAdmin() ? '<button class="btn sec" id="btnMigrar">Migrar desde Sheets</button>' : '') +
         (X.banco && X.puedeEditar() ? '<button class="btn sec" id="btnCuentas">' + ic('cliente') + 'Cuentas bancarias</button>' : '') +
         (X.banco ? '<button class="btn sec" data-ir="codigosBanco">' + ic('banco') + 'Códigos de banco</button>' : '') +
@@ -186,13 +187,14 @@
       var semLista = Object.keys(semanas).sort(function (a, b) { return ordenSemana(b) - ordenSemana(a); });
       var f = filtrarPagos(ev);
       var tot = function (l, k) { return X.redondear(l.reduce(function (s, e) { return s + e[k]; }, 0)); };
+      var nSem = function (l) { return l.reduce(function (s, e) { return s + e.semanas.length; }, 0); };
       var listos = ev.filter(function (e) { return e.listo; }), ret = ev.filter(function (e) { return !e.listo; });
       var cuenta = function (k) { return { todos: ev.length, listos: listos.length, retenidos: ret.length, contax: ev.filter(function (e) { return e.cliente; }).length, revision: ev.filter(function (e) { return e.semanas.some(function (s) { return s.estado === 'revision'; }); }).length }[k]; };
       return cab +
         '<div class="rejilla r4 mb">' +
-          '<div class="kpi"><small>Total pendiente</small><b class="num">' + bs(tot(ev, 'total')) + '</b><em>' + entero(ev.length) + ' repartidores</em></div>' +
+          '<div class="kpi"><small>Total pendiente</small><b class="num">' + bs(tot(ev, 'total')) + '</b><em>' + entero(nSem(ev)) + ' semanas · ' + entero(ev.length) + ' repartidores</em></div>' +
           '<div class="kpi"><small>Listos para pagar</small><b class="num">' + bs(tot(listos, 'totalPagar')) + '</b><em>' + entero(listos.length) + ' repartidores</em></div>' +
-          '<div class="kpi alerta"><small>Retenidos</small><b class="num">' + bs(tot(ret, 'total')) + '</b><em>' + entero(ret.length) + ' repartidores</em></div>' +
+          '<div class="kpi alerta"><small>Retenidos</small><b class="num">' + bs(tot(ret, 'total')) + '</b><em>' + entero(nSem(ret)) + ' semanas · ' + entero(ret.length) + ' repartidores</em></div>' +
           '<div class="kpi"><small>Corte</small><b class="num">' + esc(corte().texto) + '</b><em>' + esc(corte().dia) + ' · 18:00</em></div>' +
         '</div>' +
         '<div class="card"><div class="pestanas" role="tablist">' + [['todos', 'Todos'], ['listos', 'Listos'], ['retenidos', 'Retenidos'], ['revision', 'En revisión'], ['contax', 'Clientes CONTAX']].map(function (p) {
@@ -233,6 +235,7 @@
       var bc = el.querySelector('#btnCierres'); if (bc) bc.addEventListener('click', verCierres);
       var bi = el.querySelector('#btnImportar'); if (bi) bi.addEventListener('click', function () { X.semanas.importar(); });
       var bl = el.querySelector('#btnImportaciones'); if (bl) bl.addEventListener('click', function () { X.semanas.verImportaciones(); });
+      var bps = el.querySelector('#btnPorSemana'); if (bps) bps.addEventListener('click', function () { X.semanas.verPorSemana(); });
       var bm = el.querySelector('#btnMigrar'); if (bm) bm.addEventListener('click', function () { X.semanas.migrar(); });
       var bcu = el.querySelector('#btnCuentas'); if (bcu) bcu.addEventListener('click', function () { X.banco.verCuentas(); });
     }
@@ -577,7 +580,7 @@
           { t: 'Repartidor', html: function (r) { return '<b>' + esc(r.nombre || 'Sin nombre') + '</b><span class="sub num">ID ' + esc(r.id) + '</span>'; } },
           { t: 'Celular', html: function (r) { return '<span class="num">' + esc(X.telVisible(r.celular)) + '</span>'; } },
           { t: 'Situación', html: function (r) { return (r.habilitado === false ? X.chip('mal', 'No habilitado') : X.chip('ok', 'Habilitado')) + ' ' + (r.poliza ? '' : X.chip('pend', 'Sin póliza')) + (X.clienteDe(r) ? ' ' + X.chip('contax', 'CONTAX') : ''); } },
-          { t: 'Pendiente', clase: 'monto', html: function (r) { var p = (r.resumen || {}).pendientes || {}; return p.cantidad ? '<b>' + bs(p.total) + '</b><span class="sub">' + p.cantidad + ' sem.</span>' : '<span class="muted">—</span>'; } },
+          { t: 'Pendiente', clase: 'monto', html: function (r) { var p = (r.resumen || {}).pendientes || {}; var nh = (r.noHab || [])[0]; return p.cantidad ? '<b>' + bs(p.total) + '</b><span class="sub">' + p.cantidad + ' sem.</span>' : nh ? '<span class="muted">Bs 0</span><span class="sub">' + esc(nh.semana) + ' no hab.</span>' : '<span class="muted">—</span>'; } },
           { t: 'Último pago', clase: 'monto', html: function (r) { var h = (r.historial || [])[0]; return h ? bs(h.importe) + '<span class="sub">' + esc(h.fechaPago) + '</span>' : '<span class="muted">—</span>'; } }
         ], f, { clic: true, pag: R.pag }) : X.vacio('No hay repartidores con ese filtro', '', 'marca/graficos/rel-equipo-' + (S.oscuro ? 'oscuro' : 'claro') + '.png')) + '</div>';
     },

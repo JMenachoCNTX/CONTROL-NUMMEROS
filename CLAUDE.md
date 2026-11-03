@@ -45,7 +45,7 @@ El permiso se elige en **Panel → Usuarios → columna CONTROL**. Las reglas de
 - GitHub Pages desde la rama `main` (raíz): https://jmenachocntx.github.io/CONTROL-NUMMEROS/
 - Todavía **no hay archivo `CNAME`**. El dominio previsto es `controlnummeros.contaxbolivia.com` (pasos en `README.md`).
 - `firestore.rules` **no se publica solo**: hay que copiarlo y pegarlo en la consola de Firebase del proyecto `control--nummeros` → Firestore → Reglas → Publicar.
-- Versiones: `version` en `config.js` (hoy 2.3.6), el `?v=` de los scripts en `index.html` y el mensaje del commit dice la versión (ej. "... (v1.4)").
+- Versiones: `version` en `config.js` (hoy 2.3.7), el `?v=` de los scripts en `index.html` y el mensaje del commit dice la versión (ej. "... (v1.4)").
 
 ## Cuidados importantes
 - **El repositorio es PÚBLICO.** Nunca subir contraseñas, archivos `.json` de cuentas de servicio ni datos de clientes.
@@ -71,3 +71,4 @@ El permiso se elige en **Panel → Usuarios → columna CONTROL**. Las reglas de
 - **Semanas «de la hoja CONTROL» (v2.3.2):** documento `historialPagos/hojaControl_2026-11-03` con `origen: 'hojaControl'`: 55 semanas que la hoja «CONTROL» marcaba sin factura y que no estaban ni en pendientes ni en el historial (sin pago registrado). Se leen en `D.histDeuda` (no en `D.hist`, así no cuentan como pagos ni en gráficos) y salen en la lista de facturación como «De la hoja CONTROL». La migración desde Sheets no lo borra (solo borra `origen: 'HistPagosMTG'`).
 - **Clientes CONTAX en `clienteDe`:** además de la colección propia `clientes` (vacía), usa los clientes «Activos» del Panel reconocidos como repartidores (NIT de BDYango, celular o **nombre**: todas las palabras del nombre del repartidor, mín. 2, y un solo repartidor). `bdclientes` del Panel se lee al abrir CONTROL. Así «CONTAX debe emitir» funciona en Pagos y en la lista.
 - **Fotos de colaboración** (`marca/colaboracion/`): la fuente es `EdiThor-Nummeros/colaboracion/`.
+- **Semanas en Bs 0 y planillas por semana (2.3.7):** las semanas `no_habilitado` quedan en `r.noHab` y se ven en el informe del repartidor («No habilitado (Bs 0)») y en Repartidores; las «Enviado a pagar» también salen en el informe. Pagos pendientes muestra semanas y repartidores. Botón «Planillas por semana»: lee `semanas` con `orden == semana` (todas las ciudades y estados) + las filas del historial de esa semana (las migradas de Sheets no tienen los Bs 0), con totales pagados / falta pagar / no habilitados y Excel (Resumen + Detalle).

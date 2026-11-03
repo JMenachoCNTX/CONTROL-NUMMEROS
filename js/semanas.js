@@ -102,24 +102,26 @@
     if (!D.repartidores || !D.semanas) return;
     D.repartidores.forEach(function (r) {
       if (!r._sheets) r._sheets = { pendientes: r.pendientes || [], historial: r.historial || [], habilitado: r.habilitado, resumen: r.resumen };
-      r.pendientes = []; r.historial = []; r.enPlanilla = []; r._ultima = 0; r._ultimaNoHab = false; r._ultCiudad = 0; r.ciudad = '';
+      r.pendientes = []; r.historial = []; r.enPlanilla = []; r.noHab = []; r._ultima = 0; r._ultimaNoHab = false; r._ultCiudad = 0; r.ciudad = '';
     });
     D.semanas.forEach(function (s) {
       var uid = s.uid || X.idSeguro(s.id), r = D.repartidores.get(uid);
       if (!r) {
         r = { uid: uid, id: String(s.id), nombre: s.nombre || '', celular: s.celular || '', sinCuenta: true, habilitado: true, poliza: false,
-          pendientes: [], historial: [], enPlanilla: [], tramites: [], _ultima: 0, _ultimaNoHab: false };
+          pendientes: [], historial: [], enPlanilla: [], noHab: [], tramites: [], _ultima: 0, _ultimaNoHab: false };
         D.repartidores.set(uid, r);
       }
       var item = { semana: s.semana, rango: s.rango || '', importe: Number(s.importe) || 0, ciudad: s.ciudad || '', _doc: s._id, _orden: s.orden || 0, rebote: s.rebote || null };
       if (s.estado === 'pendiente') { item.estado = 'Pendiente'; r.pendientes.push(item); }
       else if (s.estado === 'en_planilla') { item.estado = 'En planilla'; item.planilla = s.planilla || ''; r.enPlanilla.push(item); }
+      else if (s.estado === 'no_habilitado') { item.estado = 'No habilitado'; r.noHab.push(item); }
       if ((s.orden || 0) >= r._ultima) { r._ultima = s.orden || 0; r._ultimaNoHab = s.estado === 'no_habilitado'; }
       if (s.ciudad && (s.orden || 0) >= (r._ultCiudad || 0)) { r._ultCiudad = s.orden || 0; r.ciudad = s.ciudad; }
     });
     var suma = function (l) { return X.redondear(l.reduce(function (t, x) { return t + (x.importe || 0); }, 0)); };
     D.repartidores.forEach(function (r) {
       r.pendientes.sort(function (a, b) { return b._orden - a._orden; });
+      r.noHab.sort(function (a, b) { return b._orden - a._orden; });
       r.historial.sort(function (a, b) { return (b._o - a._o) || (b._orden - a._orden); });
       r.habilitado = !r._ultimaNoHab;
       r.resumen = { pendientes: { cantidad: r.pendientes.length, total: suma(r.pendientes) }, pagados: { cantidad: r.historial.length, total: suma(r.historial) } };
@@ -450,6 +452,119 @@
       });
     }, function (e) { console.error(e); c.cuerpo.innerHTML = X.vacio('No se pudieron traer las importaciones', 'Revisa tus permisos y las reglas de CONTROL.'); });
   }
+  /* ══════════ PLANILLAS POR SEMANA ══════════
+     La planilla completa de una semana (todas las ciudades): quién se pagó, quién falta (pendiente o enviado a pagar)
+     y quién quedó en Bs 0 (no habilitado). Lee de Firebase solo los documentos de esa semana; las semanas pagadas
+     antes de CONTROL (migradas de Sheets) salen del historial (ahí no se guardaron los Bs 0). */
+  var PS = { orden: 0, ciudad: '', estado: '', buscar: '', pag: 0 };
+  var EST_FACT = { lista: 'Lista para pagar', contax: 'Factura CONTAX', excepcion: 'Excepción', revision: 'Factura en revisión', observada: 'Factura observada', tarde: 'Después del corte', porEmitir: 'Por emitir (CONTAX)', falta: 'Falta factura' };
+  function ordenHist(h) { return anioSemana(h.semana, h.gestion, h.fecha) * 100 + numSemana(h.semana); }
+  function semanasDisponibles() {
+    var m = {};
+    (D.semanas || []).forEach(function (s) { if (s.orden) m[s.orden] = 1; });
+    (D.hist || []).forEach(function (h) { var o = ordenHist(h); if (o % 100) m[o] = 1; });
+    return Object.keys(m).map(Number).sort(function (a, b) { return b - a; });
+  }
+  function textoOrden(o) { return 'Semana ' + (o % 100) + ' · ' + Math.floor(o / 100); }
+  function verPorSemana() {
+    var ords = semanasDisponibles();
+    if (!ords.length) return X.aviso('Todavía no hay semanas cargadas.');
+    if (ords.indexOf(PS.orden) < 0) PS.orden = ords[0];
+    var c = X.cajon('Planillas por semana', 'La planilla completa de cualquier semana: pagados (historial), pendientes y en Bs 0 (no habilitados).', ''), filas = [];
+    function traer() {
+      var o = PS.orden; PS.pag = 0;
+      c.cuerpo.innerHTML = X.cargaBarra('Planilla', 'Trayendo ' + textoOrden(o) + '…');
+      col().where('orden', '==', o).get().then(function (q) {
+        var hs = (D.hist || []).filter(function (h) { return ordenHist(h) === o; }), porId = {}, vistos = {}, evs = {};
+        hs.forEach(function (h) { porId[h.id] = h; });
+        filas = [];
+        q.forEach(function (d) {
+          var x = d.data(), id = String(x.id), h = porId[id], uid = x.uid || X.idSeguro(id), f = '—';
+          vistos[id] = 1;
+          if (x.estado === 'pendiente' && D.repartidores && D.repartidores.get(uid)) {
+            var ev = evs[uid] || (evs[uid] = X.evaluar(D.repartidores.get(uid)));
+            var e = ev.semanas.filter(function (z) { return z.p.semana === x.semana; })[0];
+            f = e ? (EST_FACT[e.estado] || 'Pago retenido') : 'Falta factura';
+          }
+          filas.push({ ciudad: x.ciudad || '', id: id, nombre: x.nombre || (h && h.nombre) || '', semana: x.semana, rango: x.rango || (h && h.rango) || '',
+            importe: x.estado === 'no_habilitado' ? 0 : Number(x.importe) || 0, ganancias: Number(x.ganancias) || 0,
+            estado: { pagado: 'Pagado', pendiente: 'Pendiente', en_planilla: 'Enviado a pagar', no_habilitado: 'No habilitado' }[x.estado] || x.estado,
+            fechaPago: x.estado === 'pagado' ? X.fecha(x.fechaPago || (h && h.fecha)) : '', factura: x.estado === 'pagado' ? ((h && h.factura) || '—') : x.estado === 'no_habilitado' ? 'No corresponde' : f });
+        });
+        hs.forEach(function (h) {
+          if (vistos[h.id]) return; vistos[h.id] = 1;
+          filas.push({ ciudad: CIUDADES[h.ciudad] ? h.ciudad : '', id: h.id, nombre: h.nombre, semana: h.semana, rango: h.rango, importe: h.importe, ganancias: 0,
+            estado: 'Pagado', fechaPago: X.fecha(h.fecha), factura: h.factura || '—' });
+        });
+        filas.sort(function (a, b) { return String(a.ciudad).localeCompare(String(b.ciudad)) || X.normal(a.nombre).localeCompare(X.normal(b.nombre)); });
+        armar();
+      }, function (e) { console.error(e); c.cuerpo.innerHTML = X.vacio('No se pudo traer la semana', 'Revisa tu conexión y tus permisos.'); });
+    }
+    function deCiudad() { return filas.filter(function (f) { return !PS.ciudad || f.ciudad === PS.ciudad; }); }
+    function visibles() {
+      var b = X.normal(PS.buscar);
+      return deCiudad().filter(function (f) {
+        if (PS.estado === 'pendiente' && f.estado !== 'Pendiente' && f.estado !== 'Enviado a pagar') return false;
+        if (PS.estado && PS.estado !== 'pendiente' && f.estado !== PS.estado) return false;
+        return !b || (X.normal(f.nombre) + ' ' + f.id).indexOf(b) >= 0;
+      });
+    }
+    function cuenta(l) {
+      var k = function (fn) { var x = l.filter(fn); return { n: x.length, t: X.redondear(x.reduce(function (s, f) { return s + f.importe; }, 0)) }; };
+      return { todos: k(function () { return true; }), pagado: k(function (f) { return f.estado === 'Pagado'; }),
+        pendiente: k(function (f) { return f.estado === 'Pendiente' || f.estado === 'Enviado a pagar'; }), nohab: k(function (f) { return f.estado === 'No habilitado'; }) };
+    }
+    function armar() {
+      var k = cuenta(deCiudad());
+      c.cuerpo.innerHTML = '<div class="herr">' +
+          '<select id="psSem" aria-label="Semana">' + ords.map(function (o) { return '<option value="' + o + '"' + (o === PS.orden ? ' selected' : '') + '>' + textoOrden(o) + '</option>'; }).join('') + '</select>' +
+          '<select id="psCiu" aria-label="Ciudad"><option value="">Todas las ciudades</option>' + Object.keys(CIUDADES).map(function (x) { return '<option value="' + x + '"' + (x === PS.ciudad ? ' selected' : '') + '>' + CIUDADES[x] + '</option>'; }).join('') + '</select>' +
+          '<button class="btn sec" id="psExcel"' + (filas.length ? '' : ' disabled') + '>' + ic('descargar') + 'Excel</button></div>' +
+        '<div class="rejilla r4 mb">' +
+          '<div class="kpi"><small>Planilla completa</small><b class="num">' + bs(k.todos.t) + '</b><em>' + entero(k.todos.n) + ' repartidores</em></div>' +
+          '<div class="kpi"><small>Pagados</small><b class="num">' + bs(k.pagado.t) + '</b><em>' + entero(k.pagado.n) + ' repartidores</em></div>' +
+          '<div class="kpi alerta"><small>Falta pagar</small><b class="num">' + bs(k.pendiente.t) + '</b><em>' + entero(k.pendiente.n) + ' repartidores</em></div>' +
+          '<div class="kpi"><small>No habilitados (Bs 0)</small><b class="num">' + entero(k.nohab.n) + '</b><em>no cumplieron las horas</em></div>' +
+        '</div>' +
+        '<div class="pestanas">' + [['', 'Todos', 'todos'], ['Pagado', 'Pagados', 'pagado'], ['pendiente', 'Falta pagar', 'pendiente'], ['No habilitado', 'No habilitados', 'nohab']].map(function (p) {
+          return '<button aria-selected="' + (PS.estado === p[0]) + '" data-ps="' + esc(p[0]) + '">' + p[1] + ' <em class="num">' + entero(k[p[2]].n) + '</em></button>';
+        }).join('') + '</div>' +
+        '<div class="herr"><div class="buscar">' + ic('buscar') + '<input type="search" id="psBus" placeholder="Buscar por nombre o ID" value="' + esc(PS.buscar) + '"></div></div>' +
+        '<div id="psRes"></div>' +
+        (filas.length ? '' : '<p class="muted">No hay datos de esta semana.</p>');
+      var q = function (s) { return c.cuerpo.querySelector(s); };
+      q('#psSem').addEventListener('change', function () { PS.orden = Number(this.value); traer(); });
+      q('#psCiu').addEventListener('change', function () { PS.ciudad = this.value; PS.pag = 0; armar(); });
+      c.cuerpo.querySelectorAll('[data-ps]').forEach(function (b) { b.addEventListener('click', function () { PS.estado = b.getAttribute('data-ps'); PS.pag = 0; armar(); }); });
+      var t; q('#psBus').addEventListener('input', function () { var v = this.value; clearTimeout(t); t = setTimeout(function () { PS.buscar = v; PS.pag = 0; resultados(); }, 250); });
+      q('#psExcel').addEventListener('click', excel);
+      resultados();
+    }
+    function resultados() {
+      var l = visibles(), caja = c.cuerpo.querySelector('#psRes'); if (!caja) return;
+      var chip = function (e) { return X.chip({ 'Pagado': 'ok', 'Pendiente': 'pend', 'Enviado a pagar': 'pend', 'No habilitado': 'neutro' }[e] || 'neutro', e === 'No habilitado' ? 'No habilitado (Bs 0)' : e); };
+      caja.innerHTML = l.length ? '<div class="tabla-ancha">' + X.tabla([
+        { t: 'Ciudad', html: function (f) { return esc(CIUDADES[f.ciudad] || '—'); } },
+        { t: 'Repartidor', html: function (f) { return '<b>' + esc(f.nombre || 'Sin nombre') + '</b><span class="sub num">ID ' + esc(f.id) + '</span>'; } },
+        { t: 'Importe', clase: 'monto', html: function (f) { return bs(f.importe); } },
+        { t: 'Pago', html: function (f) { return chip(f.estado) + (f.fechaPago ? '<span class="sub num">' + esc(f.fechaPago) + '</span>' : ''); } },
+        { t: 'Factura', html: function (f) { return esc(f.factura); } }
+      ], l, { tam: 100, pag: PS.pag }) + '</div>' : (filas.length ? X.vacio('Nadie con ese filtro', '') : '');
+      caja.querySelectorAll('[data-pag]').forEach(function (b) { b.addEventListener('click', function () { PS.pag = Number(b.getAttribute('data-pag')); resultados(); }); });
+    }
+    function excel() {
+      var l = deCiudad(), k = cuenta(l), nom = 'Planilla-SEM' + (PS.orden % 100) + '-' + Math.floor(PS.orden / 100) + (PS.ciudad ? '-' + PS.ciudad : '');
+      X.excel([
+        { nombre: 'Resumen', filas: [['Planilla', textoOrden(PS.orden) + (PS.ciudad ? ' · ' + CIUDADES[PS.ciudad] : ' · todas las ciudades')], [], ['', 'Repartidores', 'Importe (Bs)'],
+          ['Planilla completa', k.todos.n, k.todos.t], ['Pagados', k.pagado.n, k.pagado.t], ['Falta pagar', k.pendiente.n, k.pendiente.t], ['No habilitados (Bs 0)', k.nohab.n, 0]] },
+        { nombre: 'Detalle', filas: [['Ciudad', 'ID Yango', 'Nombre', 'Semana', 'Rango', 'Importe (Bs)', 'Ganancias (Bs)', 'Estado del pago', 'Fecha de pago', 'Factura']].concat(l.map(function (f) {
+          return [CIUDADES[f.ciudad] || '', f.id, f.nombre, f.semana, f.rango, f.importe, f.ganancias || '', f.estado, f.fechaPago, f.factura];
+        })) }
+      ], nom);
+      X.bitacora('Descargó planilla por semana', nom);
+    }
+    traer();
+  }
   function deshacer(lote, cerrarCajon) {
     col().where('lote', '==', lote).get().then(function (q) {
       var ops = [], bloqueadas = 0;
@@ -713,7 +828,7 @@
   }
 
   X.semanas = {
-    modoControl: modoControl, cargar: cargar, aplicar: aplicar, cargarHistorial: cargarHistorial, aplicarHistorial: aplicarHistorial, agregarAlHistorial: agregarAlHistorial, importar: importar, verImportaciones: verImportaciones, migrar: migrar,
+    modoControl: modoControl, cargar: cargar, aplicar: aplicar, cargarHistorial: cargarHistorial, aplicarHistorial: aplicarHistorial, agregarAlHistorial: agregarAlHistorial, importar: importar, verImportaciones: verImportaciones, verPorSemana: verPorSemana, migrar: migrar,
     marcarEnPlanilla: marcarEnPlanilla, marcarFuera: marcarFuera, confirmarPago: confirmarPago, anularPlanilla: anularPlanilla, porConfirmar: porConfirmar, reporte: reporte,
     // piezas que usa js/banco.js
     leerLibro: leerLibro, escribir: escribir, encolarNotif: encolarNotif, CIUDADES: CIUDADES, fechaISO: fechaISO,
