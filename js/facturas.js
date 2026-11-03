@@ -298,9 +298,11 @@
         if (!d.exists) { zona.innerHTML = X.vacio('No se encontró el PDF'); return; }
         var datos = String(d.data().datos || ''), b64 = datos.slice(datos.indexOf(',') + 1);
         var bin = atob(b64), arr = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-        var url = URL.createObjectURL(new Blob([arr], { type: 'application/pdf' }));
-        zona.innerHTML = '<div class="fila-acc mb"><a class="btn sec chico" href="' + url + '" target="_blank" rel="noopener">' + ic('ojo') + 'Abrir en otra pestaña</a><a class="btn sec chico" href="' + url + '" download="' + esc(f.nombreArchivo || ('factura-' + f.numero + '.pdf')) + '">' + ic('descargar') + 'Descargar</a></div>' +
-          '<iframe class="pdf" src="' + url + '#view=FitH" title="PDF de la factura"></iframe>';
+        // Desde el Portal 3.24 también llegan fotos o capturas (JPEG/PNG)
+        var tipo = (datos.match(/^data:([^;,]+)/) || [0, 'application/pdf'])[1], img = /^image\//.test(tipo);
+        var url = URL.createObjectURL(new Blob([arr], { type: tipo }));
+        zona.innerHTML = '<div class="fila-acc mb"><a class="btn sec chico" href="' + url + '" target="_blank" rel="noopener">' + ic('ojo') + 'Abrir en otra pestaña</a><a class="btn sec chico" href="' + url + '" download="' + esc(f.nombreArchivo || ('factura-' + f.numero + (img ? '.jpg' : '.pdf'))) + '">' + ic('descargar') + 'Descargar</a></div>' +
+          (img ? '<img src="' + url + '" alt="Imagen de la factura" style="max-width:100%;border:1px solid var(--borde,#ddd);border-radius:8px">' : '<iframe class="pdf" src="' + url + '#view=FitH" title="PDF de la factura"></iframe>');
       }, function (e) { console.error(e); zona.innerHTML = X.vacio('No se pudo abrir el PDF', 'Revisa tu conexión o tus permisos.'); });
       cu.querySelectorAll('[data-acc]').forEach(function (b) {
         b.addEventListener('click', function () {
