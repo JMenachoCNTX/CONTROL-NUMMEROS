@@ -45,7 +45,7 @@ El permiso se elige en **Panel → Usuarios → columna CONTROL**. Las reglas de
 - GitHub Pages desde la rama `main` (raíz): https://jmenachocntx.github.io/CONTROL-NUMMEROS/
 - Todavía **no hay archivo `CNAME`**. El dominio previsto es `controlnummeros.contaxbolivia.com` (pasos en `README.md`).
 - `firestore.rules` **no se publica solo**: hay que copiarlo y pegarlo en la consola de Firebase del proyecto `control--nummeros` → Firestore → Reglas → Publicar.
-- Versiones: `version` en `config.js` (hoy 2.2), el `?v=` de los scripts en `index.html` y el mensaje del commit dice la versión (ej. "... (v1.4)").
+- Versiones: `version` en `config.js` (hoy 2.3), el `?v=` de los scripts en `index.html` y el mensaje del commit dice la versión (ej. "... (v1.4)").
 
 ## Cuidados importantes
 - **El repositorio es PÚBLICO.** Nunca subir contraseñas, archivos `.json` de cuentas de servicio ni datos de clientes.
@@ -65,4 +65,6 @@ El permiso se elige en **Panel → Usuarios → columna CONTROL**. Las reglas de
 - **Gráficos en 3D:** todos pasan por `X.grafico` (Chart.js + plugin `nm3d` en `js/base.js`: barras con cara de arriba y costado, líneas/tortas con sombra, animación; clic en el gráfico = verlo en grande, se cierra con Esc o clic fuera). En SVG (reporte de pago y PDF) usar `X.barraSvg`.
 - **Historial de pagos:** subpestañas «Gráficos», «Fechas de pago» y «Todos los pagos» (las dos últimas con las 13 columnas de HistPagosMTG).
 - **Repartidores + informe (antes «Buscar repartidor»):** al tocar un repartidor se abre su informe (página `informe`, oculta del menú) con el diseño del sistema; «Descargar PDF» arma el informe con formato NUMMEROS y logo de CONTAX.
+- **Facturas → «Lista de facturación» (v2.3, pestaña por defecto):** reemplaza la hoja «CONTROL» del Sistema Verificación Facturas. Una fila por repartidor y semana que debe factura a MILTHAGOR: semanas `pendiente` (importe > 0) + semanas pagadas **con retención** (`historialPagos` con factura «Pago Retenido»; igual deben traer factura). Columnas como la hoja (sin las de accesos/contraseñas): celular, ID, nombre, importe, contador (CONTAX/Otro), semana, ¿emitida?, emisor, N.º, fecha, NIT, autorización y estado de la factura (`facturas`). Cuadros General / Externos / CONTAX, filtros y Excel. El Panel muestra la misma lista en Facturación → Facturas pendientes.
+- **Clientes CONTAX en `clienteDe`:** además de la colección propia `clientes` (vacía), usa los clientes «Activos» del Panel reconocidos como repartidores (NIT de BDYango, celular o **nombre**: todas las palabras del nombre del repartidor, mín. 2, y un solo repartidor). `bdclientes` del Panel se lee al abrir CONTROL. Así «CONTAX debe emitir» funciona en Pagos y en la lista.
 - **Fotos de colaboración** (`marca/colaboracion/`): la fuente es `EdiThor-Nummeros/colaboracion/`.
