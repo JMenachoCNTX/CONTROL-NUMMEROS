@@ -173,7 +173,6 @@
         (SM && X.puedeEditar() ? '<button class="btn sec" id="btnImportar">' + ic('subir') + 'Importar planilla semanal</button>' : '') +
         (SM ? '<button class="btn sec" id="btnImportaciones">' + ic('historial') + 'Importaciones</button>' : '') +
         (SM ? '<button class="btn sec" id="btnPorSemana">' + ic('historial') + 'Planillas por semana</button>' : '') +
-        (SM && X.esAdmin() ? '<button class="btn sec" id="btnMigrar">Migrar desde Sheets</button>' : '') +
         (X.banco && X.puedeEditar() ? '<button class="btn sec" id="btnCuentas">' + ic('cliente') + 'Cuentas bancarias</button>' : '') +
         (X.banco ? '<button class="btn sec" data-ir="codigosBanco">' + ic('banco') + 'Códigos de banco</button>' : '') +
         '<button class="btn sec" id="btnCierres">' + ic('historial') + 'Planillas generadas</button><button class="btn" id="btnPlanilla"' + (X.puedeEditar() ? '' : ' disabled') + '>' + ic('descargar') + 'Planilla de pago</button>');
@@ -236,7 +235,6 @@
       var bi = el.querySelector('#btnImportar'); if (bi) bi.addEventListener('click', function () { X.semanas.importar(); });
       var bl = el.querySelector('#btnImportaciones'); if (bl) bl.addEventListener('click', function () { X.semanas.verImportaciones(); });
       var bps = el.querySelector('#btnPorSemana'); if (bps) bps.addEventListener('click', function () { X.semanas.verPorSemana(); });
-      var bm = el.querySelector('#btnMigrar'); if (bm) bm.addEventListener('click', function () { X.semanas.migrar(); });
       var bcu = el.querySelector('#btnCuentas'); if (bcu) bcu.addEventListener('click', function () { X.banco.verCuentas(); });
     }
   });
