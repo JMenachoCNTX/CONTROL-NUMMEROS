@@ -220,6 +220,16 @@ button.kpi:hover{border-color:var(--verde-300)}
 .kpi small{display:block;font:600 12px var(--display);letter-spacing:.12em;text-transform:uppercase;color:var(--suave)}
 .kpi b{display:block;font:700 clamp(24px,2.3vw,34px)/1.05 var(--display);margin:8px 0 4px;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .kpi em{font-style:normal;font-size:13px;color:var(--suave)}
+.ciu-card{border:1px solid var(--borde);border-radius:var(--r-lg);padding:16px 18px;min-width:0}
+.ciu-card.total{background:var(--acento);border-color:transparent;color:var(--sobre-acento)}
+.ciu-card small{display:block;font:600 12px var(--display);letter-spacing:.12em;text-transform:uppercase;color:var(--suave)}
+.ciu-card.total small,.ciu-card.total .ciu-fila span{color:var(--sobre-acento);opacity:.8}
+.ciu-card>b{display:block;font:700 clamp(22px,2vw,30px)/1.1 var(--display);margin:8px 0 10px;white-space:nowrap}
+.ciu-fila{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-top:1px solid var(--borde);font-size:14px}
+.ciu-card.total .ciu-fila{border-color:color-mix(in srgb,var(--sobre-acento) 25%,transparent)}
+.ciu-fila span{color:var(--suave)}
+.ciu-fila.ok b{color:var(--ok)}
+.ciu-card.total .ciu-fila b{color:var(--sobre-acento)}
 .kpi.alerta b{color:var(--aviso)}
 .portada{position:relative;border-radius:var(--r-lg);overflow:hidden;min-height:250px;display:flex;align-items:flex-end;margin-bottom:16px;background:var(--colab-claro)}
 .portada img.foto{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% 40%}
@@ -417,21 +427,21 @@ td .sub{display:block;font-size:12px;color:var(--suave)}
   </div>
 </div>
 
-<script src="config.js?v=2.4.2"></script>
+<script src="config.js?v=2.4.3"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" defer></script>
-<script src="js/base.js?v=2.4.2"></script>
-<script src="js/operacion.js?v=2.4.2"></script>
-<script src="js/facturas.js?v=2.4.2"></script>
-<script src="js/portal.js?v=2.4.2"></script>
-<script src="js/gestion.js?v=2.4.2"></script>
-<script src="js/semanas.js?v=2.4.2"></script>
-<script src="js/banco.js?v=2.4.2"></script>
-<script src="js/documentos.js?v=2.4.2"></script>
-<script src="js/informe.js?v=2.4.2"></script>
-<script src="js/padron.js?v=2.4.2"></script>
+<script src="js/base.js?v=2.4.3"></script>
+<script src="js/operacion.js?v=2.4.3"></script>
+<script src="js/facturas.js?v=2.4.3"></script>
+<script src="js/portal.js?v=2.4.3"></script>
+<script src="js/gestion.js?v=2.4.3"></script>
+<script src="js/semanas.js?v=2.4.3"></script>
+<script src="js/banco.js?v=2.4.3"></script>
+<script src="js/documentos.js?v=2.4.3"></script>
+<script src="js/informe.js?v=2.4.3"></script>
+<script src="js/padron.js?v=2.4.3"></script>
 <script>CTRL.iniciar();</script>
 <script src="version-aviso.js" defer></script>
 </body>

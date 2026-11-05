@@ -523,6 +523,23 @@
       return { todos: k(function () { return true; }), pagado: k(function (f) { return f.estado === 'Pagado'; }),
         pendiente: k(function (f) { return f.estado === 'Pendiente' || f.estado === 'Enviado a pagar'; }), nohab: k(function (f) { return f.estado === 'No habilitado'; }) };
     }
+    // Resumen por ciudad (para sacar captura y mandarlo): total, habilitados, en Bs 0 e importe de la semana
+    function porCiudad() {
+      var g = function (l) { var hab = l.filter(function (f) { return f.estado !== 'No habilitado'; });
+        return { n: l.length, hab: hab.length, nohab: l.length - hab.length, t: X.redondear(hab.reduce(function (s, f) { return s + f.importe; }, 0)) }; };
+      return Object.keys(CIUDADES).map(function (x) { return { nom: CIUDADES[x], k: g(filas.filter(function (f) { return f.ciudad === x; })) }; })
+        .concat(filas.some(function (f) { return !CIUDADES[f.ciudad]; }) ? [{ nom: 'Sin ciudad', k: g(filas.filter(function (f) { return !CIUDADES[f.ciudad]; })) }] : [])
+        .concat([{ nom: 'Total de la semana', k: g(filas), total: true }]);
+    }
+    function resumenCiudades() {
+      if (!filas.length) return '';
+      var fila = function (t, v, cl) { return '<div class="ciu-fila' + (cl ? ' ' + cl : '') + '"><span>' + t + '</span><b class="num">' + v + '</b></div>'; };
+      return '<div class="card mb ciu-resumen"><div class="h2">Resumen por ciudad <small>' + textoOrden(PS.orden) + '</small></div><div class="rejilla r4">' +
+        porCiudad().map(function (c) {
+          return '<div class="ciu-card' + (c.total ? ' total' : '') + '"><small>' + esc(c.nom) + '</small><b class="num">' + bs(c.k.t) + '</b>' +
+            fila('Repartidores', entero(c.k.n)) + fila('Habilitados', entero(c.k.hab), 'ok') + fila('No habilitados (Bs 0)', entero(c.k.nohab), 'cero') + '</div>';
+        }).join('') + '</div></div>';
+    }
     function armar() {
       var k = cuenta(deCiudad());
       c.cuerpo.innerHTML = '<div class="herr">' +
@@ -534,7 +551,7 @@
           '<div class="kpi"><small>Pagados</small><b class="num">' + bs(k.pagado.t) + '</b><em>' + entero(k.pagado.n) + ' repartidores</em></div>' +
           '<div class="kpi alerta"><small>Falta pagar</small><b class="num">' + bs(k.pendiente.t) + '</b><em>' + entero(k.pendiente.n) + ' repartidores</em></div>' +
           '<div class="kpi"><small>No habilitados (Bs 0)</small><b class="num">' + entero(k.nohab.n) + '</b><em>no cumplieron las horas</em></div>' +
-        '</div>' +
+        '</div>' + resumenCiudades() +
         '<div class="pestanas">' + [['', 'Todos', 'todos'], ['Pagado', 'Pagados', 'pagado'], ['pendiente', 'Falta pagar', 'pendiente'], ['No habilitado', 'No habilitados', 'nohab']].map(function (p) {
           return '<button aria-selected="' + (PS.estado === p[0]) + '" data-ps="' + esc(p[0]) + '">' + p[1] + ' <em class="num">' + entero(k[p[2]].n) + '</em></button>';
         }).join('') + '</div>' +
@@ -565,7 +582,8 @@
       var l = deCiudad(), k = cuenta(l), nom = 'Planilla-SEM' + (PS.orden % 100) + '-' + Math.floor(PS.orden / 100) + (PS.ciudad ? '-' + PS.ciudad : '');
       X.excel([
         { nombre: 'Resumen', filas: [['Planilla', textoOrden(PS.orden) + (PS.ciudad ? ' · ' + CIUDADES[PS.ciudad] : ' · todas las ciudades')], [], ['', 'Repartidores', 'Importe (Bs)'],
-          ['Planilla completa', k.todos.n, k.todos.t], ['Pagados', k.pagado.n, k.pagado.t], ['Falta pagar', k.pendiente.n, k.pendiente.t], ['No habilitados (Bs 0)', k.nohab.n, 0]] },
+          ['Planilla completa', k.todos.n, k.todos.t], ['Pagados', k.pagado.n, k.pagado.t], ['Falta pagar', k.pendiente.n, k.pendiente.t], ['No habilitados (Bs 0)', k.nohab.n, 0],
+          [], ['Por ciudad', 'Repartidores', 'Habilitados', 'No habilitados (Bs 0)', 'Importe (Bs)']].concat(porCiudad().map(function (c) { return [c.nom, c.k.n, c.k.hab, c.k.nohab, c.k.t]; })) },
         { nombre: 'Detalle', filas: [['Ciudad', 'ID Yango', 'Nombre', 'Semana', 'Rango', 'Importe (Bs)', 'Ganancias (Bs)', 'Estado del pago', 'Fecha de pago', 'Factura']].concat(l.map(function (f) {
           return [CIUDADES[f.ciudad] || '', f.id, f.nombre, f.semana, f.rango, f.importe, f.ganancias || '', f.estado, f.fechaPago, f.factura];
         })) }
