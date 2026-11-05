@@ -82,7 +82,7 @@
     var filas = [], ya = {};
     var agregar = function (r, id, nombre, semana, importe, tipo, extra) {
       var k = id + '|' + semana; if (ya[k]) return; ya[k] = 1;
-      var uid = r ? r.uid : X.idSeguro(id), f = facturaDe(uid, semana), cli = r ? X.clienteDe(r) : X.clienteDe({ id: id });
+      var uid = r ? r.uid : X.idSeguro(id), f = facturaDe(uid, semana), cli = r ? X.clienteDe(r) : X.clienteDe({ id: id, nombre: nombre });
       var e = !f ? (cli ? 'porEmitir' : 'falta') : f.origen === 'contax' ? 'contax' : f.estado === 'aprobada' ? 'aprobada' : f.estado === 'recibida' ? 'subida' : 'observada';
       filas.push(Object.assign({ r: r, id: String(id), nombre: nombre || (r && r.nombre) || '', celular: (r && r.celular) || '', semana: semana, importe: Number(importe) || 0,
         tipo: tipo, cliente: cli, contador: cli ? 'CONTAX' : 'OTRO', f: f, estado: e, tiene: e === 'aprobada' || e === 'contax' || e === 'subida' }, extra || {}));

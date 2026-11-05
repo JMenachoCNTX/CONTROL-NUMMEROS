@@ -852,7 +852,7 @@
       if ((c.idYango && String(c.idYango).trim() === id) || (cel && c.celular && String(c.celular).replace(/\D/g, '').slice(-8) === cel)) return c;
     }
     // Clientes «Activos» del Panel reconocidos como repartidores (js/gestion.js)
-    return (CTRL.clientesCONTAX && CTRL.clientesCONTAX.porIdYango()[id]) || null;
+    return (CTRL.clientesCONTAX && CTRL.clientesCONTAX.porRepartidor(r)) || null;
   }
 
   /* ══════════ ARRANQUE ══════════ */

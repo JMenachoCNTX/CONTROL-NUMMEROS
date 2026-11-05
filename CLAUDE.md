@@ -46,7 +46,7 @@ El permiso se elige en **Panel → Usuarios → columna CONTROL**. Las reglas de
 - Todavía **no hay archivo `CNAME`**. El dominio previsto es `controlnummeros.contaxbolivia.com` (pasos en `README.md`).
 - `firestore.rules` **no se publica solo**: hay que copiarlo y pegarlo en la consola de Firebase del proyecto `control--nummeros` → Firestore → Reglas → Publicar.
 - Aviso de nueva versión: `version-aviso.js` (copia del de `NUMMEROS_CRM`) muestra «Hay una nueva versión · Actualizar ahora» al publicar; no hay que tocar nada.
-- Versiones: `version` en `config.js` (hoy 2.4.3), el `?v=` de los scripts en `index.html` y el mensaje del commit dice la versión (ej. "... (v1.4)").
+- Versiones: `version` en `config.js` (hoy 2.4.4), el `?v=` de los scripts en `index.html` y el mensaje del commit dice la versión (ej. "... (v1.4)").
 
 ## Cuidados importantes
 - **El repositorio es PÚBLICO.** Nunca subir contraseñas, archivos `.json` de cuentas de servicio ni datos de clientes.
@@ -78,3 +78,4 @@ El permiso se elige en **Panel → Usuarios → columna CONTROL**. Las reglas de
 - **Base propia de repartidores (2.4.0):** `js/padron.js`, colección `padron` de CONTROL (partes p1, p2… de 800 repartidores en `filas` JSON). Cada vez que se lee BDYango se guardan todos y los que ya no aparecen quedan `activo:false` con `baja` (no se marca a nadie si BDYango trae menos de 1000). El NIT se completa con el de las facturas aprobadas (historial, `nitOrigen:'factura'`). DBYango → «Base propia» (filtros, Excel) → «Pasar NIT al Portal»: crea `perfiles` en el Portal (`origen:'historial'`) solo para quien no tiene; el Portal no exige la razón social en esos casos. Reglas: `match /padron` solo `puedeEditar`.
 - **Cambiar fecha de pago (2.4.1, solo admin):** Historial → Fechas de pago → «Cambiar fecha de pago» (`X.semanas.cambiarFecha`). Mueve las partes de `historialPagos` de esa fecha a la nueva (se juntan si ya hay; guarda `fechaAnterior`), las `semanas` pagadas, las planillas de `pagos` y las filas de `historialRider` del Portal.
 - **Resumen por ciudad (2.4.3):** Pagos pendientes → «Planillas por semana» muestra debajo de los totales un cuadro por ciudad (Santa Cruz, Cochabamba, La Paz) y «Total de la semana»: importe en Bs, repartidores, habilitados y no habilitados (Bs 0), siempre de las 3 ciudades (no depende del filtro), para sacar captura y mandarlo. También sale en la hoja «Resumen» del Excel (`porCiudad` en `js/semanas.js`).
+- **Cliente CONTAX igual que en el Panel (2.4.4):** `clienteDe` usa `porRepartidor` (js/gestion.js): si el ID no salió de NIT/celular/nombre, busca desde el repartidor con la misma regla del Panel. Antes, un repartidor con 2 IDs o sin NIT quedaba «Otro» en CONTROL y «CONTAX» en el Panel.

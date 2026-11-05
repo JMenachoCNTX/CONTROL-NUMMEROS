@@ -65,14 +65,29 @@
     var k = Object.keys(ids); return k.length === 1 ? ids[k[0]] : null;
   }
   /* Clientes CONTAX por ID de Yango (para «CONTAX debe emitir» y la lista de facturación) */
-  var MAPA = { clave: '', m: {} };
+  var MAPA = { clave: '', m: {}, n: {}, act: [] };
   function porIdYango() {
     var P = D.panelClientes; if (!P || !P.lista) return {};
     var clave = (P.leido ? P.leido.getTime() : 0) + '|' + ((D.bdyango && D.bdyango.lista) || []).length + '|' + (D.repartidores ? D.repartidores.size : 0);
-    if (MAPA.clave !== clave) { MAPA.m = {}; activosPanel().forEach(function (c) { if (c.idYango) MAPA.m[c.idYango] = c; }); MAPA.clave = clave; }
+    if (MAPA.clave !== clave) {
+      MAPA.m = {}; MAPA.n = {}; MAPA.act = activosPanel();
+      MAPA.act.forEach(function (c) { if (c.idYango) MAPA.m[c.idYango] = c; c.pal = palabras(c.nombre); });
+      MAPA.clave = clave;
+    }
     return MAPA.m;
   }
-  CTRL.clientesCONTAX = { cargar: cargarPanelClientes, porIdYango: porIdYango };
+  /* Igual que el Panel (Facturación → Repartidores Yango): si no salió por ID, se busca desde el repartidor.
+     Todas las palabras de su nombre (mín. 2) están en el nombre del cliente. Sirve cuando el repartidor tiene más de un ID. */
+  function porRepartidor(r) {
+    var m = porIdYango(), id = String(r.id || ''); if (m[id]) return m[id];
+    var p = palabras(r.nombre); if (p.length < 2) return null;
+    if (id in MAPA.n) return MAPA.n[id];
+    var l = (MAPA.act || []).filter(function (c) { return p.every(function (w) { return c.pal.indexOf(w) >= 0; }); });
+    var tam = function (c) { return Object.keys(c.pal.reduce(function (o, w) { o[w] = 1; return o; }, {})).length; };
+    if (l.length > 1) l = l.filter(function (c) { return tam(c) === p.length; });
+    return (MAPA.n[id] = l.length && l.every(function (c) { return tam(c) === tam(l[0]); }) ? l[0] : null);
+  }
+  CTRL.clientesCONTAX = { cargar: cargarPanelClientes, porIdYango: porIdYango, porRepartidor: porRepartidor };
   function filtrarClientes(l) {
     var b = X.normal(CL.buscar);
     return l.filter(function (c) {
