@@ -40,7 +40,7 @@
     var porNit = {}, porCel = {};
     ((D.bdyango && D.bdyango.lista) || []).forEach(function (y) { if (y.nit) porNit[digitos(y.nit)] = y; if (y.telefono) porCel[digitos(y.telefono, 8)] = porCel[digitos(y.telefono, 8)] || y; });
     if (D.repartidores) X.lista().forEach(function (r) { var c = digitos(r.celular, 8); if (c) porCel[c] = r; });
-    return P.lista.filter(function (x) { return X.normal(pv(x, 'Estado Usuario')) === 'ACTIVO'; }).map(function (x) {
+    return P.lista.filter(function (x) { return /^(ACTIVO|SUSCRIPCION (DE )?FACTURACION)$/.test(X.normal(pv(x, 'Estado Usuario'))); }).map(function (x) {
       var c = { x: x, nombre: pv(x, 'NOMBRE') || pv(x, 'Nombre o Razón Social'), codigo: pv(x, 'Codigo de ID'), nit: pv(x, 'NIT'), ci: pv(x, 'C.I.'), celular: pv(x, 'Celular'),
         usuario: pv(x, 'Usuario'), clave: pv(x, 'Contraseña'), claveSiat: pv(x, 'Contraseña SIAT'), brinda: pv(x, 'Brinda Servicios A'), costo: pv(x, 'Costo Servicio Mensual') };
       var y = (c.nit && porNit[digitos(c.nit)]) || (digitos(c.celular, 8).length === 8 && porCel[digitos(c.celular, 8)]) || porNombre(c.nombre);
