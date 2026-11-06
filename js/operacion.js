@@ -188,12 +188,24 @@
       var tot = function (l, k) { return X.redondear(l.reduce(function (s, e) { return s + e[k]; }, 0)); };
       var nSem = function (l) { return l.reduce(function (s, e) { return s + e.semanas.length; }, 0); };
       var listos = ev.filter(function (e) { return e.listo; }), ret = ev.filter(function (e) { return !e.listo; });
-      var cuenta = function (k) { return { todos: ev.length, listos: listos.length, retenidos: ret.length, contax: ev.filter(function (e) { return e.cliente; }).length, revision: ev.filter(function (e) { return e.semanas.some(function (s) { return s.estado === 'revision'; }); }).length }[k]; };
+      var cuenta = function (k) { return { todos: nSem(ev), listos: nSem(listos), retenidos: nSem(ret), contax: nSem(ev.filter(function (e) { return e.cliente; })), revision: ev.reduce(function (n, e) { return n + e.semanas.filter(function (s) { return s.estado === 'revision'; }).length; }, 0) }[k]; };
+      // Cada pago necesita su factura: Pagos = Verificadas + Pre-aprobadas + Observadas + Faltan (+ excepciones). Solo cuenta como verificada la cruzada con Impuestos.
+      var pg = { ver: 0, pre: 0, obs: 0, falta: 0, exc: 0 };
+      ev.forEach(function (e) { e.semanas.forEach(function (s) {
+        var f = s.f, malo = f && (f.estado === 'observada' || f.estado === 'rechazada');
+        pg[!f ? (s.ex ? 'exc' : 'falta') : malo ? 'obs' : f.verificacion ? 'ver' : 'pre']++;
+      }); });
       return cab +
         '<div class="rejilla r4 mb">' +
-          '<div class="kpi"><small>Total pendiente</small><b class="num">' + bs(tot(ev, 'total')) + '</b><em>' + entero(nSem(ev)) + ' semanas · ' + entero(ev.length) + ' repartidores</em></div>' +
-          '<div class="kpi"><small>Listos para pagar</small><b class="num">' + bs(tot(listos, 'totalPagar')) + '</b><em>' + entero(listos.length) + ' repartidores</em></div>' +
-          '<div class="kpi alerta"><small>Retenidos</small><b class="num">' + bs(tot(ret, 'total')) + '</b><em>' + entero(nSem(ret)) + ' semanas · ' + entero(ret.length) + ' repartidores</em></div>' +
+          '<div class="kpi"><small>Pagos pendientes</small><b class="num">' + entero(nSem(ev)) + '</b><em>una factura por cada pago' + (pg.exc ? ' · ' + entero(pg.exc) + ' por excepción' : '') + '</em></div>' +
+          '<div class="kpi"><small>Con factura verificada</small><b class="num">' + entero(pg.ver) + '</b><em>cruzadas con el Excel de Impuestos</em></div>' +
+          '<div class="kpi"><small>Pre-aprobadas</small><b class="num">' + entero(pg.pre) + '</b><em>tienen factura, falta el Excel de Impuestos</em></div>' +
+          '<div class="kpi alerta"><small>Faltan emitir</small><b class="num">' + entero(pg.falta) + '</b><em>' + (pg.obs ? entero(pg.obs) + ' más con factura observada' : 'pagos sin factura') + '</em></div>' +
+        '</div>' +
+        '<div class="rejilla r4 mb">' +
+          '<div class="kpi"><small>Total pendiente</small><b class="num">' + bs(tot(ev, 'total')) + '</b><em>' + entero(nSem(ev)) + ' pagos · ' + entero(ev.length) + ' repartidores</em></div>' +
+          '<div class="kpi"><small>Listos para pagar</small><b class="num">' + bs(tot(listos, 'totalPagar')) + '</b><em>' + entero(nSem(listos)) + ' pagos · ' + entero(listos.length) + ' repartidores</em></div>' +
+          '<div class="kpi alerta"><small>Retenidos</small><b class="num">' + bs(tot(ret, 'total')) + '</b><em>' + entero(nSem(ret)) + ' pagos · ' + entero(ret.length) + ' repartidores</em></div>' +
           '<div class="kpi"><small>Corte</small><b class="num">' + esc(corte().texto) + '</b><em>' + esc(corte().dia) + ' · 18:00</em></div>' +
         '</div>' +
         '<div class="card"><div class="pestanas" role="tablist">' + [['todos', 'Todos'], ['listos', 'Listos'], ['retenidos', 'Retenidos'], ['revision', 'En revisión'], ['contax', 'Clientes CONTAX']].map(function (p) {
@@ -210,7 +222,7 @@
           } },
           { t: 'Pendiente', clase: 'monto', html: function (e) { return bs(e.total); } },
           { t: 'A pagar', clase: 'monto', html: function (e) { return '<b>' + bs(e.totalPagar) + '</b>'; } }
-        ], f, { clic: true, pag: P.pag, pie: '<td colspan="3">Total (' + entero(f.length) + ')</td><td class="monto">' + bs(tot(f, 'total')) + '</td><td class="monto">' + bs(tot(f, 'totalPagar')) + '</td>' })
+        ], f, { clic: true, pag: P.pag, pie: '<td colspan="3">Total (' + entero(nSem(f)) + ' pagos · ' + entero(f.length) + ' repartidores)</td><td class="monto">' + bs(tot(f, 'total')) + '</td><td class="monto">' + bs(tot(f, 'totalPagar')) + '</td>' })
           : X.vacio('Nada que mostrar con estos filtros', '', 'marca/graficos/ilu-crecimiento-reportes.png')) +
         '</div>';
     },

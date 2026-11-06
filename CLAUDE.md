@@ -46,7 +46,7 @@ El permiso se elige en **Panel → Usuarios → columna CONTROL**. Las reglas de
 - Todavía **no hay archivo `CNAME`**. El dominio previsto es `controlnummeros.contaxbolivia.com` (pasos en `README.md`).
 - `firestore.rules` **no se publica solo**: hay que copiarlo y pegarlo en la consola de Firebase del proyecto `control--nummeros` → Firestore → Reglas → Publicar.
 - Aviso de nueva versión: `version-aviso.js` (copia del de `NUMMEROS_CRM`) muestra «Hay una nueva versión · Actualizar ahora» al publicar; no hay que tocar nada.
-- Versiones: `version` en `config.js` (hoy 2.4.5), el `?v=` de los scripts en `index.html` y el mensaje del commit dice la versión (ej. "... (v1.4)").
+- Versiones: `version` en `config.js` (hoy 2.4.6), el `?v=` de los scripts en `index.html` y el mensaje del commit dice la versión (ej. "... (v1.4)").
 
 ## Cuidados importantes
 - **El repositorio es PÚBLICO.** Nunca subir contraseñas, archivos `.json` de cuentas de servicio ni datos de clientes.
@@ -80,3 +80,4 @@ El permiso se elige en **Panel → Usuarios → columna CONTROL**. Las reglas de
 - **Resumen por ciudad (2.4.3):** Pagos pendientes → «Planillas por semana» muestra debajo de los totales un cuadro por ciudad (Santa Cruz, Cochabamba, La Paz) y «Total de la semana»: importe en Bs, repartidores, habilitados y no habilitados (Bs 0), siempre de las 3 ciudades (no depende del filtro), para sacar captura y mandarlo. También sale en la hoja «Resumen» del Excel (`porCiudad` en `js/semanas.js`).
 - **Cliente CONTAX igual que en el Panel (2.4.4):** `clienteDe` usa `porRepartidor` (js/gestion.js): si el ID no salió de NIT/celular/nombre, busca desde el repartidor con la misma regla del Panel. Antes, un repartidor con 2 IDs o sin NIT quedaba «Otro» en CONTROL y «CONTAX» en el Panel.
 - **Estados que cuentan como cliente CONTAX (2.4.5):** ACTIVO y SUSCRIPCIÓN FACTURACIÓN (`activosPanel` en js/gestion.js), igual que el Panel. También salen en la pestaña Clientes CONTAX.
+- **Se cuenta por pago, no por repartidor (2.4.6):** cada pago pendiente necesita su propia factura. Pagos pendientes muestra Pagos = Con factura verificada (`f.verificacion`, la del Excel de Impuestos) + Pre-aprobadas (tienen factura sin verificar) + Observadas + Faltan emitir; las pestañas también cuentan pagos. Paso 1 del plan: paso 2 = cruce desde el Excel hacia los pagos; paso 3 = habilitar solo con verificación.
