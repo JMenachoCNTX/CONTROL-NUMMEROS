@@ -33,10 +33,11 @@
      Se arma una vez y se rehace solo cuando cambian los datos. */
   var IB = { firma: '', txt: {}, aut: {} };
   function indiceBusqueda() {
-    var l = lista(), fac = D.facturas || [], hist = D.hist || [], by = (D.bdyango && D.bdyango.lista) || [];
-    var firma = [l.length, fac.length, hist.length, by.length, (D.clientes || []).length].join('|');
+    var fac = D.facturas || [], hist = D.hist || [], by = (D.bdyango && D.bdyango.lista) || [];
+    // Se llama por cada fila: la firma no debe recorrer ninguna lista
+    var firma = [D.repartidores ? D.repartidores.size : 0, fac.length, hist.length, by.length, (D.clientes || []).length].join('|');
     if (firma === IB.firma) return IB;
-    var txt = {}, aut = {};
+    var l = lista(), txt = {}, aut = {};
     var pon = function (id) {
       id = String(id == null ? '' : id).trim(); if (!id) return;
       var s = [].slice.call(arguments, 1).filter(Boolean).map(function (v) { var n = X.normal(v); return n + ' ' + n.replace(/[^0-9A-Z]/g, ''); }).join(' ');
