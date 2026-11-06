@@ -43,7 +43,17 @@
   }
 
   var F = { tab: 'lista', buscar: '', semana: '', pag: 0, sel: {} };
+  /* Algunas facturas llegan del Portal sin nombre: se muestra el del repartidor o la razón social (solo en pantalla, no se guarda) */
+  function nombresFacturas() {
+    (D.facturas || []).forEach(function (f) {
+      if (String(f.nombre || '').trim()) return;
+      var r = D.repartidores && D.repartidores.get(X.idSeguro(f.id));
+      f.nombre = (r && r.nombre) || (X.padron && X.padron.dato(f.id) || {}).nombre || f.razonEmisor || '';
+    });
+  }
+  X.nombresFacturas = nombresFacturas;
   function filtradas() {
+    nombresFacturas();
     var b = X.normal(F.buscar);
     return (D.facturas || []).filter(function (f) {
       if (F.tab === 'recibida' && f.estado !== 'recibida') return false;
@@ -333,7 +343,7 @@
     });
   }
   function falla(b) { return function (e) { console.error(e); b.disabled = false; X.aviso('No se pudo guardar. Revisa tus permisos.'); X.refrescar(); }; }
-  CTRL.abrirFactura = abrirFactura;
+  CTRL.abrirFactura = abrirFactura; X.abrirFactura = abrirFactura;
 
   /* ── Registrar una factura emitida por CONTAX ── */
   function registrarContax(idInicial) {

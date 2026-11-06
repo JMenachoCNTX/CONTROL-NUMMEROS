@@ -83,6 +83,14 @@
     return Object.keys(hechas).some(function (k) { return Math.abs(Number(k) - meta) <= 5 && hechas[k] >= 2; });
   }
 
+  function datosFactura(f) { return f ? { fnum: String(f.numero || ''), fimp: Number(f.importe) || 0, ffecha: fechaRCV(f.fechaEmision), fnit: limpiaNum(f.nitEmisor) } : {}; }
+  /* Lo que el repartidor debe, para comparar a simple vista */
+  function textoPagos(l) {
+    return l.slice().sort(function (a, b) { return X.ordenSemana(a.semana) - X.ordenSemana(b.semana); }).map(function (p) {
+      return X.semanaCorta(p.semana) + ' · ' + bs(p.importe) + (p.f ? ' · factura N.º ' + (p.f.numero || 's/n') + (p.f.verificacion ? ' verificada' : '') : '');
+    }).join(' | ');
+  }
+
   /* ── El cruce. No escribe nada.
      ctx: pagos [{id, uid, nombre, semana, importe, tipo, f}], facturas, nombres [{id, nombre}], nits {id: [nit]}, pagadas {clave: 1} ── */
   function cruzar(lista, ctx) {
@@ -108,6 +116,7 @@
       });
       return { ids: Object.keys(ids), exactos: exactos };
     }
+    var nombreDe = {}; nombres.forEach(function (x) { if (!nombreDe[x.id]) nombreDe[x.id] = x.nombre; });
     var usados = {}, vistas = {};
     var abierto = function (p, link) { return !usados[p.id + '|' + p.semana] && !(p.f && p.f.verificacion && !(link && p.f._id === link._id)); };
     var orden = function (a, b) { return X.ordenSemana(a.semana) - X.ordenSemana(b.semana); };
@@ -132,8 +141,10 @@
         var f = link;
         if (!f && p && p.f && p.f.estado !== 'rechazada') f = p.f;
         if (f) ligadas[f._id] = 1;
-        return Object.assign({}, x, { r: r, det: det || '', como: como || '', id: p ? p.id : (id || (f ? f.id : '')), nombre: p ? p.nombre : (f ? f.nombre : ''), semana: p ? p.semana : '',
-          pago: p ? p.importe : 0, tipo: p ? p.tipo : '', uid: p ? p.uid : (f ? f.uid : ''), fid: f ? f._id : '', fest: f ? f.estado : '', forig: f ? (f.origen || '') : '', fmotivo: f ? (f.motivo || '') : '' });
+        var quien = p ? p.id : (id || (f ? f.id : '')), lista = pagosDe[quien] || [];
+        return Object.assign({}, x, { r: r, det: det || '', como: como || '', id: quien, nombre: p ? p.nombre : (f ? f.nombre : (lista[0] ? lista[0].nombre : nombreDe[quien] || '')), semana: p ? p.semana : '',
+          pago: p ? p.importe : 0, tipo: p ? p.tipo : '', uid: p ? p.uid : (f ? f.uid : ''), fid: f ? f._id : '', fest: f ? f.estado : '', forig: f ? (f.origen || '') : '', fmotivo: f ? (f.motivo || '') : '',
+          cnit: (nits[quien] || []).join(', '), abiertos: r === 'coincide' ? '' : textoPagos(lista) }, datosFactura(f));
       };
       var ident = function () {
         if (link) return { ids: [String(link.id)], por: 'factura' };
@@ -146,7 +157,8 @@
       vistas[clave] = 1;
       // Verificada antes pero nunca aprobada (sigue «Por revisar»): vuelve a cruzarse para poder aprobarla
       if (link && link.verificacion && link.estado !== 'recibida') return fin('usada', 'Ya verificada en una conciliación anterior');
-      if (pagadas[claveAut(x.aut)] || pagadas[x.nit + '|' + x.num]) return fin('usada', 'Ya se pagó con esta factura');
+      var pagada = pagadas[claveAut(x.aut)] || pagadas[x.nit + '|' + x.num];
+      if (pagada) return fin('usada', 'Ya se pagó con esta factura' + (typeof pagada === 'string' ? ' · ' + pagada : ''), null, '', ident().ids[0]);
 
       var who = ident();
       if (!who.ids.length) return fin('otros');
@@ -184,9 +196,9 @@
     facturas.forEach(function (f) {
       if (f.verificacion || ligadas[f._id] || f.estado === 'rechazada') return;
       var fe = fechaRCV(f.fechaEmision), dentro = fe && desde && fe >= desde && fe <= hasta;
-      res.push({ num: limpiaNum(f.numero), imp: Number(f.importe) || 0, nit: limpiaNum(f.nitEmisor), nom: f.razonEmisor || '', est: '', fecha: fe, aut: f.autorizacion || '',
+      res.push(Object.assign({ num: limpiaNum(f.numero), imp: Number(f.importe) || 0, nit: limpiaNum(f.nitEmisor), nom: f.razonEmisor || '', est: '', fecha: fe, aut: f.autorizacion || '',
         r: !dentro ? 'espera' : f.origen === 'contax' ? 'contaxFalta' : 'noEsta', det: '', como: '', id: f.id, nombre: f.nombre, semana: (f.semanas || []).join(', '), pago: 0, tipo: '', uid: f.uid,
-        fid: f._id, fest: f.estado, forig: f.origen || '', fmotivo: f.motivo || '', portal: 1 });
+        fid: f._id, fest: f.estado, forig: f.origen || '', fmotivo: f.motivo || '', cnit: (nits[f.id] || []).join(', '), portal: 1 }, datosFactura(f)));
     });
     var enExcel = res.filter(function (r) { return !r.portal; }), n = function (g) { return enExcel.filter(function (r) { return grupo(r.r) === g; }).length; };
     var pagos = ctx.pagos || [], antes = pagos.filter(function (p) { return p.f && p.f.verificacion; }).length, nuevos = n('ok'), cubiertos = {};
@@ -202,6 +214,7 @@
     var noHay = function () { return null; };
     return Promise.all([X.padron.cargar().catch(noHay), X.dbP.collection('perfiles').get().catch(noHay)]).then(function (r) {
       var nits = {}, nombres = [], vistos = {}, pagadas = {};
+      X.nombresFacturas();
       var nit = function (id, v) { id = String(id); v = limpiaNum(v); if (v.length < 5) return; var l = nits[id] = nits[id] || []; if (l.indexOf(v) < 0) l.push(v); };
       var nom = function (id, v) { var k = id + '|' + X.normal(v); if (!v || vistos[k]) return; vistos[k] = 1; nombres.push({ id: String(id), nombre: v }); };
       if (D.repartidores) D.repartidores.forEach(function (x) { nom(x.id, x.nombre); var d = X.padron.dato(x.id); if (d) { nom(x.id, d.nombre); nit(x.id, d.nit); } });
@@ -211,8 +224,9 @@
       (D.hist || []).forEach(function (h) {
         nom(h.id, h.nombre); nit(h.id, h.nit);
         if (!/^\s*\d+\s*$/.test(String(h.factura || ''))) return;
-        if (h.autorizacion) pagadas[claveAut(h.autorizacion)] = 1;
-        else if (limpiaNum(h.nit)) pagadas[limpiaNum(h.nit) + '|' + limpiaNum(h.factura)] = 1; // sin código, solo queda NIT + N.º
+        var txt = X.semanaCorta(h.semana) + ' pagada el ' + X.fecha(h.fecha);
+        if (h.autorizacion) pagadas[claveAut(h.autorizacion)] = txt;
+        else if (limpiaNum(h.nit)) pagadas[limpiaNum(h.nit) + '|' + limpiaNum(h.factura)] = txt; // sin código, solo queda NIT + N.º
       });
       var pagos = X.listaFacturacionDatos().map(function (x) { return { id: x.id, uid: x.r ? x.r.uid : X.idSeguro(x.id), nombre: x.nombre, semana: x.semana, importe: x.importe, tipo: x.tipo, f: x.f }; });
       return { pagos: pagos, facturas: D.facturas || [], nombres: nombres, nits: nits, pagadas: pagadas };
@@ -287,24 +301,59 @@
     }, function (e) { console.error(e); X.clasicos(false); X.aviso('No se pudo guardar. Revisa tus permisos.'); });
   }
 
+  function CTRL_abrir(id) { if ((D.facturas || []).some(function (f) { return f._id === id; })) X.abrirFactura(id); else X.aviso('Esa factura ya no está en la lista.'); }
+
   /* ── Pantalla del resultado (la misma para un cruce nuevo y para uno guardado) ── */
   var PEST = [['', 'Todas'], ['ok', 'Coinciden'], ['mal', 'Algo no cuadra'], ['anulada', 'Anuladas'], ['otros', 'No son de repartidores'], ['ya', 'Ya verificadas'], ['portal', 'En CONTROL y no en el Excel']];
+  /* Las filas «portal» no están en el Excel: sus datos son de CONTROL y las columnas del Excel quedan vacías */
+  var vacia = '<span class="muted">—</span>';
+  var deExcel = function (fn) { return function (x) { return x.portal ? vacia : fn(x); }; };
+  var estadoF = { recibida: 'Por revisar', aprobada: 'Aprobada', observada: 'Observada', rechazada: 'Rechazada' };
+  function textoFactura(x) {
+    if (!x.fid) return '';
+    var num = x.fnum != null ? x.fnum : x.num, imp = x.fimp != null ? x.fimp : 0;
+    return (x.forig === 'contax' ? 'CONTAX' : x.forig === 'impuestos' ? 'Del Excel' : 'Portal') + ' · N.º ' + (num || 's/n') + (imp ? ' · ' + bs(imp) : '') + ' · ' + (estadoF[x.fest] || x.fest || '');
+  }
+  function textoDetalle(x) { return x.det || (x.como ? 'por ' + x.como : ''); }
   var COLS = [
-    { t: 'Fecha', html: function (x) { return x.fecha ? X.fecha(x.fecha) : '—'; } },
-    { t: 'N.º', html: function (x) { return '<b class="num">' + esc(x.num || '—') + '</b>'; } },
-    { t: 'Emisor (Excel)', html: function (x) { return '<b>' + esc(x.nom || '—') + '</b><span class="sub num">' + (x.nit ? 'NIT ' + esc(x.nit) : 'sin NIT') + '</span>'; } },
-    { t: 'Importe', clase: 'monto', html: function (x) { return bs(x.imp); } },
-    { t: 'Repartidor', html: function (x) { return x.id ? esc(x.nombre || '') + '<span class="sub num">ID ' + esc(x.id) + '</span>' : '<span class="muted">—</span>'; } },
-    { t: 'Pago', html: function (x) { return x.semana ? esc(X.semanaCorta(x.semana)) + (x.tipo === 'retenido' ? '<span class="sub">Ya pagado con retención</span>' : '') : '<span class="muted">—</span>'; } },
-    { t: 'Resultado', html: function (x) { var e = RES[x.r] || ['neutro', x.r]; return X.chip(e[0], e[1]) + (x.det || x.como ? '<span class="sub">' + esc(x.det || ('por ' + x.como)) + '</span>' : ''); } }
+    { g: 'e', k: 'fecha', t: 'Fecha', v: function (x) { return x.portal ? '' : x.fecha; }, html: deExcel(function (x) { return x.fecha ? X.fecha(x.fecha) : vacia; }) },
+    { g: 'e', k: 'num', t: 'N.º', n: 1, v: function (x) { return x.portal ? 0 : Number(x.num) || 0; }, html: deExcel(function (x) { return '<b class="num">' + esc(x.num || '—') + '</b>'; }) },
+    { g: 'e', k: 'nit', t: 'NIT', v: function (x) { return x.portal ? '' : x.nit; }, html: deExcel(function (x) { return '<span class="num">' + esc(x.nit || '—') + '</span>'; }) },
+    { g: 'e', k: 'nom', t: 'Razón social', v: function (x) { return x.portal ? '' : X.normal(x.nom); }, html: deExcel(function (x) { return esc(x.nom || '—'); }) },
+    { g: 'e', k: 'imp', t: 'Importe', n: 1, clase: 'monto', v: function (x) { return x.portal ? 0 : x.imp; }, html: deExcel(function (x) { return '<b>' + bs(x.imp) + '</b>'; }) },
+    { g: 'e', k: 'est', t: 'Estado', v: function (x) { return x.portal ? '' : X.normal(x.est); }, html: deExcel(function (x) { return esc(x.est || '—'); }) },
+    { g: 'e', k: 'aut', t: 'Autorización', v: function (x) { return x.portal ? '' : x.aut; }, html: deExcel(function (x) { var a = String(x.aut || ''); return a ? '<span class="num" title="' + esc(a) + '">' + esc(a.length > 14 ? a.slice(0, 6) + '…' + a.slice(-6) : a) + '</span>' : vacia; }) },
+    { g: 'c', k: 'id', t: 'ID', v: function (x) { return x.id || ''; }, html: function (x) { return x.id ? '<span class="num">' + esc(x.id) + '</span>' : vacia; } },
+    { g: 'c', k: 'nombre', t: 'Repartidor', v: function (x) { return X.normal(x.nombre); }, html: function (x) { return x.nombre ? '<b>' + esc(x.nombre) + '</b>' : vacia; } },
+    { g: 'c', k: 'cnit', t: 'NIT registrado', v: function (x) { return x.cnit || ''; }, html: function (x) { return x.cnit ? '<span class="num">' + esc(x.cnit) + '</span>' : vacia; } },
+    { g: 'c', k: 'semana', t: 'Pago', v: function (x) { return X.ordenSemana(x.semana); }, n: 1, html: function (x) { return x.semana ? esc(X.semanaCorta(x.semana)) + (x.pago ? ' · ' + bs(x.pago) : '') + (x.tipo === 'retenido' ? '<span class="sub">Ya pagado con retención</span>' : '') : vacia; } },
+    { g: 'c', k: 'fac', t: 'Factura en CONTROL', v: textoFactura, html: function (x) { return textoFactura(x) ? esc(textoFactura(x)) : vacia; } },
+    { g: 'c', k: 'abiertos', t: 'Pagos del repartidor', v: function (x) { return x.abiertos || ''; }, html: function (x) { return x.abiertos ? esc(x.abiertos).replace(/ \| /g, '<br>') : vacia; } },
+    { g: 'r', k: 'r', t: 'Resultado', v: function (x) { return (RES[x.r] || [0, x.r])[1]; }, html: function (x) { var e = RES[x.r] || ['neutro', x.r]; return X.chip(e[0], e[1]); } },
+    { g: 'r', k: 'det', t: 'Detalle', v: textoDetalle, html: function (x) { return esc(textoDetalle(x)) || vacia; } }
   ];
-  function exportar(c) {
-    X.excel([{ nombre: 'Conciliación', filas: [['Fecha', 'N.º factura', 'NIT', 'Emisor', 'Importe', 'Estado en Impuestos', 'Autorización', 'ID repartidor', 'Repartidor', 'Semana', 'Resultado', 'Detalle']].concat(c.filas.map(function (x) {
-      return [x.fecha, x.num, x.nit, x.nom, x.imp, x.est, x.aut, x.id, x.nombre, x.semana, (RES[x.r] || [0, x.r])[1], x.det || (x.como ? 'por ' + x.como : '')];
+  function tablaHTML(l, E) {
+    var n = function (g) { return COLS.filter(function (c) { return c.g === g; }).length; };
+    var trozo = l.slice(E.pag * 100, E.pag * 100 + 100), total = Math.ceil(l.length / 100);
+    return '<div class="tabla cn-caja"><table class="cn"><thead><tr class="cn-grupos"><th class="cn-e" colspan="' + n('e') + '">Datos del Excel de Impuestos</th><th class="cn-c" colspan="' + n('c') + '">Datos de CONTROL</th><th class="cn-r" colspan="' + n('r') + '">Resultado del cruce</th></tr><tr>' +
+      COLS.map(function (c, i) {
+        var marca = E.orden === c.k ? (E.dir > 0 ? ' ▲' : ' ▼') : '', ini = i && COLS[i - 1].g !== c.g;
+        return '<th class="' + (c.clase || '') + (ini ? ' cn-ini' : '') + '" data-ord="' + c.k + '" title="Ordenar">' + c.t + marca + '</th>';
+      }).join('') + '</tr></thead><tbody>' +
+      trozo.map(function (x, i) {
+        return '<tr' + (x.fid ? ' class="clic" data-abrir="' + esc(x.fid) + '"' : '') + '>' + COLS.map(function (c, j) { return '<td class="' + (c.clase || '') + (j && COLS[j - 1].g !== c.g ? ' cn-ini' : '') + '">' + c.html(x) + '</td>'; }).join('') + '</tr>';
+      }).join('') + '</tbody></table></div>' +
+      (total > 1 ? '<div class="fila-acc" style="margin-top:10px"><button class="btn sec chico" data-pag="' + (E.pag - 1) + '"' + (E.pag ? '' : ' disabled') + '>Anterior</button><span class="muted">Página ' + (E.pag + 1) + ' de ' + total + '</span><button class="btn sec chico" data-pag="' + (E.pag + 1) + '"' + (E.pag >= total - 1 ? ' disabled' : '') + '>Siguiente</button></div>' : '');
+  }
+  function exportar(c, filas) {
+    X.excel([{ nombre: 'Conciliación', filas: [['Excel: Fecha', 'Excel: N.º factura', 'Excel: NIT', 'Excel: Razón social', 'Excel: Importe', 'Excel: Estado', 'Excel: Autorización', 'CONTROL: ID', 'CONTROL: Repartidor', 'CONTROL: NIT registrado', 'CONTROL: Semana', 'CONTROL: Importe del pago', 'CONTROL: Factura', 'CONTROL: Pagos del repartidor', 'Resultado', 'Detalle']].concat(filas.map(function (x) {
+      var e = x.portal ? ['', '', '', '', '', '', ''] : [x.fecha, x.num, x.nit, x.nom, x.imp, x.est, x.aut];
+      return e.concat([x.id, x.nombre, x.cnit || '', x.semana, x.pago || '', textoFactura(x), x.abiertos || '', (RES[x.r] || [0, x.r])[1], textoDetalle(x)]);
     })) }], 'Conciliacion-' + (c.hasta || X.hoyISO()));
   }
   function pintar(cu, c, cerrar, vivo) {
-    var E = { g: c.resumen.noCuadran ? 'mal' : '', pag: 0 }, r = c.resumen, zona = document.createElement('div');
+    var E = { g: c.resumen.noCuadran ? 'mal' : '', pag: 0, buscar: '', res: '', sem: '', orden: 'nombre', dir: 1 }, r = c.resumen, zona = document.createElement('div');
+    if (cu.parentNode) cu.parentNode.classList.add('completa');
     var verif = vivo ? opsVerificar(c) : [], obs = vivo ? opsObservar(c) : [];
     var aprobadasMal = c.filas.filter(function (x) { return x.fest === 'aprobada' && ['importe', 'suma', 'nitDistinto', 'fechaAntes', 'anulada', 'noEsta'].indexOf(x.r) >= 0; }).length;
     cu.innerHTML = '<div class="aviso-caja mb">' + ic('ayuda') + '<div><b>' + entero(r.filasExcel) + ' en el Excel · ' + entero(r.repartidores) + ' de repartidores · ' + entero(r.otros) + ' de otros · ' + entero(r.anuladas) + ' anuladas</b>' +
@@ -321,18 +370,42 @@
         (X.puedeEditar() && verif.length ? '<button class="btn" id="cnVer">' + ic('check') + 'Registrar las ' + entero(verif.length) + ' verificadas</button>' : '') +
         (X.puedeEditar() && obs.length ? '<button class="btn sec" id="cnObs">Observar las ' + entero(obs.length) + ' con problema</button>' : '') +
         '<button class="btn sec" id="cnExc">' + ic('descargar') + 'Excel</button></div>';
-    cu.appendChild(zona);
+    var semanas = {}, resultados = {};
+    c.filas.forEach(function (x) { if (x.semana) semanas[x.semana] = 1; resultados[x.r] = (resultados[x.r] || 0) + 1; });
+    var filtros = document.createElement('div'); filtros.className = 'herr';
+    filtros.innerHTML = '<div class="buscar">' + ic('buscar') + '<input type="search" id="cnBus" placeholder="Buscar por nombre, razón social, ID, NIT o N.º"></div>' +
+      '<select id="cnRes" aria-label="Filtrar por resultado"><option value="">Todos los resultados</option>' + Object.keys(RES).filter(function (k) { return resultados[k]; }).map(function (k) { return '<option value="' + k + '">' + esc(RES[k][1]) + ' (' + entero(resultados[k]) + ')</option>'; }).join('') + '</select>' +
+      '<select id="cnSem" aria-label="Filtrar por semana"><option value="">Todas las semanas</option>' + Object.keys(semanas).sort(function (a, b) { return X.ordenSemana(b) - X.ordenSemana(a); }).map(function (k) { return '<option value="' + esc(k) + '">' + esc(k) + '</option>'; }).join('') + '</select>';
+    cu.appendChild(filtros); cu.appendChild(zona);
+    var col = function (k) { return COLS.filter(function (x) { return x.k === k; })[0]; };
+    function visibles() {
+      var b = X.normal(E.buscar), o = col(E.orden);
+      return c.filas.filter(function (x) {
+        if (E.g && grupo(x.r) !== E.g) return false;
+        if (E.res && x.r !== E.res) return false;
+        if (E.sem && x.semana !== E.sem) return false;
+        return !b || X.normal([x.nombre, x.nom, x.id, x.nit, x.cnit, x.num, x.fnum].join(' ')).indexOf(b) >= 0;
+      }).sort(function (p, q) {
+        var a = o.v(p), z = o.v(q);
+        return E.dir * (o.n ? (Number(a) || 0) - (Number(z) || 0) : String(a || '').localeCompare(String(z || '')));
+      });
+    }
     function tabla() {
-      var l = c.filas.filter(function (x) { return !E.g || grupo(x.r) === E.g; });
+      var l = visibles();
       zona.innerHTML = '<div class="pestanas">' + PEST.map(function (p) {
         var k = p[0] ? c.filas.filter(function (x) { return grupo(x.r) === p[0]; }).length : c.filas.length;
         return '<button aria-selected="' + (E.g === p[0]) + '" data-gr="' + p[0] + '">' + p[1] + ' <em class="num">' + entero(k) + '</em></button>';
-      }).join('') + '</div>' + (l.length ? X.tabla(COLS, l, { tam: 100, pag: E.pag }) : X.vacio('Nada en este grupo', ''));
+      }).join('') + '</div><p class="muted mb">' + entero(l.length) + ' filas. Toca el título de una columna para ordenar; toca una fila con factura para abrirla.</p>' + (l.length ? tablaHTML(l, E) : X.vacio('Nada con estos filtros', ''));
       zona.querySelectorAll('[data-gr]').forEach(function (b) { b.addEventListener('click', function () { E.g = b.getAttribute('data-gr'); E.pag = 0; tabla(); }); });
       zona.querySelectorAll('[data-pag]').forEach(function (b) { b.addEventListener('click', function () { E.pag = Number(b.getAttribute('data-pag')); tabla(); }); });
+      zona.querySelectorAll('[data-ord]').forEach(function (b) { b.addEventListener('click', function () { var k = b.getAttribute('data-ord'); if (E.orden === k) E.dir = -E.dir; else { E.orden = k; E.dir = 1; } E.pag = 0; tabla(); }); });
+      zona.querySelectorAll('[data-abrir]').forEach(function (t) { t.addEventListener('click', function () { CTRL_abrir(t.getAttribute('data-abrir')); }); });
     }
+    filtros.querySelector('#cnBus').addEventListener('input', X.debounce(function (e) { E.buscar = filtros.querySelector('#cnBus').value; E.pag = 0; tabla(); }, 200));
+    filtros.querySelector('#cnRes').addEventListener('change', function (e) { E.res = e.target.value; if (E.res) E.g = ''; E.pag = 0; tabla(); });
+    filtros.querySelector('#cnSem').addEventListener('change', function (e) { E.sem = e.target.value; E.pag = 0; tabla(); });
     tabla();
-    cu.querySelector('#cnExc').addEventListener('click', function () { exportar(c); });
+    cu.querySelector('#cnExc').addEventListener('click', function () { exportar(c, visibles()); });
     var bv = cu.querySelector('#cnVer');
     if (bv) bv.addEventListener('click', function () {
       X.confirmar('Registrar ' + verif.length + ' facturas verificadas', 'Quedan como <b>verificadas en Impuestos</b> y aprobadas. El repartidor las ve en su portal. Las que no subió se registran solas y las de CONTAX se completan con el N.º, el NIT y la autorización del Excel.', function () {
