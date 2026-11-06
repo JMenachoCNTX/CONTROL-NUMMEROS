@@ -276,7 +276,7 @@
         }).join('') + '</div>' +
         '<div class="herr"><div class="buscar">' + ic('buscar') +  '<input type="search" id="bPagos" placeholder="Buscar por nombre, ID, celular, NIT, razón social o autorización" value="' + esc(P.buscar) + '"></div>' +
           '<select id="sSemana" aria-label="Semana"><option value="">Todas las semanas</option>' + semLista.map(function (s) { return '<option' + (s === P.semana ? ' selected' : '') + '>' + esc(s) + '</option>'; }).join('') + '</select>' +
-          '<select id="sCiudad" aria-label="Ciudad"><option value="">Todas las ciudades</option>' + ['SCZ', 'CBBA', 'LPZ'].map(function (c) { return '<option value="' + c + '"' + (c === P.ciudad ? ' selected' : '') + '>' + esc(X.semanas.CIUDADES[c]) + '</option>'; }).join('') + '<option value="sin"' + (P.ciudad === 'sin' ? ' selected' : '') + '>Sin ciudad</option></select>' +
+          '<select id="sCiudad" aria-label="Ciudad"><option value="">Todas las ciudades</option>' + ['SCZ', 'CBBA', 'LPZ'].map(function (c) { return '<option value="' + c + '"' + (c === P.ciudad ? ' selected' : '') + '>' + esc(X.semanas.CIUDADES[c]) + '</option>'; }).join('') + '<option value="sin"' + (P.ciudad === 'sin' ? ' selected' : '') + '>Sin ciudad (inactivos)</option></select>' +
           '<select id="sCliente" aria-label="Clientes"><option value="">Clientes y no clientes</option><option value="si"' + (P.cliente === 'si' ? ' selected' : '') + '>Clientes CONTAX</option><option value="no"' + (P.cliente === 'no' ? ' selected' : '') + '>No clientes</option></select></div>' +
         (f.length ? X.tabla([
           { t: 'Repartidor', html: function (e) { return '<b>' + esc(e.r.nombre || 'Sin nombre') + '</b><span class="sub num">ID ' + esc(e.r.id) + (e.cliente ? ' · ' : '') + '</span>' + (e.cliente ? X.chip('contax', 'Cliente CONTAX') : '') + (e.r.nombreSistema ? '<span class="sub">' + X.chip('neutro', 'Nombre colocado por el sistema') + '</span>' : ''); } },
@@ -350,7 +350,7 @@
       '<div class="fm"><div class="dos"><div class="fila"><label for="plFecha">Fecha de pago</label><input id="plFecha" type="date" value="' + X.hoyISO() + '"></div>' +
         '<div class="fila"><label for="plNombre">Nombre del archivo</label><input id="plNombre" value="' + esc((sem ? sem.replace(/G\d{4}$/, '') + ' ' : '') + 'Planilla Banco') + '"></div></div></div>' +
       (mc
-        ? '<div class="aviso-caja">' + ic('check') + '<div><b>Se guarda en «Planillas generadas»</b>Las semanas incluidas pasan a «en planilla» y no vuelven a salir en otra planilla hasta que se concilie el extracto, se confirme o se anule.</div></div><input type="checkbox" id="chkCierre" checked hidden>'
+        ? '<div class="aviso-caja">' + ic('check') + '<div><b>Se guarda en «Planillas generadas»</b>Las semanas incluidas pasan a «en planilla» y no vuelven a salir en otra planilla hasta que se concilie el extracto, se confirme o se anule. También se descargan el Detalle de pagos (Excel) y el Reporte con gráficos (PDF).</div></div><input type="checkbox" id="chkCierre" checked hidden>'
         : '<label class="interruptor"><input type="checkbox" id="chkCierre" checked>Guardar esta planilla en «Planillas generadas»</label>'),
       '<button class="btn sec" data-cerrar>Cancelar</button><button class="btn" data-ok' + (a.lineas.length ? '' : ' disabled') + '>' + ic('descargar') + 'Descargar planilla del banco</button>',
       function (v, cerrar) {
@@ -362,7 +362,7 @@
           B.descargarBanco(a.lineas, fecha, nombre).then(function () {
             X.bitacora('Descargó planilla del banco', a.pagan.length + ' repartidores · ' + a.lineas.length + ' filas · ' + bs(a.total));
             // Con fuentePagos 'control' la planilla siempre se guarda: sus semanas pasan a «en planilla»
-            if (!v.querySelector('#chkCierre').checked && !mc) return;
+            var guardar = v.querySelector('#chkCierre').checked || mc;
             var ok = function (e) { return e.semanas.filter(function (s) { return s.ok; }); };
             var filas = a.pagan.map(function (e) {
               return { id: String(e.r.id), nombre: e.r.nombre, importe: e.totalPagar, ciudad: ok(e).map(function (s) { return s.p.ciudad; }).filter(Boolean)[0] || e.r.ciudad || '',
@@ -371,14 +371,22 @@
                 docs: ok(e).map(function (s) { return s.p._doc; }).filter(Boolean) };
             });
             var docs = a.lineas.map(function (l) { return l.doc; }).filter(Boolean);
-            return X.dbC.collection('pagos').add({
+            var datos = {
               fecha: X.hoyISO(), fechaProgramada: fecha, archivo: nombre, semanaPrincipal: sem, creado: X.servidor(), quien: S.usuario.email,
               total: a.total, cantidad: a.pagan.length, retenidos: ret.length, regla: C.reglaPago || 'todo', estado: mc ? 'enviada' : 'registro', fuente: mc ? 'control' : 'sheets',
               filas: filas, lineas: a.lineas, sinCuenta: a.sinCuenta,
               retenidosDet: ret.map(function (e) { return { id: String(e.r.id), nombre: e.r.nombre, importe: e.total, motivo: e.motivo }; })
-            }).then(function (ref) {
-              return mc ? X.semanas.marcarEnPlanilla(ref.id, docs).then(function () { return X.semanas.marcarFuera(ref.id, a.sinCuenta); }).then(function () { X.recargarTodo(); }) : null;
-            });
+            };
+            // Un fallo en los reportes no debe parecer un fallo de la planilla: ya quedó guardada y no hay que repetirla
+            var informes = function () {
+              return X.banco.informesPlanilla(datos).catch(function (e) {
+                console.error(e); X.aviso('La planilla está lista, pero faltó un reporte. Descárgalo desde «Planillas generadas».');
+              });
+            };
+            if (!guardar) return informes();
+            return X.dbC.collection('pagos').add(datos).then(function (ref) {
+              return mc ? X.semanas.marcarEnPlanilla(ref.id, docs).then(function () { return X.semanas.marcarFuera(ref.id, a.sinCuenta); }) : null;
+            }).then(informes).then(function () { if (mc) X.recargarTodo(); });
           }).then(function () { cerrar(); X.aviso('Planilla del banco descargada'); }, function (e) { console.error(e); btn.disabled = false; btn.textContent = 'Descargar planilla del banco'; X.aviso(e.message || 'No se pudo generar el Excel.'); });
         });
       });
@@ -399,13 +407,14 @@
           var conf = X.semanas && x.estado === 'enviada' && X.puedeEditar();
           return '<div class="fila-acc"><button class="btn sec chico" data-bajar="' + esc(x._id) + '">' + ic('descargar') + (x.lineas ? 'Banco' : 'Excel') + '</button>' +
             (x.lineas ? '<button class="btn sec chico" data-detalle="' + esc(x._id) + '">' + ic('descargar') + 'Detalle</button>' : '') +
-            (X.semanas ? '<button class="btn sec chico" data-reporte="' + esc(x._id) + '">' + ic('grafico') + 'Gráficos</button>' : '') +
+            (x.lineas ? '<button class="btn sec chico" data-pdf="' + esc(x._id) + '">' + ic('grafico') + 'PDF</button>' : X.semanas ? '<button class="btn sec chico" data-reporte="' + esc(x._id) + '">' + ic('grafico') + 'Gráficos</button>' : '') +
             (conf && x.lineas ? '<button class="btn chico" data-conciliar="' + esc(x._id) + '">' + ic('cruzar') + 'Conciliar extracto</button>' : '') +
             (conf ? '<button class="btn sec chico" data-confirmar="' + esc(x._id) + '">' + ic('check') + 'Pago confirmado</button><button class="btn sec chico" data-anular="' + esc(x._id) + '">Anular</button>' : '') + '</div>';
         } }
       ], l) : X.vacio('Todavía no se guardó ninguna planilla', '', 'marca/graficos/ilu-factura-recibo.png');
       var buscarP = function (b, k) { return l.filter(function (y) { return y._id === b.getAttribute(k); })[0]; };
       c.cuerpo.querySelectorAll('[data-reporte]').forEach(function (b) { b.addEventListener('click', function () { X.semanas.reporte(buscarP(b, 'data-reporte')); }); });
+      c.cuerpo.querySelectorAll('[data-pdf]').forEach(function (b) { b.addEventListener('click', function () { X.reportePdf(buscarP(b, 'data-pdf')).catch(function (e) { console.error(e); X.aviso(e.message || 'No se pudo generar el PDF.'); }); }); });
       c.cuerpo.querySelectorAll('[data-detalle]').forEach(function (b) { b.addEventListener('click', function () { X.banco.detalleExcel(buscarP(b, 'data-detalle')); }); });
       c.cuerpo.querySelectorAll('[data-conciliar]').forEach(function (b) { b.addEventListener('click', function () { X.banco.conciliar(buscarP(b, 'data-conciliar'), c.cerrar); }); });
       c.cuerpo.querySelectorAll('[data-confirmar]').forEach(function (b) { b.addEventListener('click', function () { X.semanas.confirmarPago(buscarP(b, 'data-confirmar'), c.cerrar); }); });

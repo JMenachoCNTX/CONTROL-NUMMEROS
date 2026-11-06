@@ -348,40 +348,87 @@
     var f = l.factura;
     return f ? [numOTexto(f.numero), fechaCortaISO(f.fecha) || f.fecha || '', numOTexto(f.nit), f.autorizacion || ''] : ['', '', '', ''];
   }
-  function detalleExcel(p) {
-    var lineas = p.lineas || [], fecha = p.fechaPago || p.fechaProgramada || p.fecha, principal = p.semanaPrincipal || semanaPrincipal(lineas);
-    var d = X.aFecha(fecha), titulo = d ? z2(d.getDate()) + ' ' + MESES[d.getMonth()] : fecha;
-    var hojas = [];
-    // 1) Todos los repartidores de la semana principal: habilitados y retenidos
+  function tituloPlanilla(p) {
+    var fecha = p.fechaPago || p.fechaProgramada || p.fecha, d = X.aFecha(fecha);
+    return d ? z2(d.getDate()) + ' ' + MESES[d.getMonth()] : fecha;
+  }
+  /* Los números que comparten el Excel y el PDF: así los dos reportes siempre dan lo mismo */
+  function resumenPlanilla(p) {
+    var lineas = p.lineas || [], principal = p.semanaPrincipal || semanaPrincipal(lineas), P = X.semanas._puro;
+    var porSem = {}, ciudades = {};
+    var suma = function (o, k, v) { o[k] = o[k] || { n: 0, t: 0 }; o[k].n++; o[k].t += v; };
+    lineas.forEach(function (l) { suma(porSem, l.sem, l.importe); suma(ciudades, CIUDAD_CORTA[l.ciudad] || '', l.importe); });
+    var semanas = Object.keys(porSem).sort(function (a, b) { return (P.anioDe(a) * 100 + P.numSemana(a)) - (P.anioDe(b) * 100 + P.numSemana(b)); })
+      .map(function (k) { return { sem: k, n: porSem[k].n, t: X.redondear(porSem[k].t) }; });
+    var r = { principal: principal, semanas: semanas, ciudades: ciudades, planilla: null };
+    // Toda la semana principal, por ciudad: lo que se paga y lo que queda retenido
     if (X.semanas.modoControl() && D.semanas && principal) {
       var enPlanilla = {}; lineas.forEach(function (l) { enPlanilla[l.doc] = l; });
-      var semDocs = D.semanas.filter(function (s) { return semBanco(s.semana, s.orden) === principal && (Number(s.importe) || 0) > 0; })
+      var docs = D.semanas.filter(function (s) { return semBanco(s.semana, s.orden) === principal && (Number(s.importe) || 0) > 0; })
         .sort(function (a, b) { return (Number(a.importe) || 0) - (Number(b.importe) || 0); });
+      var pl = { docs: docs, linea: function (s) { return enPlanilla[s._id] || (s.estado === 'pagado' || s.estado === 'en_planilla' ? { excepcion: false, factura: null } : null); },
+        ciudades: {}, habilitado: { n: 0, t: 0 }, excepcion: { n: 0, t: 0 }, retenido: { n: 0, t: 0 }, n: 0, t: 0 };
+      docs.forEach(function (s) {
+        var v = Number(s.importe) || 0, l = pl.linea(s), k = CIUDAD_CORTA[s.ciudad] || '', c = pl.ciudades[k] = pl.ciudades[k] || { n: 0, t: 0, ret: 0 };
+        var g = !l ? pl.retenido : l.excepcion ? pl.excepcion : pl.habilitado;
+        g.n++; g.t += v; c.n++; c.t += v; if (!l) c.ret += v; pl.n++; pl.t += v;
+      });
+      r.planilla = pl;
+    }
+    return r;
+  }
+  function detalleExcel(p) {
+    var lineas = p.lineas || [], fecha = p.fechaPago || p.fechaProgramada || p.fecha, titulo = tituloPlanilla(p);
+    var R = resumenPlanilla(p), principal = R.principal, pl = R.planilla, hojas = [], hojaPl = '';
+    // 1) Todos los repartidores de la semana principal: habilitados y retenidos
+    if (pl) {
       var anio = (principal.match(/G(\d{4})/) || [])[1];
-      hojas.push({ nombre: 'Planilla ' + principal.replace(/G\d{4}$/, '').replace('SEM', 'Sem'), filas: [['Nro', 'Semana', 'Rango (Días)', 'ID del mensajero', 'Nombre completo', 'Importe total', 'Comentarios', 'Nro Factura', 'Fecha Factura', 'NIT Factura', 'Nro Autorización', 'ESTADO DE PAGO', 'Gestión SEM', 'Ciudad']]
-        .concat(semDocs.map(function (s, i) {
-          var l = enPlanilla[s._id] || (s.estado === 'pagado' || s.estado === 'en_planilla' ? { excepcion: false, factura: null } : null);
+      hojaPl = 'Planilla ' + principal.replace(/G\d{4}$/, '').replace('SEM', 'Sem');
+      hojas.push({ nombre: hojaPl, filas: [['Nro', 'Semana', 'Rango (Días)', 'ID del mensajero', 'Nombre completo', 'Importe total', 'Comentarios', 'Nro Factura', 'Fecha Factura', 'NIT Factura', 'Nro Autorización', 'ESTADO DE PAGO', 'Gestión SEM', 'Ciudad']]
+        .concat(pl.docs.map(function (s, i) {
+          var l = pl.linea(s);
           var rep = D.repartidores && D.repartidores.get(s.uid);
           return [i + 1, principal, rangoLargo(s.rango, anio), numOTexto(s.id), s.nombre || (rep && rep.nombre) || '', Number(s.importe) || 0, CIUDAD_CORTA[s.ciudad] || '']
             .concat(l ? facturaCols(l) : ['Pago Retenido', 'Pago Retenido', 'Pago Retenido', 'Pago Retenido'])
             .concat([l ? estadoLinea(l) : 'Retención ❌', Number(anio) || '', '']);
         })) });
     }
-    // 2) Lo que se paga en esta planilla (todas las semanas), con el resumen por semana a la derecha
-    var porSem = {}; lineas.forEach(function (l) { porSem[l.sem] = porSem[l.sem] || [0, 0]; porSem[l.sem][0]++; porSem[l.sem][1] += l.importe; });
-    var res = Object.keys(porSem).sort(function (a, b) { var P = X.semanas._puro; return (P.anioDe(a) * 100 + P.numSemana(a)) - (P.anioDe(b) * 100 + P.numSemana(b)); });
-    var pagos = [['Nro', 'Fecha Pago', 'Semana', 'Rango (Días)', 'ID del mensajero', 'Nombre completo', 'Importe total', 'Comentarios', 'Nro Factura', 'Fecha Factura', 'NIT Factura', 'Nro Autorización', 'ESTADO DE PAGO', 'Gestión SEM', '', '', 'Semana', 'Cant', 'Importe']]
-      .concat(lineas.map(function (l, i) {
-        var anio = Number((l.sem.match(/G(\d{4})/) || [])[1]) || '';
-        var fila = [i + 1, fechaCortaISO(fecha) || fecha, l.sem, rangoLargo(l.rango, anio), numOTexto(l.id), l.nombre, l.importe, CIUDAD_CORTA[l.ciudad] || ''].concat(facturaCols(l)).concat([estadoLinea(l), anio, '', '']);
-        var r = res[i];
-        return fila.concat(r ? [r, porSem[r][0], X.redondear(porSem[r][1])] : r === undefined && i === res.length ? ['TOTAL', lineas.length, X.redondear(p.total)] : ['', '', '']);
-      }));
+    // 2) Lo que se paga en esta planilla (todas las semanas), con el resumen a la derecha (columnas Q:S, con fórmulas como el Excel de siempre)
+    var cant = function (f, v) { return { t: 'n', v: v, f: f, z: '0' }; }, plata = function (f, v) { return { t: 'n', v: X.redondear(v), f: f, z: '#,##0.00' }; };
+    var bloque = R.semanas.map(function (s, i) { var q = 'Q' + (i + 2); return [s.sem, cant('COUNTIF(C:C,' + q + ')', s.n), plata('SUMIF(C:C,' + q + ',G:G)', s.t)]; });
+    var finSem = bloque.length + 1;
+    bloque.push(['', '', '']);
+    bloque.push(['TOTAL PAGADO', cant('SUM(R2:R' + finSem + ')', lineas.length), plata('SUM(S2:S' + finSem + ')', p.total)]);
+    if (pl) {
+      bloque.push(['', '', '']);
+      var ini = bloque.length + 2, h = "'" + hojaPl + "'!";
+      ['SC', 'CBBA', 'LP'].forEach(function (k) {
+        var c = pl.ciudades[k] || { n: 0, t: 0 };
+        bloque.push(['PLANILLA ' + k, cant('COUNTIF(' + h + 'G:G,"' + k + '")', c.n), plata('SUMIFS(' + h + 'F:F,' + h + 'G:G,"' + k + '")', c.t)]);
+      });
+      if (pl.ciudades['']) bloque.push(['PLANILLA SIN CIUDAD', pl.ciudades[''].n, X.redondear(pl.ciudades[''].t)]);
+      var fin = bloque.length + 1;
+      bloque.push(['TOTAL PLANILLA', cant('SUM(R' + ini + ':R' + fin + ')', pl.n), plata('SUM(S' + ini + ':S' + fin + ')', pl.t)]);
+    }
+    var pagos = [['Nro', 'Fecha Pago', 'Semana', 'Rango (Días)', 'ID del mensajero', 'Nombre completo', 'Importe total', 'Comentarios', 'Nro Factura', 'Fecha Factura', 'NIT Factura', 'Nro Autorización', 'ESTADO DE PAGO', 'Gestión SEM', '', '', 'Semana', 'Cant', 'Importe']];
+    for (var i = 0; i < Math.max(lineas.length, bloque.length); i++) {
+      var l = lineas[i], fila = new Array(16).fill('');
+      if (l) {
+        var an = Number((l.sem.match(/G(\d{4})/) || [])[1]) || '';
+        fila = [i + 1, fechaCortaISO(fecha) || fecha, l.sem, rangoLargo(l.rango, an), numOTexto(l.id), l.nombre, l.importe, CIUDAD_CORTA[l.ciudad] || ''].concat(facturaCols(l)).concat([estadoLinea(l), an, '', '']);
+      }
+      pagos.push(fila.concat(bloque[i] || ['', '', '']));
+    }
     hojas.push({ nombre: 'Pagos ' + titulo, filas: pagos });
     if ((p.retenidosDet || []).length) hojas.push({ nombre: 'Retenidos', filas: [['ID del mensajero', 'Nombre completo', 'Importe retenido', 'Motivo']].concat(p.retenidosDet.map(function (r) { return [numOTexto(r.id), r.nombre, r.importe, r.motivo]; })) });
     if ((p.sinCuenta || []).length) hojas.push({ nombre: 'Sin cuenta bancaria', filas: [['ID del mensajero', 'Nombre completo', 'Importe', 'Semanas']].concat(p.sinCuenta.map(function (r) { return [numOTexto(r.id), r.nombre, r.importe, (r.semanas || []).join(', ')]; })) });
     if ((p.rebotados || []).length) hojas.push({ nombre: 'Rebotados', filas: [['ID del mensajero', 'Nombre', 'Semana', 'Importe', 'Estado en el banco', 'Banco']].concat(p.rebotados.map(function (r) { return [numOTexto(r.id), r.nombre, r.sem, r.importe, r.estado, r.banco]; })) });
     return X.excel(hojas, 'Detalle Pagos ' + titulo).then(function () { X.bitacora('Descargó detalle de pagos', titulo); });
+  }
+  /* Los dos reportes que acompañan a la planilla del banco */
+  function informesPlanilla(p) {
+    var pdf = function () { return new Promise(function (ok) { setTimeout(ok, 600); }).then(function () { return X.reportePdf(p); }); };
+    return detalleExcel(p).then(pdf);
   }
 
   /* ══════════ CONCILIACIÓN CON EL EXTRACTO DEL BANCO ══════════ */
@@ -671,7 +718,7 @@
 
   X.banco = {
     cargar: cargar, cargarBDYango: cargarBDYango, cuentaDe: cuentaDe, faltaEnCuenta: faltaEnCuenta, nombreBanco: nombreBanco, verCuentas: verCuentas, importarCuentas: importarCuentas,
-    armar: armar, descargarBanco: descargarBanco, semanaPrincipal: semanaPrincipal, detalleExcel: detalleExcel, conciliar: conciliar,
+    armar: armar, descargarBanco: descargarBanco, semanaPrincipal: semanaPrincipal, detalleExcel: detalleExcel, resumenPlanilla: resumenPlanilla, tituloPlanilla: tituloPlanilla, informesPlanilla: informesPlanilla, conciliar: conciliar,
     importarBDYango: importarBDYango,
     _puro: { bancoDe: bancoDe, filasBDYango: filasBDYango, leerGlosa: leerGlosa, glosa: glosa, semBanco: semBanco, serialExcel: serialExcel, rangoLargo: rangoLargo, numOTexto: numOTexto, cuentasDePlanilla: cuentasDePlanilla, filasBanco: filasBanco, leerExtracto: leerExtracto, cruzar: cruzar, ENC_BANCO: ENC_BANCO }
   };
