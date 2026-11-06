@@ -41,6 +41,8 @@
     m = String(v || '').match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? m[0] : '';
   }
   function claveAut(v) { return String(v || '').replace(/\s+/g, '').toUpperCase(); }
+  /* El N.º se repite en facturas del mismo repartidor (empieza de nuevo cada tanto): si las dos tienen código de autorización, manda el código */
+  function esLaMisma(f, x) { var a = claveAut(f && f.autorizacion), b = claveAut(x.aut); return !!f && (!a || !b || a === b); }
   function leerFilas(filas, c) {
     var txt = function (f, k) { return c[k] >= 0 ? String(f[c[k]] == null ? '' : f[c[k]]).trim() : ''; };
     return filas.map(function (f) {
@@ -109,11 +111,12 @@
       var l = eq.slice().sort(orden), una = function (fn) { return l.filter(fn)[0]; };
       return (link && una(function (p) { return String(p.id) === String(link.id) && (link.semanas || []).indexOf(p.semana) >= 0; })) ||
         una(function (p) { return p.f && p.f.origen === 'contax' && !limpiaNum(p.f.numero); }) ||
-        una(function (p) { return p.f && p.f.estado !== 'rechazada' && limpiaNum(p.f.numero) === row.num; }) ||
+        una(function (p) { return p.f && p.f.estado !== 'rechazada' && limpiaNum(p.f.numero) === row.num && esLaMisma(p.f, row); }) ||
         una(function (p) { return !p.f || p.f.estado === 'rechazada'; }) || null;
     }
     var filas = lista.map(function (x) {
-      return { x: x, link: (claveAut(x.aut) && porAut[claveAut(x.aut)]) || (x.nit && x.num && porNitNum[x.nit + '|' + x.num]) || null };
+      var porNum = x.nit && x.num && porNitNum[x.nit + '|' + x.num];
+      return { x: x, link: (claveAut(x.aut) && porAut[claveAut(x.aut)]) || (esLaMisma(porNum, x) ? porNum : null) };
     });
     // Primero las que ya se subieron al Portal: así ninguna otra les quita su semana
     filas.sort(function (a, b) { return (a.link ? 0 : 1) - (b.link ? 0 : 1) || String(a.x.fecha).localeCompare(String(b.x.fecha)); });
@@ -159,7 +162,7 @@
           eq = ex;
         }
       }
-      if (!link) { var mismo = eq[0] && porIdNum[eq[0].id + '|' + x.num]; if (mismo && mismo.estado !== 'rechazada') link = mismo; }
+      if (!link) { var mismo = eq[0] && porIdNum[eq[0].id + '|' + x.num]; if (mismo && mismo.estado !== 'rechazada' && esLaMisma(mismo, x)) link = mismo; }
       var p = elegir(eq, x, link);
       if (!p) return fin('dudosa', 'Ese pago ya tiene otra factura con otro número', eq[0]);
       usados[p.id + '|' + p.semana] = 1;
@@ -204,7 +207,7 @@
         nom(h.id, h.nombre); nit(h.id, h.nit);
         if (!/^\s*\d+\s*$/.test(String(h.factura || ''))) return;
         if (h.autorizacion) pagadas[claveAut(h.autorizacion)] = 1;
-        if (limpiaNum(h.nit)) pagadas[limpiaNum(h.nit) + '|' + limpiaNum(h.factura)] = 1;
+        else if (limpiaNum(h.nit)) pagadas[limpiaNum(h.nit) + '|' + limpiaNum(h.factura)] = 1; // sin código, solo queda NIT + N.º
       });
       var pagos = X.listaFacturacionDatos().map(function (x) { return { id: x.id, uid: x.r ? x.r.uid : X.idSeguro(x.id), nombre: x.nombre, semana: x.semana, importe: x.importe, tipo: x.tipo, f: x.f }; });
       return { pagos: pagos, facturas: D.facturas || [], nombres: nombres, nits: nits, pagadas: pagadas };
