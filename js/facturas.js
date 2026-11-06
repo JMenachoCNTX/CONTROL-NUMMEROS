@@ -162,7 +162,7 @@
       })) }], 'Lista-facturacion-' + X.hoyISO());
     });
   }
-  CTRL.listaFacturacion = listaFacturacion;
+  CTRL.listaFacturacion = listaFacturacion; X.listaFacturacionDatos = listaFacturacion;
 
   X.pagina('facturas', {
     t: 'Facturas', i: 'factura', orden: 2, sec: 'Operación',
@@ -293,7 +293,7 @@
         '<button class="btn sec" data-acc="repartidor">' + ic('repartidor') + 'Ver repartidor</button></div>' : '');
     X.cajon('Factura N.º ' + esc(f.numero) + ' ' + chipFactura(f), esc(f.nombre) + ' · ID ' + esc(f.id), html, function (cu, cerrar) {
       var zona = cu.querySelector('#zonaPdf');
-      if (f.origen === 'contax' && !f.conPdf) { zona.innerHTML = X.vacio('Registrada por el equipo sin PDF', esc(f.registradoPor || '')); }
+      if ((f.origen === 'contax' || f.origen === 'impuestos') && !f.conPdf) { zona.innerHTML = X.vacio(f.origen === 'impuestos' ? 'Registrada desde el Excel de Impuestos, sin PDF' : 'Registrada por el equipo sin PDF', esc(f.registradoPor || '')); }
       else X.dbP.collection('facturasPdf').doc(f._id).get().then(function (d) {
         if (!d.exists) { zona.innerHTML = X.vacio('No se encontró el PDF'); return; }
         var datos = String(d.data().datos || ''), b64 = datos.slice(datos.indexOf(',') + 1);
@@ -377,69 +377,9 @@
   }
   CTRL.registrarContax = registrarContax;
 
-  /* ── Cruce con el Registro de Compras de Impuestos Nacionales (RCV de MILTHAGOR) ──
-     Una factura está verificada solo si en el archivo hay una con el mismo NIT del emisor y el mismo
-     N.º (y el mismo importe). Los números se repiten entre repartidores (cada uno empieza en 1), así que
-     el número y el importe solos no alcanzan. Si la factura no tiene NIT (las subidas antes de pedirlo),
-     se exige N.º + importe + fecha de emisión + que el nombre del emisor sea el del repartidor. */
-  function limpiaNum(n) { return String(n == null ? '' : n).replace(/\D/g, '').replace(/^0+/, ''); }
-  function fechaRCV(v) {
-    if (typeof v === 'number') return new Date(Date.UTC(1899, 11, 30) + v * 864e5).toISOString().slice(0, 10);
-    var m = String(v || '').match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/); if (m) return m[3] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[1]).slice(-2);
-    m = String(v || '').match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? m[0] : '';
-  }
-  /* Mismo nombre: al menos dos palabras (de 3+ letras) en común, o una si uno de los dos tiene una sola */
-  function mismoNombre(a, b) {
-    var pal = function (t) { return X.normal(t).split(/[^A-Z]+/).filter(function (w) { return w.length >= 3; }); };
-    var pa = pal(a), pb = pal(b); if (!pa.length || !pb.length) return null;
-    var comunes = pa.filter(function (w) { return pb.indexOf(w) >= 0; }).length;
-    return comunes >= Math.min(2, pa.length, pb.length);
-  }
-  function indexarRCV(filas, cols) {
-    var porNum = {}, porAut = {}, desde = '', hasta = '';
-    filas.forEach(function (f) {
-      var k = limpiaNum(f[cols.num]); if (!k) return;
-      var fila = { num: k, imp: X.numero(f[cols.imp]), nit: cols.nit >= 0 ? limpiaNum(f[cols.nit]) : '', nom: cols.nom >= 0 ? String(f[cols.nom]).trim() : '',
-        est: cols.est >= 0 ? String(f[cols.est]) : '', fecha: cols.fecha >= 0 ? fechaRCV(f[cols.fecha]) : '', aut: cols.aut >= 0 ? String(f[cols.aut]).trim() : '' };
-      (porNum[k] = porNum[k] || []).push(fila);
-      if (fila.aut) porAut[fila.aut.replace(/\s+/g, '').toUpperCase()] = fila;
-      if (fila.fecha) { if (!desde || fila.fecha < desde) desde = fila.fecha; if (!hasta || fila.fecha > hasta) hasta = fila.fecha; }
-    });
-    return { porNum: porNum, porAut: porAut, desde: desde, hasta: hasta };
-  }
-  function evaluarRCV(f, ix) {
-    var cands = ix.porNum[limpiaNum(f.numero)] || [], nitF = limpiaNum(f.nitEmisor), fechaF = fechaRCV(f.fechaEmision);
-    var igualImp = function (c) { return Math.abs((c.imp || 0) - (Number(f.importe) || 0)) <= 0.05; };
-    var anulada = function (c) { return /ANULAD/.test(X.normal(c.est)); };
-    var enPeriodo = !fechaF || !ix.desde || (fechaF >= ix.desde && fechaF <= ix.hasta);
-    var res = function (r, fila, como) { return { f: f, r: r, fila: fila || null, como: como || '' }; };
-    // Si la factura trae su código de autorización (leído por la IA), se busca primero por él
-    var autF = String(f.autorizacion || '').replace(/\s+/g, '').toUpperCase();
-    if (autF && ix.porAut && ix.porAut[autF]) {
-      var fa = ix.porAut[autF];
-      if (nitF && fa.nit && fa.nit !== nitF) return res('otroEmisor', fa);
-      return igualImp(fa) ? res(anulada(fa) ? 'anulada' : 'coincide', fa, 'código de autorización') : res('importe', fa);
-    }
-    if (nitF) {
-      var mias = cands.filter(function (c) { return c.nit === nitF; });
-      if (mias.length) { var ok = mias.filter(igualImp)[0]; return ok ? res(anulada(ok) ? 'anulada' : 'coincide', ok, 'NIT + N.º') : res('importe', mias[0]); }
-      if (cands.some(igualImp)) return res('otroEmisor', cands.filter(igualImp)[0]);
-      return res(enPeriodo ? 'falta' : 'otroMes');
-    }
-    // Sin NIT: número + importe + fecha, y el emisor debe ser el mismo repartidor
-    var c2 = cands.filter(function (c) { return igualImp(c) && (!fechaF || !c.fecha || c.fecha === fechaF); });
-    var suyas = c2.filter(function (c) { return mismoNombre(c.nom, f.nombre) === true; });
-    if (suyas.length === 1) return res(anulada(suyas[0]) ? 'anulada' : 'coincide', suyas[0], 'N.º + importe + fecha + nombre (sin NIT)');
-    if (suyas.length > 1 || (c2.length && !String(f.nombre || '').trim())) return res('dudosa', c2[0]);
-    if (c2.length) return res('otroEmisor', c2[0]);
-    var suyaOtroImp = cands.filter(function (c) { return mismoNombre(c.nom, f.nombre) === true; })[0];
-    if (suyaOtroImp) return res('importe', suyaOtroImp);
-    return res(enPeriodo ? 'falta' : 'otroMes');
-  }
-  CTRL.cruceRCV = { limpiaNum: limpiaNum, fechaRCV: fechaRCV, mismoNombre: mismoNombre, indexarRCV: indexarRCV, evaluarRCV: evaluarRCV };
-
+  /* ── Cruce con Impuestos: aquí solo se lee el archivo; lo demás está en js/conciliacion.js ── */
   function cruceImpuestos() {
-    X.ventana('Cruzar con Impuestos Nacionales', 'Sube el Registro de Compras de MILTHAGOR que descargas de Impuestos (mejor en Excel .xlsx). Una factura queda verificada solo si coincide su NIT, su N.º y su importe.',
+    X.ventana('Cruzar con Impuestos Nacionales', 'Sube el Registro de Compras de MILTHAGOR que descargas de Impuestos (mejor en Excel .xlsx). Cada fila se busca entre los pagos que deben factura: alcanza con el nombre y el importe, y si tenemos el NIT también se compara.',
       '<div class="fm"><div class="fila"><label for="czArch">Archivo</label><input id="czArch" type="file" accept=".xlsx,.xls,.csv"></div><div id="czMapa"></div></div>',
       '<button class="btn sec" data-cerrar>Cancelar</button><button class="btn" data-ok disabled>' + ic('cruzar') + 'Cruzar</button>', function (v, cerrar) {
         var filas = null, enc = null, ok = v.querySelector('[data-ok]'), mapa = v.querySelector('#czMapa'), nombreArchivo = '';
@@ -461,7 +401,7 @@
                 fecha: adivina(/^FECHA/), aut: adivina(/AUTORIZACION|^CUF/), est: adivina(/^ESTADO/) };
               var sel = function (k, et) { return '<div class="fila"><label for="cz_' + k + '">' + et + '</label><select id="cz_' + k + '"><option value="-1">(no usar)</option>' + enc.map(function (h, j) { return '<option value="' + j + '"' + (cols[k] === j ? ' selected' : '') + '>' + esc(h || ('Columna ' + (j + 1))) + '</option>'; }).join('') + '</select></div>'; };
               mapa.innerHTML = '<p class="muted">' + entero(filas.length) + ' facturas en el archivo. Revisa que cada dato apunte a la columna correcta:</p><div class="dos">' +
-                sel('nit', 'NIT del emisor *') + sel('num', 'N.º de factura *') + sel('imp', 'Importe *') + sel('fecha', 'Fecha de la factura') + sel('nom', 'Nombre o razón social') + sel('aut', 'Código de autorización') + sel('est', 'Estado') + '</div>';
+                sel('nit', 'NIT del emisor *') + sel('num', 'N.º de factura *') + sel('imp', 'Importe *') + sel('fecha', 'Fecha de la factura') + sel('nom', 'Nombre o razón social *') + sel('aut', 'Código de autorización') + sel('est', 'Estado') + '</div>';
               ok.disabled = false;
             });
           }).catch(function (ex) { console.error(ex); mapa.innerHTML = '<p class="login-err">' + esc(ex.message || 'No se pudo leer el archivo.') + '</p>'; });
@@ -469,72 +409,9 @@
         ok.addEventListener('click', function () {
           var col = function (k) { return Number(v.querySelector('#cz_' + k).value); };
           var cols = { num: col('num'), imp: col('imp'), nit: col('nit'), nom: col('nom'), fecha: col('fecha'), aut: col('aut'), est: col('est') };
-          if (cols.num < 0 || cols.imp < 0 || cols.nit < 0) { X.aviso('Elige al menos las columnas del NIT, del número y del importe.'); return; }
-          var ix = indexarRCV(filas, cols);
-          // Se revisan las por revisar, las observadas y las aprobadas que todavía no se verificaron (las de CONTAX no)
-          var revisar = (D.facturas || []).filter(function (f) { return f.origen !== 'contax' && (f.estado === 'recibida' || f.estado === 'observada' || (f.estado === 'aprobada' && !f.verificacion)); });
-          var res = revisar.map(function (f) { return evaluarRCV(f, ix); });
-          cerrar(); mostrarCruce(res, filas.length, ix, nombreArchivo);
+          if (cols.num < 0 || cols.imp < 0 || cols.nit < 0 || cols.nom < 0) { X.aviso('Elige al menos las columnas del NIT, del nombre, del número y del importe.'); return; }
+          cerrar(); X.conciliacion.conciliar(filas, cols, nombreArchivo);
         });
       });
-  }
-  var RES_CRUCE = {
-    coincide: ['ok', 'Verificada en Impuestos'], importe: ['mal', 'Está, pero con otro importe'], anulada: ['mal', 'Figura anulada'],
-    otroEmisor: ['mal', 'Ese N.º lo emitió otra persona'], falta: ['mal', 'No está en Impuestos'], dudosa: ['pend', 'Revisar a mano (sin NIT)'], otroMes: ['neutro', 'De otro mes']
-  };
-  function motivoCruce(x, periodo) {
-    var n = 'N.º ' + x.f.numero;
-    if (x.r === 'falta') return 'Tu factura ' + n + ' no figura en el Registro de Compras de Impuestos Nacionales de MILTHAGOR (' + periodo + '). Si la anulaste, emite una nueva y súbela.';
-    if (x.r === 'otroEmisor') return 'La factura ' + n + ' figura en Impuestos Nacionales emitida por otro NIT. Revisa el número y tu NIT, y vuelve a subirla.';
-    if (x.r === 'anulada') return 'La factura ' + n + ' figura anulada en Impuestos Nacionales.';
-    return 'El importe en Impuestos Nacionales (' + bs(x.fila && x.fila.imp) + ') no coincide con el de tu factura.';
-  }
-  function mostrarCruce(res, total, ix, archivo) {
-    var n = function (k) { return res.filter(function (x) { return x.r === k; }).length; };
-    var periodo = ix.desde ? X.fecha(ix.desde) + ' al ' + X.fecha(ix.hasta) : 'período del archivo';
-    var malas = function (x) { return x.r === 'importe' || x.r === 'anulada' || x.r === 'otroEmisor' || x.r === 'falta'; };
-    var aprobadasMal = res.filter(function (x) { return x.f.estado === 'aprobada' && malas(x); });
-    var aprobables = res.filter(function (x) { return x.r === 'coincide' && x.f.estado === 'recibida'; });
-    var observables = res.filter(function (x) { return malas(x) && (x.f.estado === 'recibida' || (x.f.estado === 'observada' && x.f.motivo !== motivoCruce(x, periodo))); });
-    var orden = ['otroEmisor', 'falta', 'anulada', 'importe', 'dudosa', 'coincide', 'otroMes'];
-    res.sort(function (a, b) { return orden.indexOf(a.r) - orden.indexOf(b.r); });
-    var c = X.cajon('Resultado del cruce', entero(total) + ' facturas en el archivo (' + esc(periodo) + ') · ' + entero(res.length) + ' revisadas en CONTROL',
-      '<div class="rejilla r4 mb">' +
-        '<div class="kpi"><small>Verificadas</small><b class="num">' + n('coincide') + '</b><em>NIT, N.º e importe coinciden</em></div>' +
-        '<div class="kpi alerta"><small>No cuadran</small><b class="num">' + (n('falta') + n('otroEmisor') + n('anulada') + n('importe')) + '</b><em>' + n('falta') + ' no están · ' + n('otroEmisor') + ' de otro emisor · ' + n('anulada') + ' anuladas · ' + n('importe') + ' otro importe</em></div>' +
-        '<div class="kpi' + (n('dudosa') ? ' alerta' : '') + '"><small>Revisar a mano</small><b class="num">' + n('dudosa') + '</b><em>sin NIT y sin datos suficientes</em></div>' +
-        '<div class="kpi"><small>De otro mes</small><b class="num">' + n('otroMes') + '</b><em>carga el archivo de ese mes</em></div>' +
-      '</div>' +
-      (aprobadasMal.length ? '<div class="aviso-caja error mb">' + ic('excepcion') + '<div><b>' + aprobadasMal.length + ' facturas ya aprobadas no tienen respaldo en Impuestos</b>Revísalas una por una (aparecen arriba en la lista). No se cambian solas.</div></div>' : '') +
-      (X.puedeEditar() && (aprobables.length || observables.length) ? '<div class="fila-acc mb">' +
-        (aprobables.length ? '<button class="btn" id="czApr">' + ic('check') + 'Aprobar las ' + aprobables.length + ' verificadas</button>' : '') +
-        (observables.length ? '<button class="btn sec" id="czObs">Observar las ' + observables.length + ' que no cuadran</button>' : '') + '</div>' : '') +
-      X.tabla([
-        { t: 'Repartidor', html: function (x) { return '<b>' + esc(x.f.nombre) + '</b><span class="sub num">ID ' + esc(x.f.id) + (x.f.nitEmisor ? ' · NIT ' + esc(x.f.nitEmisor) : ' · sin NIT') + '</span>'; } },
-        { t: 'N.º', html: function (x) { return '<b class="num">' + esc(x.f.numero) + '</b><span class="sub">' + X.fecha(x.f.fechaEmision) + '</span>'; } },
-        { t: 'En CONTROL', clase: 'monto', html: function (x) { return bs(x.f.importe) + '<span class="sub">' + chipFactura(x.f) + '</span>'; } },
-        { t: 'En Impuestos', clase: 'monto', html: function (x) { return x.fila ? bs(x.fila.imp) + '<span class="sub">' + esc(x.fila.nom) + (x.fila.nit ? ' · NIT ' + esc(x.fila.nit) : '') + '</span>' : '—'; } },
-        { t: 'Resultado', html: function (x) { return X.chip(RES_CRUCE[x.r][0], RES_CRUCE[x.r][1]) + (x.como ? '<span class="sub">por ' + esc(x.como) + '</span>' : ''); } }
-      ], res, { tam: 500 }), function (cu, cerrar) {
-        X.dbC.collection('cruces').add({ cuando: X.servidor(), quien: S.usuario.email, archivo: archivo, desde: ix.desde, hasta: ix.hasta, filasExcel: total, revisadas: res.length,
-          coinciden: n('coincide'), importeDistinto: n('importe'), anuladas: n('anulada'), otroEmisor: n('otroEmisor'), noEstan: n('falta'), dudosas: n('dudosa'), otroMes: n('otroMes') }).catch(function () { });
-        X.bitacora('Cruce con Impuestos', archivo + ' · ' + n('coincide') + ' verificadas · ' + n('falta') + ' no están · ' + n('otroEmisor') + ' de otro emisor · ' + n('importe') + ' otro importe');
-        // Toda factura verificada queda marcada (también las ya aprobadas u observadas)
-        var verif = res.filter(function (x) { return x.r === 'coincide'; });
-        if (verif.length && X.puedeEditar()) {
-          var lv = X.dbP.batch();
-          verif.forEach(function (x) { lv.update(X.dbP.collection('facturas').doc(x.f._id), { verificacion: { cuando: X.servidor(), quien: S.usuario.email, archivo: archivo, periodo: periodo, como: x.como, nit: x.fila.nit, autorizacion: x.fila.aut } }); });
-          lv.commit().catch(function (e) { console.error('Verificación:', e); });
-        }
-        var a = cu.querySelector('#czApr');
-        if (a) a.addEventListener('click', function () { cerrar(); aprobarVarias(aprobables.map(function (x) { return x.f._id; }), true); });
-        var o = cu.querySelector('#czObs');
-        if (o) o.addEventListener('click', function () {
-          var lote = X.dbP.batch();
-          observables.forEach(function (x) { lote.update(X.dbP.collection('facturas').doc(x.f._id), { estado: 'observada', revisadoPor: S.usuario.email, revisado: X.servidor(), motivo: motivoCruce(x, periodo) }); });
-          lote.commit().then(function () { X.bitacora('Observó facturas por cruce', observables.length + ' facturas'); cerrar(); X.aviso(observables.length + ' facturas observadas'); }, function (e) { console.error(e); X.aviso('No se pudieron observar.'); });
-        });
-      });
-    return c;
   }
 })();

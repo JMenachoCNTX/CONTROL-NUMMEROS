@@ -53,7 +53,7 @@
     var semanas = (r.pendientes || []).map(function (p) {
       var f = fs[p.semana], ex = excepcionDe(r, p.semana), e;
       // Corte: solo entran a la planilla las facturas subidas hasta el último jueves 18:00 (las de CONTAX no tienen corte)
-      var tarde = f && f.origen !== 'contax' && f.subidoF && f.subidoF.getTime() > ultimoCorte();
+      var tarde = f && f.origen !== 'contax' && f.origen !== 'impuestos' && f.subidoF && f.subidoF.getTime() > ultimoCorte();
       if (f && f.estado === 'aprobada' && !tarde) e = f.origen === 'contax' ? 'contax' : 'lista';
       else if (ex) e = 'excepcion';
       else if (f && f.estado === 'aprobada') e = 'tarde';
