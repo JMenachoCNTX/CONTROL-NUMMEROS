@@ -401,7 +401,7 @@
       zona.querySelectorAll('[data-ord]').forEach(function (b) { b.addEventListener('click', function () { var k = b.getAttribute('data-ord'); if (E.orden === k) E.dir = -E.dir; else { E.orden = k; E.dir = 1; } E.pag = 0; tabla(); }); });
       zona.querySelectorAll('[data-abrir]').forEach(function (t) { t.addEventListener('click', function () { CTRL_abrir(t.getAttribute('data-abrir')); }); });
     }
-    filtros.querySelector('#cnBus').addEventListener('input', X.debounce(function (e) { E.buscar = filtros.querySelector('#cnBus').value; E.pag = 0; tabla(); }, 200));
+    filtros.querySelector('#cnBus').addEventListener('input', X.debounce(function (e) { E.buscar = filtros.querySelector('#cnBus').value; if (E.buscar) E.g = ''; E.pag = 0; tabla(); }, 200));
     filtros.querySelector('#cnRes').addEventListener('change', function (e) { E.res = e.target.value; if (E.res) E.g = ''; E.pag = 0; tabla(); });
     filtros.querySelector('#cnSem').addEventListener('change', function (e) { E.sem = e.target.value; E.pag = 0; tabla(); });
     tabla();
