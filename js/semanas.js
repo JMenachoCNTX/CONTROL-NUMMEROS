@@ -947,6 +947,53 @@
         });
       });
   }
+  /* Un pendiente que ya se pagó por fuera de la planilla: pasa a «pagado» y entra al historial, en un solo lote */
+  function marcarPagado(doc, f, verificada) {
+    if (!puedeCorregir()) { X.aviso('Solo un administrador puede corregir un pago.'); return; }
+    var x0 = (D.semanas || []).filter(function (s) { return s._id === doc; })[0];
+    if (!x0) { X.aviso('Ese pago ya no está en pendientes. Recarga la página.'); return; }
+    X.ventana('Marcar como pagado', resumenPago({ nombre: x0.nombre, id: x0.id, semana: x0.semana, importe: Number(x0.importe) || 0 }),
+      '<div class="fm"><div class="fila"><label for="mpFecha">Fecha del pago</label><input id="mpFecha" type="date" value="' + X.hoyISO() + '"></div></div>' +
+      '<label class="interruptor"><input type="checkbox" id="mpAvisar" checked>Avisar al repartidor «Recibiste tu pago»</label>' +
+      (verificada ? '' : '<div class="aviso-caja">' + ic('ayuda') + '<div><b>Este pago no tiene factura verificada</b>' + (f && f.numero ? 'La factura N.º ' + esc(f.numero) + ' aún no está verificada en el Excel de Impuestos.' : 'No tiene factura registrada.') + ' Márcalo solo si el pago ya se hizo.</div></div>') +
+      '<div class="aviso-caja">' + ic('ayuda') + '<div><b>Qué pasa</b>El pago sale de pendientes, entra al historial con esta fecha y el repartidor lo ve como pagado. No se envía nada al banco: úsalo solo para pagos ya realizados.</div></div>',
+      '<button class="btn sec" data-cerrar>Cancelar</button><button class="btn" data-ok>' + ic('check') + 'Marcar como pagado</button>',
+      function (v, cerrar) {
+        var ok = v.querySelector('[data-ok]');
+        ok.addEventListener('click', function () {
+          var fecha = v.querySelector('#mpFecha').value, avisar = v.querySelector('#mpAvisar').checked, quien = S.usuario.email, ref = col().doc(doc), destino = colH().doc(fecha + '_c'), uid = '', texto = '';
+          if (!fecha) { X.aviso('Elige la fecha del pago.'); return; }
+          ok.disabled = true; ok.innerHTML = X.anilloBoton() + 'Guardando';
+          Promise.all([ref.get(), destino.get()]).then(function (res) {
+            var x = res[0].exists ? res[0].data() : null;
+            if (!x || x.estado !== 'pendiente') throw new Error('Ese pago ya no está pendiente. Recarga la página.');
+            var d = res[1], ant = [], importe = X.redondear(Number(x.importe) || 0);
+            try { ant = d.exists ? JSON.parse(d.data().filas || '[]') : []; } catch (e) { throw new Error('No se pudo leer el historial de esa fecha.'); }
+            var todas = ant.concat([[String(x.semana || ''), x.rango || '', String(x.id), x.nombre || '', importe, x.ciudad || '', (f && f.numero) || '', (f && f.fechaEmision) || '', (f && f.nitEmisor) || '', (f && (f.autorizacion || f.cuf)) || '', '', '', x.anio || '']]);
+            uid = x.uid; texto = resumenPago({ nombre: x.nombre, id: x.id, semana: x.semana, importe: importe });
+            return escribir([
+              { tipo: 'update', ref: ref, datos: { estado: 'pagado', fechaPago: fecha, rebote: null, fueraDePlanilla: null, pagoManual: true, actualizado: X.servidor(), quien: quien } },
+              { ref: destino, merge: true, datos: { fecha: fecha, parte: 'c', origen: 'control', cantidad: todas.length, total: totalFilas(todas), filas: JSON.stringify(todas), actualizado: X.servidor(), quien: quien } }
+            ]);
+          }).then(function () {
+            return Promise.all([X.bitacora('Marcó pendiente como pagado', texto + ' · ' + X.fecha(fecha)),
+              avisar ? encolarNotif('Recibiste tu pago', 'Miltagor realizó tu pago del ' + X.fecha(fecha) + '. Revisa el detalle en tu historial.', [uid], 'historial') : null]);
+          }).then(function () {
+            cerrar(); X.aviso('El pago quedó como pagado.'); cargarHistorial(); X.recargarTodo();
+          }, function (e) { console.error(e); ok.disabled = false; ok.innerHTML = ic('check') + 'Marcar como pagado'; X.aviso(e.message || 'No se pudo guardar. No cambió nada.'); });
+        });
+      });
+  }
+  function botonPagado(s) {
+    if (!puedeCorregir() || !s.p._doc || s.p.estado !== 'Pendiente') return '';
+    return '<button class="btn sec chico" data-pend-pagado="' + esc(s.p._doc) + '" data-f-doc="' + esc((s.f && s.f._id) || '') + '" data-verif="' + (s.f && s.f.verificacion ? 1 : '') + '">' + ic('check') + 'Marcar pagado</button>';
+  }
+  document.addEventListener('click', function (ev) {
+    var b = ev.target.closest && ev.target.closest('[data-pend-pagado]'); if (!b) return;
+    ev.preventDefault(); ev.stopPropagation();
+    var k = b.getAttribute('data-f-doc'), f = k ? (D.facturas || []).filter(function (x) { return x._id === k; })[0] : null;
+    marcarPagado(b.getAttribute('data-pend-pagado'), f || null, !!b.getAttribute('data-verif'));
+  }, true);
   /* Botones de cada pago en el historial y en la ficha del repartidor */
   function accionesPago(h) {
     if (!puedeCorregir() || !h.fecha || !D.hist) return '';
@@ -1060,7 +1107,7 @@
   X.semanas = {
     completarNombres: completarNombres,
     modoControl: modoControl, cargar: cargar, aplicar: aplicar, cargarHistorial: cargarHistorial, aplicarHistorial: aplicarHistorial, agregarAlHistorial: agregarAlHistorial, importar: importar, verImportaciones: verImportaciones, verPorSemana: verPorSemana, migrar: migrar,
-    marcarEnPlanilla: marcarEnPlanilla, cambiarFecha: cambiarFecha, puedeCorregir: puedeCorregir, accionesPago: accionesPago, marcarFuera: marcarFuera, confirmarPago: confirmarPago, anularPlanilla: anularPlanilla, porConfirmar: porConfirmar, reporte: reporte,
+    marcarEnPlanilla: marcarEnPlanilla, cambiarFecha: cambiarFecha, puedeCorregir: puedeCorregir, accionesPago: accionesPago, botonPagado: botonPagado, marcarFuera: marcarFuera, confirmarPago: confirmarPago, anularPlanilla: anularPlanilla, porConfirmar: porConfirmar, reporte: reporte,
     // piezas que usa js/banco.js
     leerLibro: leerLibro, escribir: escribir, encolarNotif: encolarNotif, CIUDADES: CIUDADES, fechaISO: fechaISO,
     // lógica pura (para pruebas)

@@ -717,7 +717,8 @@
           { t: 'Semana', html: function (s) { return '<b class="num">' + esc(s.p.semana) + '</b><span class="sub">' + esc(s.p.rango || '') + '</span>'; } },
           { t: X.semanas && X.semanas.modoControl() ? 'Estado' : 'Estado en Sheets', html: function (s) { return esc(s.p.estado || ''); } },
           { t: 'Factura', html: function (s) { return chipSemana(s.estado) + (s.f && s.f.numero ? '<span class="sub">N.º ' + esc(s.f.numero) + '</span>' : '') + (s.ex ? '<span class="sub">' + esc(s.ex.motivo || '') + '</span>' : ''); } },
-          { t: 'Importe', clase: 'monto', html: function (s) { return bs(s.p.importe); } }
+          { t: 'Importe', clase: 'monto', html: function (s) { return bs(s.p.importe); } },
+          { t: '', html: function (s) { return X.semanas ? X.semanas.botonPagado(s) : ''; } }
         ], e.semanas, { tam: 100 }) : X.vacio('Sin pagos pendientes')) + '</div>' +
       '<div class="card mb"><div class="h2">Facturas subidas <small>' + facts.length + '</small></div>' +
         (facts.length ? X.tabla([
