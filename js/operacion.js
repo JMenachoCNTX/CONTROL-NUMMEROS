@@ -180,17 +180,17 @@
       return portada +
         '<div class="rejilla r4 mb">' +
           '<button class="kpi" data-ir="repartidores"><small>Repartidores</small><b class="num">' + entero(l.length) + '</b><em>' + entero(noHab) + ' no habilitados · ' + entero(sinPol) + ' sin póliza</em></button>' +
-          '<button class="kpi" data-ir="pagos"><small>Por pagar</small><b class="num">' + bs(totPend) + '</b><em>' + entero(conPend.length) + ' repartidores con pendientes</em></button>' +
-          '<button class="kpi" data-ir="pagos"><small>Listos para pagar</small><b class="num">' + bs(totListos) + '</b><em>' + entero(listos.length) + ' con todas sus facturas bien</em></button>' +
-          '<button class="kpi' + (porRevisar ? ' alerta' : '') + '" data-ir="facturas"><small>Facturas por revisar</small><b class="num">' + entero(porRevisar) + '</b><em>' + entero(observadas) + ' observadas esperando corrección</em></button>' +
+          '<button class="kpi" data-ir="pagos" data-pf="todos"><small>Por pagar</small><b class="num">' + bs(totPend) + '</b><em>' + entero(conPend.length) + ' repartidores con pendientes</em></button>' +
+          '<button class="kpi" data-ir="pagos" data-pf="listos"><small>Listos para pagar</small><b class="num">' + bs(totListos) + '</b><em>' + entero(listos.length) + ' con todas sus facturas bien</em></button>' +
+          '<button class="kpi' + (porRevisar ? ' alerta' : '') + '" data-ir="facturas" data-ft="recibida"><small>Facturas por revisar</small><b class="num">' + entero(porRevisar) + '</b><em>' + entero(observadas) + ' observadas esperando corrección</em></button>' +
         '</div>' +
         '<div class="rejilla r2 mb">' +
           '<div class="card"><div class="h2">Próximo corte <small>jueves 18:00</small></div><div class="corte">' +
             '<img class="relieve" src="marca/graficos/rel-vencimientos-' + (S.oscuro ? 'oscuro' : 'claro') + '.png" alt="">' +
             '<div><div class="reloj" id="relojCorte">' + esc(k.texto) + '</div><div class="muted">Cierra el ' + esc(k.dia) + ' a las 18:00. Lo que llegue después entra al pago siguiente.</div></div></div></div>' +
           '<div class="card"><div class="h2">Para hoy</div><ul class="lista-tareas">' +
-            '<li>' + ic('factura') + '<span>Facturas subidas por revisar</span><b>' + entero(porRevisar) + '</b><button class="btn sec chico" data-ir="facturas">Revisar</button></li>' +
-            '<li>' + ic('cliente') + '<span>Semanas de clientes CONTAX por emitir</span><b>' + entero(porEmitir) + '</b><button class="btn sec chico" data-ir="pagos">Ver</button></li>' +
+            '<li>' + ic('factura') + '<span>Facturas subidas por revisar</span><b>' + entero(porRevisar) + '</b><button class="btn sec chico" data-ir="facturas" data-ft="recibida">Revisar</button></li>' +
+            '<li>' + ic('cliente') + '<span>Semanas de clientes CONTAX por emitir</span><b>' + entero(porEmitir) + '</b><button class="btn sec chico" data-ir="pagos" data-pf="contax">Ver</button></li>' +
             '<li>' + ic('tramites') + '<span>Trámites abiertos</span><b>' + entero(tram) + '</b><button class="btn sec chico" data-ir="tramites">Ver</button></li>' +
           '</ul></div>' +
         '</div>' +
@@ -200,6 +200,9 @@
         '</div>';
     },
     despues: function (el) {
+      // Desde el Tablero se llega a la lista ya filtrada
+      el.querySelectorAll('[data-pf]').forEach(function (b) { b.addEventListener('click', function () { P.filtro = b.getAttribute('data-pf'); P.pag = 0; }); });
+      el.querySelectorAll('[data-ft]').forEach(function (b) { b.addEventListener('click', function () { X.tabFacturas(b.getAttribute('data-ft')); }); });
       var t = setInterval(function () { var r = document.getElementById('relojCorte'); if (!r) return clearInterval(t); r.textContent = corte().texto; }, 30000);
       if (!D.repartidores || !S.portalUsuario) return;
       var l = lista(), pag = {}, pen = {};
@@ -220,7 +223,12 @@
   });
 
   /* ══════════ PAGOS ══════════ */
-  var P = { filtro: 'todos', semana: '', ciudad: '', buscar: '', pag: 0 };
+  var P = { filtro: 'todos', semana: '', ciudad: '', cliente: '', buscar: '', pag: 0 };
+  /* Cada pago cae en un solo grupo: así los cuadritos suman el total */
+  function grupoPago(s) {
+    var f = s.f, malo = f && (f.estado === 'observada' || f.estado === 'rechazada');
+    return !f ? (s.ex ? 'exc' : 'falta') : malo ? 'obs' : f.verificacion ? 'ver' : 'pre';
+  }
   X.pagina('pagos', {
     t: 'Pagos pendientes', i: 'pagos', orden: 3, sec: 'Operación',
     render: function () {
@@ -248,21 +256,19 @@
       var cuenta = function (k) { return { todos: nSem(ev), listos: nSem(listos), retenidos: nSem(ret), contax: nSem(ev.filter(function (e) { return e.cliente; })), revision: ev.reduce(function (n, e) { return n + e.semanas.filter(function (s) { return s.estado === 'revision'; }).length; }, 0) }[k]; };
       // Cada pago necesita su factura: Pagos = Verificadas + Pre-aprobadas + Observadas + Faltan (+ excepciones). Solo cuenta como verificada la cruzada con Impuestos.
       var pg = { ver: 0, pre: 0, obs: 0, falta: 0, exc: 0 };
-      ev.forEach(function (e) { e.semanas.forEach(function (s) {
-        var f = s.f, malo = f && (f.estado === 'observada' || f.estado === 'rechazada');
-        pg[!f ? (s.ex ? 'exc' : 'falta') : malo ? 'obs' : f.verificacion ? 'ver' : 'pre']++;
-      }); });
+      ev.forEach(function (e) { e.semanas.forEach(function (s) { pg[grupoPago(s)]++; }); });
+      var kpiP = function (k, cl) { return 'class="kpi' + (cl || '') + (P.filtro === k ? ' activo' : '') + '" data-filtro="' + k + '"'; };
       return cab +
         '<div class="rejilla r4 mb">' +
-          '<div class="kpi"><small>Pagos pendientes</small><b class="num">' + entero(nSem(ev)) + '</b><em>una factura por cada pago' + (pg.exc ? ' · ' + entero(pg.exc) + ' por excepción' : '') + '</em></div>' +
-          '<div class="kpi"><small>Con factura verificada</small><b class="num">' + entero(pg.ver) + '</b><em>cruzadas con el Excel de Impuestos</em></div>' +
-          '<div class="kpi"><small>Pre-aprobadas</small><b class="num">' + entero(pg.pre) + '</b><em>tienen factura, falta el Excel de Impuestos</em></div>' +
-          '<div class="kpi alerta"><small>Faltan emitir</small><b class="num">' + entero(pg.falta) + '</b><em>' + (pg.obs ? entero(pg.obs) + ' más con factura observada' : 'pagos sin factura') + '</em></div>' +
+          '<button ' + kpiP('todos') + '><small>Pagos pendientes</small><b class="num">' + entero(nSem(ev)) + '</b><em>una factura por cada pago' + (pg.exc ? ' · ' + entero(pg.exc) + ' por excepción' : '') + '</em></button>' +
+          '<button ' + kpiP('ver') + '><small>Con factura verificada</small><b class="num">' + entero(pg.ver) + '</b><em>cruzadas con el Excel de Impuestos</em></button>' +
+          '<button ' + kpiP('pre') + '><small>Pre-aprobadas</small><b class="num">' + entero(pg.pre) + '</b><em>tienen factura, falta el Excel de Impuestos</em></button>' +
+          '<button ' + kpiP('falta', ' alerta') + '><small>Faltan emitir</small><b class="num">' + entero(pg.falta) + '</b><em>' + (pg.obs ? entero(pg.obs) + ' más con factura observada' : 'pagos sin factura') + '</em></button>' +
         '</div>' +
         '<div class="rejilla r4 mb">' +
-          '<div class="kpi"><small>Total pendiente</small><b class="num">' + bs(tot(ev, 'total')) + '</b><em>' + entero(nSem(ev)) + ' pagos · ' + entero(ev.length) + ' repartidores</em></div>' +
-          '<div class="kpi"><small>Listos para pagar</small><b class="num">' + bs(tot(listos, 'totalPagar')) + '</b><em>' + entero(nSem(listos)) + ' pagos · ' + entero(listos.length) + ' repartidores</em></div>' +
-          '<div class="kpi alerta"><small>Retenidos</small><b class="num">' + bs(tot(ret, 'total')) + '</b><em>' + entero(nSem(ret)) + ' pagos · ' + entero(ret.length) + ' repartidores</em></div>' +
+          '<button ' + kpiP('todos') + '><small>Total pendiente</small><b class="num">' + bs(tot(ev, 'total')) + '</b><em>' + entero(nSem(ev)) + ' pagos · ' + entero(ev.length) + ' repartidores</em></button>' +
+          '<button ' + kpiP('listos') + '><small>Listos para pagar</small><b class="num">' + bs(tot(listos, 'totalPagar')) + '</b><em>' + entero(nSem(listos)) + ' pagos · ' + entero(listos.length) + ' repartidores</em></button>' +
+          '<button ' + kpiP('retenidos', ' alerta') + '><small>Retenidos</small><b class="num">' + bs(tot(ret, 'total')) + '</b><em>' + entero(nSem(ret)) + ' pagos · ' + entero(ret.length) + ' repartidores</em></button>' +
           '<div class="kpi"><small>Corte</small><b class="num">' + esc(corte().texto) + '</b><em>' + esc(corte().dia) + ' · 18:00</em></div>' +
         '</div>' +
         '<div class="card"><div class="pestanas" role="tablist">' + [['todos', 'Todos'], ['listos', 'Listos'], ['retenidos', 'Retenidos'], ['revision', 'En revisión'], ['contax', 'Clientes CONTAX']].map(function (p) {
@@ -270,7 +276,8 @@
         }).join('') + '</div>' +
         '<div class="herr"><div class="buscar">' + ic('buscar') +  '<input type="search" id="bPagos" placeholder="Buscar por nombre, ID, celular, NIT, razón social o autorización" value="' + esc(P.buscar) + '"></div>' +
           '<select id="sSemana" aria-label="Semana"><option value="">Todas las semanas</option>' + semLista.map(function (s) { return '<option' + (s === P.semana ? ' selected' : '') + '>' + esc(s) + '</option>'; }).join('') + '</select>' +
-          '<select id="sCiudad" aria-label="Ciudad"><option value="">Todas las ciudades</option>' + ['SCZ', 'CBBA', 'LPZ'].map(function (c) { return '<option value="' + c + '"' + (c === P.ciudad ? ' selected' : '') + '>' + esc(X.semanas.CIUDADES[c]) + '</option>'; }).join('') + '<option value="sin"' + (P.ciudad === 'sin' ? ' selected' : '') + '>Sin ciudad</option></select></div>' +
+          '<select id="sCiudad" aria-label="Ciudad"><option value="">Todas las ciudades</option>' + ['SCZ', 'CBBA', 'LPZ'].map(function (c) { return '<option value="' + c + '"' + (c === P.ciudad ? ' selected' : '') + '>' + esc(X.semanas.CIUDADES[c]) + '</option>'; }).join('') + '<option value="sin"' + (P.ciudad === 'sin' ? ' selected' : '') + '>Sin ciudad</option></select>' +
+          '<select id="sCliente" aria-label="Clientes"><option value="">Clientes y no clientes</option><option value="si"' + (P.cliente === 'si' ? ' selected' : '') + '>Clientes CONTAX</option><option value="no"' + (P.cliente === 'no' ? ' selected' : '') + '>No clientes</option></select></div>' +
         (f.length ? X.tabla([
           { t: 'Repartidor', html: function (e) { return '<b>' + esc(e.r.nombre || 'Sin nombre') + '</b><span class="sub num">ID ' + esc(e.r.id) + (e.cliente ? ' · ' : '') + '</span>' + (e.cliente ? X.chip('contax', 'Cliente CONTAX') : '') + (e.r.nombreSistema ? '<span class="sub">' + X.chip('neutro', 'Nombre colocado por el sistema') + '</span>' : ''); } },
           { t: 'Semanas', html: function (e) { return e.semanas.map(function (s) { return '<div style="margin:2px 0"><span class="num">' + esc(semanaCorta(s.p.semana)) + '</span> ' + chipSemana(s.estado) + (s.p.rebote ? ' ' + X.chip('mal', 'Rebotó en el banco') : '') + '</div>'; }).join(''); } },
@@ -287,9 +294,10 @@
     },
     despues: function (el) {
       var ev = D.repartidores ? lista().map(evaluar).filter(function (e) { return e.semanas.length; }) : [];
-      el.querySelectorAll('[data-filtro]').forEach(function (b) { b.addEventListener('click', function () { P.filtro = b.getAttribute('data-filtro'); P.pag = 0; X.refrescar(); }); });
+      el.querySelectorAll('[data-filtro]').forEach(function (b) { b.addEventListener('click', function () { P.filtro = b.getAttribute('data-filtro'); P.pag = 0; X.refrescar(); if (b.classList.contains('kpi')) X.verTabla(); }); });
       var bq = el.querySelector('#bPagos'); if (bq) bq.addEventListener('input', debounce(function () { P.buscar = bq.value; P.pag = 0; X.refrescar(); setFoco('#bPagos'); }, 300));
       var ss = el.querySelector('#sSemana'); if (ss) ss.addEventListener('change', function () { P.semana = ss.value; P.pag = 0; X.refrescar(); });
+      var sl = el.querySelector('#sCliente'); if (sl) sl.addEventListener('change', function () { P.cliente = sl.value; P.pag = 0; X.refrescar(); });
       var sc = el.querySelector('#sCiudad'); if (sc) sc.addEventListener('change', function () { P.ciudad = sc.value; P.pag = 0; X.refrescar(); });
       el.querySelectorAll('[data-pag]').forEach(function (b) { b.addEventListener('click', function () { P.pag = Number(b.getAttribute('data-pag')); X.refrescar(); }); });
       el.querySelectorAll('tr[data-fila]').forEach(function (tr) {
@@ -313,6 +321,8 @@
   function filtrarPagos(ev) {
     return ev.filter(function (e) {
       if (P.semana && !e.semanas.some(function (s) { return s.p.semana === P.semana; })) return false;
+      if (P.filtro === 'ver' || P.filtro === 'pre' || P.filtro === 'falta') { if (!e.semanas.some(function (s) { return grupoPago(s) === P.filtro; })) return false; }
+      if (P.cliente && !!e.cliente !== (P.cliente === 'si')) return false;
       if (P.ciudad && !e.semanas.some(function (s) { return (ciudadDe(e.r, s.p) || 'sin') === P.ciudad; })) return false;
       if (P.filtro === 'listos' && !e.listo) return false;
       if (P.filtro === 'retenidos' && e.listo) return false;

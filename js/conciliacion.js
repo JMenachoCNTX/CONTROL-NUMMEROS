@@ -417,10 +417,10 @@
     cu.innerHTML = '<div class="aviso-caja mb">' + ic('ayuda') + '<div><b>' + entero(r.filasExcel) + ' en el Excel · ' + entero(r.repartidores) + ' de repartidores · ' + entero(r.otros) + ' de otros · ' + entero(r.anuladas) + ' anuladas</b>' + (r.deMas ? entero(r.deMas) + ' facturas duplicadas o emitidas de más: el pago ya tiene otra factura. ' : '') + +
         'De ' + entero(r.pagos) + ' pagos que deben factura, quedan ' + entero(r.quedan) + ' por emitir o verificar.' + (vivo && verif.length ? ' <b>Las facturas todavía no cambiaron: toca «Registrar» antes de cerrar.</b>' : '') + '</div></div>' +
       '<div class="rejilla r4 mb">' +
-        '<div class="kpi"><small>Coinciden</small><b class="num">' + entero(r.coinciden) + '</b><em>facturas que cubren un pago</em></div>' +
-        '<div class="kpi' + (r.noCuadran ? ' alerta' : '') + '"><small>Algo no cuadra</small><b class="num">' + entero(r.noCuadran) + '</b><em>son de repartidores, para revisar</em></div>' +
-        '<div class="kpi' + (r.posibleFraude ? ' alerta' : '') + '"><small>Posible fraude</small><b class="num">' + entero(r.posibleFraude) + '</b><em>en el Portal, no en el Excel de sus fechas</em></div>' +
-        '<div class="kpi"><small>Quedan por emitir</small><b class="num">' + entero(r.quedan) + '</b><em>' + entero(r.esperan) + ' facturas esperan el Excel de sus fechas</em></div>' +
+        '<button class="kpi" data-kc="ok"><small>Coinciden</small><b class="num">' + entero(r.coinciden) + '</b><em>facturas que cubren un pago</em></button>' +
+        '<button class="kpi' + (r.noCuadran ? ' alerta' : '') + '" data-kc="mal"><small>Algo no cuadra</small><b class="num">' + entero(r.noCuadran) + '</b><em>son de repartidores, para revisar</em></button>' +
+        '<button class="kpi' + (r.posibleFraude ? ' alerta' : '') + '" data-kc="noEsta"><small>Posible fraude</small><b class="num">' + entero(r.posibleFraude) + '</b><em>en el Portal, no en el Excel de sus fechas</em></button>' +
+        '<button class="kpi" data-kc="portal"><small>Quedan por emitir</small><b class="num">' + entero(r.quedan) + '</b><em>' + entero(r.esperan) + ' facturas esperan el Excel de sus fechas</em></button>' +
       '</div>' +
       (r.contaxFaltan ? '<div class="aviso-caja mb">' + ic('ayuda') + '<div><b>' + entero(r.contaxFaltan) + ' marcadas como emitidas por CONTAX no están en este Excel</b>Puede faltar confirmarlas en Impuestos. No se cambian solas.</div></div>' : '') +
       (aprobadasMal ? '<div class="aviso-caja error mb">' + ic('excepcion') + '<div><b>' + aprobadasMal + ' facturas ya aprobadas tienen un problema</b>Revísalas una por una. No se cambian solas.</div></div>' : '') +
@@ -498,6 +498,15 @@
     filtros.querySelector('#cnSem').addEventListener('change', function (e) { E.sem = e.target.value; E.pag = 0; tabla(); });
     marcar();
     tabla();
+    cu.querySelectorAll('[data-kc]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var k = b.getAttribute('data-kc'), res = RES[k] ? k : '';
+        E.g = res ? '' : k; E.res = res; E.pag = 0;
+        filtros.querySelector('#cnRes').value = res;
+        cu.querySelectorAll('[data-kc]').forEach(function (o) { o.classList.toggle('activo', o === b); });
+        tabla(); zona.scrollIntoView({ block: 'start' });
+      });
+    });
     cu.querySelector('#cnExc').addEventListener('click', function () { exportar(c, visibles()); });
     var bv = cu.querySelector('#cnVer');
     if (bv) bv.addEventListener('click', function () {

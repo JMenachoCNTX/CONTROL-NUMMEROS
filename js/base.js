@@ -315,6 +315,8 @@
     });
   }
   /* Botones de copiar, WhatsApp, etc. en cualquier bloque */
+  /* Al tocar un cuadrito: lleva a la lista ya filtrada */
+  function verTabla() { setTimeout(function () { var e = document.querySelector('#pagina .pestanas'); if (e) e.scrollIntoView({ block: 'start' }); }, 60); }
   function activarComunes(el) {
     el.querySelectorAll('[data-copiar]').forEach(function (b) {
       b.addEventListener('click', function (e) { e.stopPropagation(); copiar(b.getAttribute('data-copiar')); });
@@ -903,7 +905,7 @@
     hoyISO: hoyISO, normal: normal, idSeguro: idSeguro, nuevoId: nuevoId, telVisible: telVisible, wa: wa, aviso: aviso, copiar: copiar,
     servidor: servidor, puedeEditar: puedeEditar, esAdmin: esAdmin, esDueno: esDueno, ic: ic,
     cargaN: cargaN, cargaCifras: cargaCifras, cargaBarra: cargaBarra, anillo: anillo, anilloBoton: anilloBoton, esqueleto: esqueleto, clasicos: clasicos, textoClasicos: textoClasicos,
-    cajon: cajon, ventana: ventana, confirmar: confirmar, formulario: formulario, activarComunes: activarComunes,
+    verTabla: verTabla, cajon: cajon, ventana: ventana, confirmar: confirmar, formulario: formulario, activarComunes: activarComunes,
     csv: csv, excel: excel, cargarXLSX: cargarXLSX, bajarArchivo: bajarArchivo, bitacora: bitacora, puente: puente,
     titulo: titulo, vacio: vacio, chip: chip, tabla: tabla, grafico: grafico, barraSvg: barraSvg, colores: colores, clienteDe: clienteDe
   };

@@ -532,15 +532,17 @@
         if (BY.ciudad && x.ciudad !== BY.ciudad) return false;
         if (BY.filtro === 'activos' && !(/ACTIV/.test(X.normal(x.estadoYango)) && !/DESACTIV/.test(X.normal(x.estadoYango)))) return false;
         if (BY.filtro === 'sinbanco' && x.cuenta) return false;
+        if (BY.filtro === 'concuenta' && !x.cuenta) return false;
         if (BY.filtro === 'sincodigo' && !(x.cuenta && x.desconocido)) return false;
         return !bq || (X.normal(x.nombre) + ' ' + x.id + ' ' + (x.ci || '') + ' ' + (x.telefono || '') + ' ' + (x.cuenta || '') + ' ' + (x.nit || '')).indexOf(bq) >= 0 || X.buscaRepartidor(x.id, bq);
       }).sort(function (a, z) { return X.normal(a.nombre).localeCompare(X.normal(z.nombre)); });
       BY.lista = l;
+      var kpiB = function (k) { return 'class="kpi' + (BY.filtro === k ? ' activo' : '') + '" data-fby="' + k + '"'; };
       return cab + '<div class="rejilla r4 mb">' +
-          '<div class="kpi"><small>Repartidores</small><b class="num">' + entero(cuenta.todos) + '</b><em>' + entero(cuenta.activos) + ' activados</em></div>' +
-          '<div class="kpi"><small>Con cuenta bancaria</small><b class="num">' + entero(conCta.length) + '</b><em>' + entero(conCta.filter(function (x) { return Number(x.forma) === 1; }).length) + ' Banco Ganadero</em></div>' +
-          '<div class="kpi"><small>Sin banco o cuenta</small><b class="num">' + entero(cuenta.sinbanco) + '</b><em>no entran a la planilla</em></div>' +
-          '<div class="kpi"><small>Banco no reconocido</small><b class="num">' + entero(cuenta.sincodigo) + '</b><em>' + esc(Object.keys(B.desconocidos || {}).slice(0, 3).join(', ')) + '</em></div>' +
+          '<button ' + kpiB('todos') + '><small>Repartidores</small><b class="num">' + entero(cuenta.todos) + '</b><em>' + entero(cuenta.activos) + ' activados</em></button>' +
+          '<button ' + kpiB('concuenta') + '><small>Con cuenta bancaria</small><b class="num">' + entero(conCta.length) + '</b><em>' + entero(conCta.filter(function (x) { return Number(x.forma) === 1; }).length) + ' Banco Ganadero</em></button>' +
+          '<button ' + kpiB('sinbanco') + '><small>Sin banco o cuenta</small><b class="num">' + entero(cuenta.sinbanco) + '</b><em>no entran a la planilla</em></button>' +
+          '<button ' + kpiB('sincodigo') + '><small>Banco no reconocido</small><b class="num">' + entero(cuenta.sincodigo) + '</b><em>' + esc(Object.keys(B.desconocidos || {}).slice(0, 3).join(', ')) + '</em></button>' +
         '</div><div class="card"><div class="pestanas" role="tablist">' + [['todos', 'Todos'], ['activos', 'Activados'], ['sinbanco', 'Sin datos bancarios'], ['sincodigo', 'Banco no reconocido']].map(function (p) {
           return '<button role="tab" aria-selected="' + (BY.filtro === p[0]) + '" data-fby="' + p[0] + '">' + p[1] + ' <em class="num">' + entero(cuenta[p[0]]) + '</em></button>';
         }).join('') + '</div>' +
@@ -561,7 +563,7 @@
       var ba = el.querySelector('#byAvisar'); if (ba) ba.addEventListener('click', avisarSemana);
       var bpd = el.querySelector('#byPadron'); if (bpd) bpd.addEventListener('click', function () { X.padron.ver(); });
       var bx = el.querySelector('#byExc'); if (bx) bx.addEventListener('click', function () {
-        var nom = { todos: 'Todos', activos: 'Activados', sinbanco: 'Sin datos bancarios', sincodigo: 'Banco no reconocido' }[BY.filtro] + (BY.ciudad ? ' ' + BY.ciudad : '');
+        var nom = { todos: 'Todos', activos: 'Activados', concuenta: 'Con cuenta bancaria', sinbanco: 'Sin datos bancarios', sincodigo: 'Banco no reconocido' }[BY.filtro] + (BY.ciudad ? ' ' + BY.ciudad : '');
         X.excel([{ nombre: nom.slice(0, 30), filas: [['ID Yango', 'Nombre', 'Ciudad', 'Estado', 'Fecha de registro', 'CI', 'NIT', 'Teléfono', 'Telegram', 'Correo', 'Banco (como figura en BDYango)', 'Cuenta', 'Banco para la planilla', 'Código', 'Observación']]
           .concat((BY.lista || []).map(function (x) {
             var obs = !x.cuenta ? 'Sin datos bancarios' : x.desconocido ? 'Banco no reconocido' : '';
@@ -569,7 +571,7 @@
               x.bancoTexto || '', x.cuenta || '', x.cuenta && !x.desconocido ? nombreBanco(x) : '', x.cuenta && !x.desconocido ? (Number(x.forma) === 1 ? 'Ganadero' : x.entidad) : '', obs];
           })) }], 'BDYango-' + nom.replace(/\s+/g, '-') + '-' + X.hoyISO());
       });
-      el.querySelectorAll('[data-fby]').forEach(function (b) { b.addEventListener('click', function () { BY.filtro = b.getAttribute('data-fby'); BY.pag = 0; X.refrescar(); }); });
+      el.querySelectorAll('[data-fby]').forEach(function (b) { b.addEventListener('click', function () { BY.filtro = b.getAttribute('data-fby'); BY.pag = 0; X.refrescar(); if (b.classList.contains('kpi')) X.verTabla(); }); });
       var sc = el.querySelector('#sByCiudad'); if (sc) sc.addEventListener('change', function () { BY.ciudad = sc.value; BY.pag = 0; X.refrescar(); });
       var bq = el.querySelector('#bBy'); if (bq) bq.addEventListener('input', X.debounce(function () { BY.buscar = bq.value; BY.pag = 0; X.refrescar(); X.setFoco('#bBy'); }, 300));
       el.querySelectorAll('[data-pag]').forEach(function (b) { b.addEventListener('click', function () { BY.pag = Number(b.getAttribute('data-pag')); X.refrescar(); }); });

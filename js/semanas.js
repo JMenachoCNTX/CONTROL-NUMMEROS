@@ -551,10 +551,10 @@
           '<select id="psCiu" aria-label="Ciudad"><option value="">Todas las ciudades</option>' + Object.keys(CIUDADES).map(function (x) { return '<option value="' + x + '"' + (x === PS.ciudad ? ' selected' : '') + '>' + CIUDADES[x] + '</option>'; }).join('') + '</select>' +
           '<button class="btn sec" id="psExcel"' + (filas.length ? '' : ' disabled') + '>' + ic('descargar') + 'Excel</button></div>' +
         '<div class="rejilla r4 mb">' +
-          '<div class="kpi"><small>Planilla completa</small><b class="num">' + bs(k.todos.t) + '</b><em>' + entero(k.todos.n) + ' repartidores</em></div>' +
-          '<div class="kpi"><small>Pagados</small><b class="num">' + bs(k.pagado.t) + '</b><em>' + entero(k.pagado.n) + ' repartidores</em></div>' +
-          '<div class="kpi alerta"><small>Falta pagar</small><b class="num">' + bs(k.pendiente.t) + '</b><em>' + entero(k.pendiente.n) + ' repartidores</em></div>' +
-          '<div class="kpi"><small>No habilitados (Bs 0)</small><b class="num">' + entero(k.nohab.n) + '</b><em>no cumplieron las horas</em></div>' +
+          '<button class="kpi' + (PS.estado === '' ? ' activo' : '') + '" data-ps=""><small>Planilla completa</small><b class="num">' + bs(k.todos.t) + '</b><em>' + entero(k.todos.n) + ' repartidores</em></button>' +
+          '<button class="kpi' + (PS.estado === 'Pagado' ? ' activo' : '') + '" data-ps="Pagado"><small>Pagados</small><b class="num">' + bs(k.pagado.t) + '</b><em>' + entero(k.pagado.n) + ' repartidores</em></button>' +
+          '<button class="kpi alerta' + (PS.estado === 'pendiente' ? ' activo' : '') + '" data-ps="pendiente"><small>Falta pagar</small><b class="num">' + bs(k.pendiente.t) + '</b><em>' + entero(k.pendiente.n) + ' repartidores</em></button>' +
+          '<button class="kpi' + (PS.estado === 'No habilitado' ? ' activo' : '') + '" data-ps="No habilitado"><small>No habilitados (Bs 0)</small><b class="num">' + entero(k.nohab.n) + '</b><em>no cumplieron las horas</em></button>' +
         '</div>' + resumenCiudades() +
         '<div class="pestanas">' + [['', 'Todos', 'todos'], ['Pagado', 'Pagados', 'pagado'], ['pendiente', 'Falta pagar', 'pendiente'], ['No habilitado', 'No habilitados', 'nohab']].map(function (p) {
           return '<button aria-selected="' + (PS.estado === p[0]) + '" data-ps="' + esc(p[0]) + '">' + p[1] + ' <em class="num">' + entero(k[p[2]].n) + '</em></button>';

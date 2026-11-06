@@ -120,17 +120,17 @@
       return true;
     });
   }
-  function lfCuadro(t, l) {
+  function lfCuadro(t, l, k) {
     var falta = l.filter(function (x) { return !x.tiene; }), con = l.length - falta.length;
     var suma = X.redondear(falta.reduce(function (s, x) { return s + x.importe; }, 0));
-    return '<div class="kpi"><small>' + t + '</small><b class="num">' + entero(falta.length) + ' ❌</b><em>' + bs(suma) + ' sin factura · ' + entero(con) + ' ✅ con factura</em></div>';
+    return '<button class="kpi' + (LF.contador === k ? ' activo' : '') + '" data-lfk="' + k + '"><small>' + t + '</small><b class="num">' + entero(falta.length) + ' ❌</b><em>' + bs(suma) + ' sin factura · ' + entero(con) + ' ✅ con factura</em></button>';
   }
   function lfHTML() {
     var todas = listaFacturacion(), f = lfFiltradas(todas);
     var ext = todas.filter(function (x) { return x.contador === 'OTRO'; }), ctx = todas.filter(function (x) { return x.contador === 'CONTAX'; });
     var corto = function (v) { v = String(v || ''); return v.length > 14 ? v.slice(0, 6) + '…' + v.slice(-6) : v; };
     var nf = function (x, k) { return x.f && x.f[k] ? esc(x.f[k]) : '<span class="muted">❌</span>'; };
-    return '<div class="rejilla r3 mb">' + lfCuadro('General', todas) + lfCuadro('Externos (otro contador)', ext) + lfCuadro('CONTAX', ctx) + '</div>' +
+    return '<div class="rejilla r3 mb">' + lfCuadro('General', todas, '') + lfCuadro('Externos (otro contador)', ext, 'OTRO') + lfCuadro('CONTAX', ctx, 'CONTAX') + '</div>' +
       (D.panelClientes && D.panelClientes.error ? '<div class="aviso-caja mb">' + ic('ayuda') + '<div>' + esc(D.panelClientes.error) + ' Sin eso no se sabe quién es cliente CONTAX.</div></div>' : '') +
       '<div class="herr"><div class="buscar">' + ic('buscar') + '<input type="search" id="bLf" placeholder="Buscar por nombre, ID, celular, NIT, razón social, autorización o semana" value="' + esc(LF.buscar) + '"></div>' +
         '<select id="sLfVista"><option value="faltan"' + (LF.vista === 'faltan' ? ' selected' : '') + '>Sin factura</option><option value="con"' + (LF.vista === 'con' ? ' selected' : '') + '>Con factura</option><option value=""' + (!LF.vista ? ' selected' : '') + '>Todas</option></select>' +
@@ -158,6 +158,7 @@
   }
   function lfDespues(el) {
     var f = lfFiltradas(listaFacturacion());
+    el.querySelectorAll('[data-lfk]').forEach(function (b) { b.addEventListener('click', function () { LF.contador = b.getAttribute('data-lfk'); LF.vista = 'faltan'; LF.pag = 0; X.refrescar(); X.verTabla(); }); });
     var bq = el.querySelector('#bLf'); if (bq) bq.addEventListener('input', X.debounce(function () { LF.buscar = bq.value; LF.pag = 0; X.refrescar(); X.setFoco('#bLf'); }, 300));
     [['#sLfVista', 'vista'], ['#sLfCont', 'contador'], ['#sLfTipo', 'tipo']].forEach(function (s) {
       var x = el.querySelector(s[0]); if (x) x.addEventListener('change', function () { LF[s[1]] = x.value; LF.pag = 0; X.refrescar(); });
@@ -346,6 +347,7 @@
     });
   }
   function falla(b) { return function (e) { console.error(e); b.disabled = false; X.aviso('No se pudo guardar. Revisa tus permisos.'); X.refrescar(); }; }
+  X.tabFacturas = function (t) { F.tab = t; F.pag = 0; F.sel = {}; };
   CTRL.abrirFactura = abrirFactura; X.abrirFactura = abrirFactura;
 
   /* ── Registrar una factura emitida por CONTAX ── */
