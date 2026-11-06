@@ -76,7 +76,7 @@
     res.forEach(function (r) {
       var f = r.fid ? facturas[r.fid] : null, clase = claseDe(r, f), h = ix.aut[clave(r.aut)], s = semanaDe(r, f) || (h ? h.semana : '');
       if (clase === RIDER) { var k = (r.id || (h && h.id)) + '|' + X.ordenSemana(s); usados[k] = 1; }
-      salida[r._i] = { d: raw[r._i], c: clase, i: String(r.id || (h && h.id) || ''), n: r.nombre || (h && h.nombre) || '', s: s, k: r.contador || '', o: r.r === 'coincide' || r.r === 'otros' ? '' : (r.r === 'anulada' ? 'Anulada' : String(r.det || '').slice(0, 160)) };
+      salida[r._i] = { d: raw[r._i], c: clase, i: String(r.id || (h && h.id) || ''), n: r.nombre || (h && h.nombre) || '', s: s, k: r.contador || '', o: clase === RIDER || clase === OTRAS ? '' : (r.r === 'anulada' ? 'Anulada' : String(r.det || '').slice(0, 160)) };
     });
     // Pagos confirmados en CONTROL no guardan el código de la factura: se reconocen por repartidor e importe
     res.forEach(function (r) {
