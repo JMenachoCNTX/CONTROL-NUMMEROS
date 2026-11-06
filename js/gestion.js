@@ -213,7 +213,7 @@
       '<div class="fila"><label for="gMot">Motivo</label><textarea id="gMot" rows="2" maxlength="300">' + esc(e.motivo) + '</textarea></div>' +
       '<div class="fila"><label for="gHasta">Vence el (opcional)</label><input id="gHasta" type="date" value="' + esc(e.hasta) + '"></div>' +
       '<div id="gImpacto"></div><p class="login-err" data-err role="alert"></p></form>';
-    X.ventana(e._id ? 'Editar excepción por grupo' : 'Excepción por grupo', 'Habilita de una vez los pagos del grupo, sin ir uno por uno. Las facturas observadas no se liberan.', html,
+    X.ventana(e._id ? 'Editar excepción por grupo' : 'Excepción por grupo', 'Se aplica solo a los del grupo que no están habilitados. Quien ya tiene su factura verificada no figura con excepción. Las facturas observadas no se liberan.', html,
       '<button class="btn sec" data-cerrar>Cancelar</button><button class="btn" data-guardar>' + (e._id ? 'Guardar' : 'Crear excepción') + '</button>', function (el, cerrar) {
         var q = function (s) { return el.querySelector(s); }, err = q('[data-err]'), btn = q('[data-guardar]');
         var leer = function () { var s = q('#gSem').value; return { grupo: q('#gGrupo').value, semana: s, yAnteriores: s !== '*' && q('#gAnt').checked }; };
@@ -254,8 +254,11 @@
       // Las vencidas se apagan solas en pantalla
       D.excepciones.forEach(function (e) { if (e.activa && e.hasta && e.hasta < hoy) e.activa = false; });
       var l = D.excepciones.slice().sort(function (a, b) { return (b.activa - a.activa) || String(a.nombre).localeCompare(String(b.nombre)); });
+      // Cuántos pagos libera hoy cada grupo: solo los que no estaban habilitados
+      var usa = {};
+      if (l.some(function (e) { return e.grupo; })) X.lista().forEach(function (r) { X.evaluar(r).semanas.forEach(function (s) { if (s.ex && s.ex.grupo) usa[s.ex._id] = (usa[s.ex._id] || 0) + 1; }); });
       return cab + '<div class="card">' + (l.length ? X.tabla([
-        { t: 'Repartidor', html: function (e) { return '<b>' + esc(e.nombre || '—') + '</b><span class="sub' + (e.grupo ? '">Excepción por grupo' : ' num">ID ' + esc(e.idYango)) + '</span>'; } },
+        { t: 'Repartidor', html: function (e) { return '<b>' + esc(e.nombre || '—') + '</b><span class="sub' + (e.grupo ? '">Por grupo · habilita ' + entero(usa[e._id] || 0) + ' pagos' : ' num">ID ' + esc(e.idYango)) + '</span>'; } },
         { t: 'Semana', html: function (e) { return e.grupo ? esc(semanaGrupo(e)) : e.semana === '*' ? 'Todas' : esc(e.semana); } },
         { t: 'Tipo', html: function (e) { return X.chip(e.tipo === 'contax' ? 'contax' : 'neutro', { habilitar: 'Pago sin factura', contax: 'Pendiente de CONTAX', otro: 'Otro' }[e.tipo] || e.tipo); } },
         { t: 'Motivo', html: function (e) { return esc(e.motivo) + '<span class="sub">' + esc(e.quien || '') + (e.hasta ? ' · vence ' + X.fecha(e.hasta) : '') + '</span>'; } },

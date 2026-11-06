@@ -73,6 +73,8 @@
       else if (f && (f.estado === 'observada' || f.estado === 'rechazada')) e = 'observada';
       else if (cli) e = 'porEmitir';
       else e = 'falta';
+      // Un grupo solo cuenta en los pagos que libera: quien ya está habilitado con su factura no figura con excepción
+      if (ex && ex.grupo && e !== 'excepcion') ex = null;
       return { p: p, f: f || null, ex: ex, estado: e, ok: e === 'lista' || e === 'contax' || e === 'excepcion' };
     });
     var todas = semanas.length && semanas.every(function (s) { return s.ok; });
