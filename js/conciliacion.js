@@ -341,6 +341,16 @@
     var num = x.fnum != null ? x.fnum : x.num, imp = x.fimp != null ? x.fimp : 0;
     return (x.forig === 'contax' ? 'CONTAX' : x.forig === 'impuestos' ? 'Del Excel' : 'Portal') + ' · N.º ' + (num || 's/n') + (imp ? ' · ' + bs(imp) : '') + ' · ' + (estadoF[x.fest] || x.fest || '');
   }
+  /* ¿Quién puso la factura en el sistema y cuándo? Se lee de la factura viva: sirve también para conciliaciones ya guardadas */
+  function cargaFila(x) {
+    if (!x.fid || x.forig === 'impuestos') return { k: 'sin', t: 'No la cargó' };
+    if (x.forig === 'contax') return { k: 'contax', t: 'Emitida por CONTAX' };
+    if (x.forig === 'migracion') return { k: 'migrada', t: 'Sistema anterior' };
+    var f = (D.facturas || []).filter(function (y) { return y._id === x.fid; })[0];
+    var tarde = !!f && contadorFila(x) !== 'CONTAX' && (!!f.fueraDeCorte || (!!f.subidoF && f.subidoF.getTime() > X.ultimoCorte()));
+    return { k: tarde ? 'tarde' : 'cargo', t: 'La cargó el repartidor', cuando: f && f.subidoF ? X.fechaHora(f.subidoF) : '', tarde: tarde };
+  }
+  function textoCarga(x) { var c = cargaFila(x); return c.t + (c.cuando ? ' · ' + c.cuando : '') + (c.tarde ? ' · Después del corte' : ''); }
   function textoDetalle(x) { return x.det || (x.como ? 'por ' + x.como : ''); }
   var COLS = [
     { g: 'e', k: 'fecha', t: 'Fecha', v: function (x) { return x.portal ? '' : x.fecha; }, html: deExcel(function (x) { return x.fecha ? X.fecha(x.fecha) : vacia; }) },
@@ -356,6 +366,7 @@
     { g: 'c', k: 'cnit', t: 'NIT registrado', v: function (x) { return x.cnit || ''; }, html: function (x) { return x.cnit ? '<span class="num">' + esc(x.cnit) + '</span>' : vacia; } },
     { g: 'c', k: 'semana', t: 'Pago', v: function (x) { return X.ordenSemana(x.semana); }, n: 1, html: function (x) { return x.semana ? esc(X.semanaCorta(x.semana)) + (x.pago ? ' · ' + bs(x.pago) : '') + (x.tipo === 'retenido' ? '<span class="sub">Ya pagado con retención</span>' : '') : vacia; } },
     { g: 'c', k: 'fac', t: 'Factura en CONTROL', v: textoFactura, html: function (x) { return textoFactura(x) ? esc(textoFactura(x)) : vacia; } },
+    { g: 'c', k: 'carga', t: 'Carga de la factura', v: textoCarga, html: function (x) { var c = cargaFila(x); return (c.k === 'contax' ? X.chip('contax', c.t) : esc(c.t)) + (c.cuando ? '<span class="sub">' + esc(c.cuando) + '</span>' : '') + (c.tarde ? '<span class="sub">' + X.chip('pend', 'Después del corte') + '</span>' : ''); } },
     { g: 'c', k: 'abiertos', t: 'Pagos del repartidor', v: function (x) { return x.abiertos || ''; }, html: function (x) { return x.abiertos ? esc(x.abiertos).replace(/ \| /g, '<br>') : vacia; } },
     { g: 'r', k: 'r', t: 'Resultado', v: function (x) { return (RES[x.r] || [0, x.r])[1]; }, html: function (x) { var e = RES[x.r] || ['neutro', x.r]; return X.chip(e[0], e[1]); } },
     { g: 'r', k: 'det', t: 'Detalle', v: textoDetalle, html: function (x) { return esc(textoDetalle(x)) || vacia; } }
@@ -374,13 +385,13 @@
       (total > 1 ? '<div class="fila-acc" style="margin-top:10px"><button class="btn sec chico" data-pag="' + (E.pag - 1) + '"' + (E.pag ? '' : ' disabled') + '>Anterior</button><span class="muted">Página ' + (E.pag + 1) + ' de ' + total + '</span><button class="btn sec chico" data-pag="' + (E.pag + 1) + '"' + (E.pag >= total - 1 ? ' disabled' : '') + '>Siguiente</button></div>' : '');
   }
   function exportar(c, filas) {
-    X.excel([{ nombre: 'Conciliación', filas: [['Excel: Fecha', 'Excel: N.º factura', 'Excel: NIT', 'Excel: Razón social', 'Excel: Importe', 'Excel: Estado', 'Excel: Autorización', 'CONTROL: ID', 'CONTROL: Repartidor', 'CONTROL: Contador', 'CONTROL: NIT registrado', 'CONTROL: Semana', 'CONTROL: Importe del pago', 'CONTROL: Factura', 'CONTROL: Pagos del repartidor', 'Resultado', 'Detalle']].concat(filas.map(function (x) {
+    X.excel([{ nombre: 'Conciliación', filas: [['Excel: Fecha', 'Excel: N.º factura', 'Excel: NIT', 'Excel: Razón social', 'Excel: Importe', 'Excel: Estado', 'Excel: Autorización', 'CONTROL: ID', 'CONTROL: Repartidor', 'CONTROL: Contador', 'CONTROL: NIT registrado', 'CONTROL: Semana', 'CONTROL: Importe del pago', 'CONTROL: Factura', 'CONTROL: Carga de la factura', 'CONTROL: Pagos del repartidor', 'Resultado', 'Detalle']].concat(filas.map(function (x) {
       var e = x.portal ? ['', '', '', '', '', '', ''] : [x.fecha, x.num, x.nit, x.nom, x.imp, x.est, x.aut];
-      return e.concat([x.id, x.nombre, contadorFila(x), x.cnit || '', x.semana, x.pago || '', textoFactura(x), x.abiertos || '', (RES[x.r] || [0, x.r])[1], textoDetalle(x)]);
+      return e.concat([x.id, x.nombre, contadorFila(x), x.cnit || '', x.semana, x.pago || '', textoFactura(x), textoCarga(x), x.abiertos || '', (RES[x.r] || [0, x.r])[1], textoDetalle(x)]);
     })) }], 'Conciliacion-' + (c.hasta || X.hoyISO()));
   }
   function pintar(cu, c, cerrar, vivo) {
-    var E = { g: c.resumen.noCuadran ? 'mal' : '', pag: 0, buscar: '', res: '', sem: '', cont: '', orden: 'nombre', dir: 1 }, r = c.resumen, zona = document.createElement('div');
+    var E = { g: c.resumen.noCuadran ? 'mal' : '', pag: 0, buscar: '', res: '', sem: '', cont: '', carga: '', orden: 'nombre', dir: 1 }, r = c.resumen, zona = document.createElement('div');
     if (cu.parentNode) cu.parentNode.classList.add('completa');
     var verif = vivo ? opsVerificar(c) : [], obs = vivo ? opsObservar(c) : [];
     var aprobadasMal = c.filas.filter(function (x) { return x.fest === 'aprobada' && ['importe', 'suma', 'nitDistinto', 'fechaAntes', 'anulada', 'noEsta'].indexOf(x.r) >= 0; }).length;
@@ -404,6 +415,7 @@
     filtros.innerHTML = '<div class="buscar">' + ic('buscar') + '<input type="search" id="cnBus" placeholder="Buscar por nombre, ID, NIT, N.º o importe"></div>' +
       '<select id="cnRes" aria-label="Filtrar por resultado"><option value="">Todos los resultados</option>' + Object.keys(RES).filter(function (k) { return resultados[k]; }).map(function (k) { return '<option value="' + k + '">' + esc(RES[k][1]) + ' (' + entero(resultados[k]) + ')</option>'; }).join('') + '</select>' +
       '<select id="cnCont" aria-label="Filtrar por contador"><option value="">CONTAX y otros</option><option value="CONTAX">Clientes CONTAX</option><option value="Otro">Otro contador</option></select>' +
+      '<select id="cnCarga" aria-label="Filtrar por carga de la factura"><option value="">Toda carga</option><option value="cargo">La cargó el repartidor</option><option value="tarde">Después del corte</option><option value="contax">Emitida por CONTAX</option><option value="migrada">Sistema anterior</option><option value="sin">No la cargó</option></select>' +
       '<select id="cnSem" aria-label="Filtrar por semana"><option value="">Todas las semanas</option>' + Object.keys(semanas).sort(function (a, b) { return X.ordenSemana(b) - X.ordenSemana(a); }).map(function (k) { return '<option value="' + esc(k) + '">' + esc(k) + '</option>'; }).join('') + '</select>';
     cu.appendChild(filtros); cu.appendChild(zona);
     var col = function (k) { return COLS.filter(function (x) { return x.k === k; })[0]; };
@@ -414,6 +426,7 @@
         if (E.res && x.r !== E.res) return false;
         if (E.sem && x.semana !== E.sem) return false;
         if (E.cont && contadorFila(x) !== E.cont) return false;
+        if (E.carga) { var ck = cargaFila(x).k; if (E.carga === 'cargo' ? ck !== 'cargo' && ck !== 'tarde' : ck !== E.carga) return false; }
         return !b || X.normal([x.nombre, x.nom, x.id, x.nit, x.cnit, x.num, x.fnum, formasImporte(x.imp), formasImporte(x.pago), formasImporte(x.fimp)].join(' ')).indexOf(b) >= 0;
       }).sort(function (p, q) {
         var a = o.v(p), z = o.v(q);
@@ -434,6 +447,7 @@
     filtros.querySelector('#cnBus').addEventListener('input', X.debounce(function (e) { E.buscar = filtros.querySelector('#cnBus').value; if (E.buscar) E.g = ''; E.pag = 0; tabla(); }, 200));
     filtros.querySelector('#cnRes').addEventListener('change', function (e) { E.res = e.target.value; if (E.res) E.g = ''; E.pag = 0; tabla(); });
     filtros.querySelector('#cnCont').addEventListener('change', function (e) { E.cont = e.target.value; E.pag = 0; tabla(); });
+    filtros.querySelector('#cnCarga').addEventListener('change', function (e) { E.carga = e.target.value; E.pag = 0; tabla(); });
     filtros.querySelector('#cnSem').addEventListener('change', function (e) { E.sem = e.target.value; E.pag = 0; tabla(); });
     tabla();
     cu.querySelector('#cnExc').addEventListener('click', function () { exportar(c, visibles()); });

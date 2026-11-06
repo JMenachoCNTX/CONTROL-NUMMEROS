@@ -778,5 +778,5 @@
   }
 
   X.evaluar = evaluar; X.cubreGrupo = cubreGrupo; X.ordenSemana = ordenSemana; X.semanaCorta = semanaCorta; X.lista = lista;
-  X.detalleRepartidor = detalleRepartidor; X.accesosCliente = accesosCliente; X.debounce = debounce; X.setFoco = setFoco; X.corte = corte;
+  X.detalleRepartidor = detalleRepartidor; X.accesosCliente = accesosCliente; X.debounce = debounce; X.setFoco = setFoco; X.corte = corte; X.ultimoCorte = ultimoCorte;
 })();
