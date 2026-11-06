@@ -403,7 +403,8 @@
       if (!h.filas[r] || h.filas[r][0] === '') continue;
       var s = r % 2 ? { border: bordes } : fondo('F3FAF5');
       var v = String(x.v);
-      if (c === h.estado) s = /Retenci/.test(v) ? fondo('FBE5D6', 'B54708', true) : /Exception/.test(v) ? fondo('DAF1DE', '163832', true) : fondo('8EB69B', '051F20', true);
+      if (c === h.estado && h.colorEstado) { var ce = h.colorEstado(v); s = fondo(ce[0], ce[1], true); }
+      else if (c === h.estado) s = /Retenci/.test(v) ? fondo('FBE5D6', 'B54708', true) : /Exception/.test(v) ? fondo('DAF1DE', '163832', true) : fondo('8EB69B', '051F20', true);
       x.s = c === h.importe ? plata(x, s) : s;
     }
     if (h.resumen) for (var f = 0; f <= rango.e.r; f++) {
@@ -758,7 +759,7 @@
 
   X.banco = {
     cargar: cargar, cargarBDYango: cargarBDYango, cuentaDe: cuentaDe, faltaEnCuenta: faltaEnCuenta, nombreBanco: nombreBanco, verCuentas: verCuentas, importarCuentas: importarCuentas,
-    armar: armar, descargarBanco: descargarBanco, semanaPrincipal: semanaPrincipal, detalleExcel: detalleExcel, resumenPlanilla: resumenPlanilla, tituloPlanilla: tituloPlanilla, informesPlanilla: informesPlanilla, conciliar: conciliar,
+    armar: armar, descargarBanco: descargarBanco, semanaPrincipal: semanaPrincipal, detalleExcel: detalleExcel, estiloDetalle: estiloDetalle, resumenPlanilla: resumenPlanilla, tituloPlanilla: tituloPlanilla, informesPlanilla: informesPlanilla, conciliar: conciliar,
     importarBDYango: importarBDYango,
     _puro: { bancoDe: bancoDe, filasBDYango: filasBDYango, leerGlosa: leerGlosa, glosa: glosa, semBanco: semBanco, serialExcel: serialExcel, rangoLargo: rangoLargo, numOTexto: numOTexto, cuentasDePlanilla: cuentasDePlanilla, filasBanco: filasBanco, leerExtracto: leerExtracto, cruzar: cruzar, ENC_BANCO: ENC_BANCO }
   };
