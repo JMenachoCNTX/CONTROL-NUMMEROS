@@ -119,7 +119,7 @@
   }
   /* ── Duplicadas de clientes CONTAX: las anula nuestro equipo desde Facturación del Panel ── */
   function indiceFacturas() {
-    var ix = {}; (D.facturas || []).forEach(function (f) { if (f.autorizacion) ix[clave(f.autorizacion)] = f; if (f.numero) ix[P_limpia(f.nitEmisor) + '|' + P_limpia(f.numero)] = f; });
+    var ix = {}; (D.facturas || []).forEach(function (f) { if (f.autorizacion) ix[clave(f.autorizacion)] = f; else if (f.numero) ix[P_limpia(f.nitEmisor) + '|' + P_limpia(f.numero)] = f; });
     return ix;
   }
   function estadoDup(e, c, fx) {

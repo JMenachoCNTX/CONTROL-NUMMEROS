@@ -1028,9 +1028,10 @@
           var num = txt(q('#cfNum').value), fecha = q('#cfFecha').value, aut = txt(q('#cfAut').value), motivo = txt(q('#cfMotivo').value), alPanel = q('#cfPanel').checked;
           if (!num || !fecha || !aut || !motivo) { X.aviso('Completa el número, la fecha, la autorización y el motivo.'); return; }
           if (num === viejo.num) { X.aviso('Es la misma factura: escribe el número de la que queda.'); return; }
-          var gemela = candidatas.filter(function (x) { return txt(x.numero) === num; })[0] || null, limpia = X.conciliacion._puro.limpiaNum;
-          var otra = fs.filter(function (x) { return x !== f && x !== gemela && x.estado !== 'anulada' && limpia(x.numero) === limpia(num) && limpia(x.nitEmisor) === limpia(viejo.nit); })[0];
-          var pagada = (D.hist || []).filter(function (y) { return y.id === id && txt(y.factura) === num && pagos.indexOf(y) < 0; })[0];
+          // Los números se repiten con los años: lo que identifica a una factura es su autorización
+          var gemela = candidatas.filter(function (x) { return txt(x.numero) === num; })[0] || null, sinEsp = function (t) { return txt(t).replace(/\s+/g, '').toUpperCase(); }, mismaAut = function (t) { return sinEsp(t) === sinEsp(aut); };
+          var otra = fs.filter(function (x) { return x !== f && x !== gemela && x.estado !== 'anulada' && mismaAut(x.autorizacion); })[0];
+          var pagada = (D.hist || []).filter(function (y) { return y.id === id && mismaAut(y.autorizacion) && pagos.indexOf(y) < 0; })[0];
           if (otra || pagada) { X.aviso('La factura N.º ' + num + ' ya está registrada' + (pagada ? ' en ' + semCorta(pagada.semana) : '') + '. Revísala antes de seguir.'); return; }
           ok.disabled = true; ok.innerHTML = X.anilloBoton() + 'Guardando';
           var quien = S.usuario.email, detalle = 'Se reemplazó por la N.º ' + num + '. ' + motivo;

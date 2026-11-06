@@ -332,7 +332,7 @@
   }
   /* Duplicadas de CONTAX que todavía no están en el Panel. Sirve también en cruces guardados: se compara con las facturas de hoy */
   function dupsPanel(c) {
-    var hay = {}; (D.facturas || []).forEach(function (f) { if (f.autorizacion) hay[claveAut(f.autorizacion)] = 1; if (f.numero) hay[limpiaNum(f.nitEmisor) + '|' + limpiaNum(f.numero)] = 1; });
+    var hay = {}; (D.facturas || []).forEach(function (f) { if (f.autorizacion) hay[claveAut(f.autorizacion)] = 1; else if (f.numero) hay[limpiaNum(f.nitEmisor) + '|' + limpiaNum(f.numero)] = 1; });
     return c.filas.filter(function (x) { return esDeContax(x) && x.id && !x.fid && !x.observada && !(x.aut && hay[claveAut(x.aut)]) && !hay[x.nit + '|' + x.num]; });
   }
   function mandarDups(l, listo) {
