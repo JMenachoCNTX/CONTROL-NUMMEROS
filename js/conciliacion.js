@@ -18,7 +18,7 @@
 
   var RES = {
     coincide: ['ok', 'Coincide con un pago', 'ok'],
-    importe: ['mal', 'Otro importe', 'mal'],
+    importe: ['mal', 'Importe no autorizado', 'mal'],
     suma: ['mal', 'Suma varios pagos', 'mal'],
     nitDistinto: ['mal', 'NIT distinto', 'mal'],
     fechaAntes: ['mal', 'Emitida antes de tiempo', 'mal'],
@@ -32,6 +32,7 @@
     contaxFalta: ['pend', 'Marcada por CONTAX, no está en el Excel', 'portal'],
     espera: ['neutro', 'Espera el Excel de sus fechas', 'portal']
   };
+  var TXT_IMPORTE = 'No cuentas con un importe de pago autorizado por la app, te recomendamos que revises y anules la factura ya que no se aprobará ni abonará.';
   /* 1283,44 · 1283.44 · 1.283,44: el importe se encuentra como lo escribas */
   function formasImporte(v) { v = Number(v); if (!v) return ''; var t = v.toFixed(2); return t + ' ' + t.replace('.', ',') + ' ' + bs(v); }
   function grupo(r) { return (RES[r] || [0, 0, 'mal'])[2]; }
@@ -178,7 +179,7 @@
         if (gemela) return fin('duplicada', X.semanaCorta(gemela.semana) + ' ya lo cubre la factura ' + cubierta(gemela), gemela);
         if (!pool.length) return fin('sinPago', todos.length ? 'Sus pagos ya están cubiertos: ' + todos.map(function (p) { return X.semanaCorta(p.semana) + ' con la ' + cubierta(p); }).join(', ') : 'No tiene pagos pendientes', null, '', who.ids[0]);
         if (esSuma(pool, x.imp)) return fin('suma', 'Cada pago necesita su propia factura', null, '', who.ids[0]);
-        return fin('importe', 'Ningún pago pendiente del repartidor es de ese importe', null, '', who.ids[0]);
+        return fin('importe', TXT_IMPORTE, null, '', who.ids[0]);
       }
       if (who.por === 'nombre') {
         var gente = {}; eq.forEach(function (p) { gente[p.id] = 1; });
@@ -269,16 +270,22 @@
 
   /* ── Aplicar el resultado ── */
   function periodoDe(c) { return c.desde ? X.fecha(c.desde) + ' al ' + X.fecha(c.hasta) : 'período del archivo'; }
+  /* Las duplicadas de clientes CONTAX son responsabilidad nuestra: las anula el equipo y al repartidor no se le avisa */
+  function esDeContax(x) { return (x.r === 'duplicada' || x.r === 'sinPago') && contadorFila(x) === 'CONTAX'; }
+  function textoDuplicada(x) {
+    var buena = (String(x.det || '').match(/N\.º\s*(\S+)/) || [])[1] || 's/n';
+    return 'La factura N.º ' + x.num + ' se encuentra duplicada ya que nuestro sistema aprobó la factura N.º ' + buena + '. Por favor, ponte en contacto con tu contador para que la anule. Antes de ello, solicita a CONTAX que desvincule tu factura en el portal de impuestos para que la pueda anular, ya que ese es el proceso que efectuamos por seguridad.';
+  }
   function motivo(x, periodo) {
     var n = 'La factura N.º ' + x.num;
     if (x.r === 'nitDistinto') return n + ' figura en Impuestos Nacionales con el NIT ' + x.nit + ', distinto al que tenemos registrado.';
     if (x.r === 'fechaAntes') return n + ' tiene fecha ' + X.fecha(x.fecha) + ', anterior al día en que se podía emitir la factura de esa semana.';
     if (x.r === 'suma') return n + ' suma varios pagos. Cada pago necesita su propia factura: anúlala y emite una por cada pago.';
     if (x.r === 'anulada') return n + ' figura anulada en Impuestos Nacionales.';
-    if (x.r === 'duplicada') return n + ' por ' + bs(x.imp) + ' está duplicada: ' + x.det + '. Solo se acepta una factura por pago.';
+    if (x.r === 'duplicada') return textoDuplicada(x);
     if (x.r === 'sinPago') return n + ' por ' + bs(x.imp) + ' fue emitida de más: no corresponde a ningún pago pendiente. ' + x.det + '.';
     if (x.r === 'noEsta') return n + ' no figura en el Registro de Compras de Impuestos Nacionales de MILTHAGOR (' + periodo + '). Si la anulaste, emite una nueva y súbela.';
-    return 'El importe en Impuestos Nacionales (' + bs(x.imp) + ') no coincide con el de tu pago.';
+    return TXT_IMPORTE;
   }
   function nuevaFactura(x, estado, extra) {
     return Object.assign({ uid: x.uid || X.idSeguro(x.id), id: String(x.id), nombre: x.nombre || x.nom, semanas: [x.semana], numero: x.num, importe: X.redondear(x.imp), fechaEmision: x.fecha, nitEmisor: x.nit, razonEmisor: x.nom,
@@ -300,20 +307,25 @@
       return { tipo: 'update', ref: col.doc(x.fid), datos: d };
     });
   }
-  function opsObservar(c) {
+  function opsObservar(c, filas) {
     var col = X.dbP.collection('facturas'), periodo = periodoDe(c), ops = [], porId = {}; (D.facturas || []).forEach(function (f) { porId[f._id] = f; });
-    c.filas.forEach(function (x) {
-      if (['nitDistinto', 'fechaAntes', 'importe', 'suma', 'anulada', 'noEsta', 'duplicada', 'sinPago'].indexOf(x.r) < 0) return;
+    (filas || c.filas).forEach(function (x) {
+      if (x.observada || ['nitDistinto', 'fechaAntes', 'importe', 'suma', 'anulada', 'noEsta', 'duplicada', 'sinPago'].indexOf(x.r) < 0) return;
+      if (esDeContax(x)) {
+        // Sin «uid»: el repartidor no la ve en su Portal. El equipo la anula desde Facturación del Panel.
+        if (!x.fid && x.id) ops.push({ fila: x, interna: true, tipo: 'set', ref: col.doc(), datos: nuevaFactura(x, 'porAnular', { uid: '', caso: 'duplicadaContax', semanas: [], detalle: x.det || '' }) });
+        return;
+      }
       var estado = x.r === 'suma' ? 'rechazada' : 'observada', m = motivo(x, periodo), extra = x.r === 'duplicada' || x.r === 'sinPago';
       if (x.fid) {
         if ((x.fest !== 'recibida' && x.fest !== 'observada') || (x.fest === estado && x.fmotivo === m)) return;
         var d = { estado: estado, revisadoPor: S.usuario.email, revisado: X.servidor(), motivo: m, caso: x.r };
         // Una factura extra no debe tapar a la que cubre el pago
         if (extra) { d.semanas = []; d.semanasAntes = (porId[x.fid] || {}).semanas || []; }
-        ops.push({ tipo: 'update', ref: col.doc(x.fid), datos: d });
+        ops.push({ fila: x, tipo: 'update', ref: col.doc(x.fid), datos: d });
       } else if (x.id && x.r !== 'anulada' && x.r !== 'noEsta') {
         var cubre = x.r === 'nitDistinto' || x.r === 'fechaAntes';
-        ops.push({ tipo: 'set', ref: col.doc(), datos: nuevaFactura(x, estado, { motivo: m, caso: x.r, semanas: cubre ? [x.semana] : [] }) });
+        ops.push({ fila: x, tipo: 'set', ref: col.doc(), datos: nuevaFactura(x, estado, { motivo: m, caso: x.r, semanas: cubre ? [x.semana] : [] }) });
       }
     });
     return ops;
@@ -335,11 +347,11 @@
   /* Las filas «portal» no están en el Excel: sus datos son de CONTROL y las columnas del Excel quedan vacías */
   var vacia = '<span class="muted">—</span>';
   var deExcel = function (fn) { return function (x) { return x.portal ? vacia : fn(x); }; };
-  var estadoF = { recibida: 'Por revisar', aprobada: 'Aprobada', observada: 'Observada', rechazada: 'Rechazada' };
+  var estadoF = { recibida: 'Por revisar', aprobada: 'Aprobada', observada: 'Observada', rechazada: 'Rechazada', porAnular: 'Por anular (CONTAX)' };
   function textoFactura(x) {
     if (!x.fid) return '';
     var num = x.fnum != null ? x.fnum : x.num, imp = x.fimp != null ? x.fimp : 0;
-    return (x.forig === 'contax' ? 'CONTAX' : x.forig === 'impuestos' ? 'Del Excel' : 'Portal') + ' · N.º ' + (num || 's/n') + (imp ? ' · ' + bs(imp) : '') + ' · ' + (estadoF[x.fest] || x.fest || '');
+    return (x.forig === 'contax' ? 'CONTAX' : x.forig === 'impuestos' ? 'Del Excel' : 'Portal') + ' · N.º ' + (num || 's/n') + (x.ffecha ? ' · ' + X.fecha(x.ffecha) : '') + (imp ? ' · ' + bs(imp) : '') + ' · ' + (estadoF[x.fest] || x.fest || '');
   }
   /* ¿Quién puso la factura en el sistema y cuándo? Se lee de la factura viva: sirve también para conciliaciones ya guardadas */
   function cargaFila(x) {
@@ -351,7 +363,12 @@
     return { k: tarde ? 'tarde' : 'cargo', t: 'La cargó el repartidor', cuando: f && f.subidoF ? X.fechaHora(f.subidoF) : '', tarde: tarde };
   }
   function textoCarga(x) { var c = cargaFila(x); return c.t + (c.cuando ? ' · ' + c.cuando : '') + (c.tarde ? ' · Después del corte' : ''); }
-  function textoDetalle(x) { return x.det || (x.como ? 'por ' + x.como : ''); }
+  function textoDetalle(x) {
+    if (esDeContax(x)) return x.fid ? 'Duplicada de CONTAX: revísala a mano. No se avisa al repartidor.' : 'Duplicada de CONTAX: la anula nuestro equipo desde Facturación del Panel. No se avisa al repartidor.';
+    if (x.r === 'importe') return TXT_IMPORTE;
+    if (x.r === 'duplicada') return textoDuplicada(x);
+    return x.det || (x.como ? 'por ' + x.como : '');
+  }
   var COLS = [
     { g: 'e', k: 'fecha', t: 'Fecha', v: function (x) { return x.portal ? '' : x.fecha; }, html: deExcel(function (x) { return x.fecha ? X.fecha(x.fecha) : vacia; }) },
     { g: 'e', k: 'num', t: 'N.º', n: 1, v: function (x) { return x.portal ? 0 : Number(x.num) || 0; }, html: deExcel(function (x) { return '<b class="num">' + esc(x.num || '—') + '</b>'; }) },
@@ -369,7 +386,8 @@
     { g: 'c', k: 'carga', t: 'Carga de la factura', v: textoCarga, html: function (x) { var c = cargaFila(x); return (c.k === 'contax' ? X.chip('contax', c.t) : esc(c.t)) + (c.cuando ? '<span class="sub">' + esc(c.cuando) + '</span>' : '') + (c.tarde ? '<span class="sub">' + X.chip('pend', 'Después del corte') + '</span>' : ''); } },
     { g: 'c', k: 'abiertos', t: 'Pagos del repartidor', v: function (x) { return x.abiertos || ''; }, html: function (x) { return x.abiertos ? esc(x.abiertos).replace(/ \| /g, '<br>') : vacia; } },
     { g: 'r', k: 'r', t: 'Resultado', v: function (x) { return (RES[x.r] || [0, x.r])[1]; }, html: function (x) { var e = RES[x.r] || ['neutro', x.r]; return X.chip(e[0], e[1]); } },
-    { g: 'r', k: 'det', t: 'Detalle', v: textoDetalle, html: function (x) { return esc(textoDetalle(x)) || vacia; } }
+    { g: 'r', k: 'det', t: 'Detalle', v: textoDetalle, html: function (x) { return esc(textoDetalle(x)) || vacia; } },
+    { g: 'r', k: 'acc', t: 'Observar', v: function (x) { return x._obs ? 1 : 0; }, html: function (x) { return x._obs >= 0 ? '<button class="btn sec chico" data-obs1="' + x._obs + '">Observar</button>' : x.observada ? '<span class="muted">Hecho</span>' : ''; } }
   ];
   function tablaHTML(l, E) {
     var n = function (g) { return COLS.filter(function (c) { return c.g === g; }).length; };
@@ -407,7 +425,7 @@
       (aprobadasMal ? '<div class="aviso-caja error mb">' + ic('excepcion') + '<div><b>' + aprobadasMal + ' facturas ya aprobadas tienen un problema</b>Revísalas una por una. No se cambian solas.</div></div>' : '') +
       '<div class="fila-acc mb">' +
         (X.puedeEditar() && verif.length ? '<button class="btn" id="cnVer">' + ic('check') + 'Registrar las ' + entero(verif.length) + ' verificadas</button>' : '') +
-        (X.puedeEditar() && obs.length ? '<button class="btn sec" id="cnObs">Observar las ' + entero(obs.length) + ' con problema</button>' : '') +
+        (X.puedeEditar() && obs.length ? '<button class="btn sec" id="cnObs">Observar todas (' + entero(obs.length) + ')</button>' : '') +
         '<button class="btn sec" id="cnExc">' + ic('descargar') + 'Excel</button></div>';
     var semanas = {}, resultados = {};
     c.filas.forEach(function (x) { if (x.semana) semanas[x.semana] = 1; resultados[x.r] = (resultados[x.r] || 0) + 1; });
@@ -438,17 +456,46 @@
       zona.innerHTML = '<div class="pestanas">' + PEST.map(function (p) {
         var k = p[0] ? c.filas.filter(function (x) { return grupo(x.r) === p[0]; }).length : c.filas.length;
         return '<button aria-selected="' + (E.g === p[0]) + '" data-gr="' + p[0] + '">' + p[1] + ' <em class="num">' + entero(k) + '</em></button>';
-      }).join('') + '</div><p class="muted mb">' + entero(l.length) + ' filas. Toca el título de una columna para ordenar; toca una fila con factura para abrirla.</p>' + (l.length ? tablaHTML(l, E) : X.vacio('Nada con estos filtros', ''));
+      }).join('') + '</div>' + botonPestana() + '<p class="muted mb">' + entero(l.length) + ' filas. Toca el título de una columna para ordenar; toca una fila con factura para abrirla.</p>' + (l.length ? tablaHTML(l, E) : X.vacio('Nada con estos filtros', ''));
       zona.querySelectorAll('[data-gr]').forEach(function (b) { b.addEventListener('click', function () { E.g = b.getAttribute('data-gr'); E.pag = 0; tabla(); }); });
       zona.querySelectorAll('[data-pag]').forEach(function (b) { b.addEventListener('click', function () { E.pag = Number(b.getAttribute('data-pag')); tabla(); }); });
       zona.querySelectorAll('[data-ord]').forEach(function (b) { b.addEventListener('click', function () { var k = b.getAttribute('data-ord'); if (E.orden === k) E.dir = -E.dir; else { E.orden = k; E.dir = 1; } E.pag = 0; tabla(); }); });
       zona.querySelectorAll('[data-abrir]').forEach(function (t) { t.addEventListener('click', function () { CTRL_abrir(t.getAttribute('data-abrir')); }); });
+      zona.querySelectorAll('[data-obs1]').forEach(function (b) { b.addEventListener('click', function (e) { e.stopPropagation(); var o = c.filas[Number(b.getAttribute('data-obs1'))]; observar(opsObservar(c, [o]), 'Observar la factura N.º ' + (o.num || o.fnum || 's/n')); }); });
+      var bt = zona.querySelector('#cnObsTab'); if (bt) bt.addEventListener('click', function () { var l2 = opsPestana(); observar(l2, 'Observar ' + l2.length + ' de esta pestaña'); });
+    }
+    /* Tres formas de observar: todas, las de una pestaña o una sola fila */
+    function opsPestana() { return E.g ? opsObservar(c, c.filas.filter(function (x) { return grupo(x.r) === E.g; })) : []; }
+    function botonPestana() {
+      if (!vivo || !X.puedeEditar()) return '';
+      var n = opsPestana().length;
+      return n ? '<div class="fila-acc mb"><button class="btn sec" id="cnObsTab">Observar las ' + entero(n) + ' de esta pestaña</button></div>' : '';
+    }
+    function marcar() {
+      if (!vivo || !X.puedeEditar()) return;
+      c.filas.forEach(function (x) { x._obs = -1; });
+      opsObservar(c).forEach(function (o) { o.fila._obs = c.filas.indexOf(o.fila); });
+    }
+    function observar(ops, titulo) {
+      if (!ops.length) return;
+      var internas = ops.filter(function (o) { return o.interna; }).length, avisos = ops.length - internas;
+      X.confirmar(titulo, (avisos ? '<b>' + entero(avisos) + '</b> repartidores verán el motivo en «Mis facturas», y queda en su ficha de CONTROL y en Conciliaciones → Observaciones. Las que suman varios pagos quedan <b>rechazadas</b>. ' : '') +
+        (internas ? '<b>' + entero(internas) + '</b> duplicadas de CONTAX van a Facturación del Panel para que el equipo las anule: <b>al repartidor no se le avisa</b>.' : ''), function () {
+        aplicar(c, ops, 'observadas', 'Observó facturas por conciliación', function () {
+          ops.forEach(function (o) { o.fila.observada = true; });
+          marcar();
+          var bo = cu.querySelector('#cnObs'), n = opsObservar(c).length;
+          if (bo) { if (n) bo.textContent = 'Observar todas (' + entero(n) + ')'; else bo.remove(); }
+          tabla();
+        });
+      }, 'Observar');
     }
     filtros.querySelector('#cnBus').addEventListener('input', X.debounce(function (e) { E.buscar = filtros.querySelector('#cnBus').value; if (E.buscar) E.g = ''; E.pag = 0; tabla(); }, 200));
     filtros.querySelector('#cnRes').addEventListener('change', function (e) { E.res = e.target.value; if (E.res) E.g = ''; E.pag = 0; tabla(); });
     filtros.querySelector('#cnCont').addEventListener('change', function (e) { E.cont = e.target.value; E.pag = 0; tabla(); });
     filtros.querySelector('#cnCarga').addEventListener('change', function (e) { E.carga = e.target.value; E.pag = 0; tabla(); });
     filtros.querySelector('#cnSem').addEventListener('change', function (e) { E.sem = e.target.value; E.pag = 0; tabla(); });
+    marcar();
     tabla();
     cu.querySelector('#cnExc').addEventListener('click', function () { exportar(c, visibles()); });
     var bv = cu.querySelector('#cnVer');
@@ -458,11 +505,7 @@
       }, 'Registrar');
     });
     var bo = cu.querySelector('#cnObs');
-    if (bo) bo.addEventListener('click', function () {
-      X.confirmar('Observar ' + obs.length + ' facturas', 'El repartidor ve el motivo en «Mis facturas» y queda en su ficha de CONTROL y en Conciliaciones → Observaciones. Incluye las duplicadas y las emitidas de más, sin tocar la factura que cubre el pago. Las que suman varios pagos quedan <b>rechazadas</b>. Las que ya estaban aprobadas no se tocan.', function () {
-        aplicar(c, obs, 'observadas', 'Observó facturas por conciliación', function () { bo.remove(); });
-      }, 'Observar');
-    });
+    if (bo) bo.addEventListener('click', function () { var l2 = opsObservar(c); observar(l2, 'Observar ' + l2.length + ' facturas'); });
   }
 
   /* ── Entrada: lo llama «Cruzar con Impuestos» de Facturas ── */

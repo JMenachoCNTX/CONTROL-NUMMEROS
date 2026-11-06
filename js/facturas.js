@@ -12,6 +12,7 @@
   var esc = X.esc, bs = X.bs, ic = X.ic, entero = X.entero;
 
   var ESTADOS = {
+    porAnular: ['pend', 'Por anular (CONTAX)'],
     recibida: ['pend', 'Por revisar'], aprobada: ['ok', 'Aprobada'], observada: ['mal', 'Observada'],
     rechazada: ['mal', 'Rechazada'], anulada: ['neutro', 'Anulada por el repartidor']
   };
