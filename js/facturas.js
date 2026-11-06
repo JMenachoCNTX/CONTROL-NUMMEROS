@@ -305,6 +305,7 @@
         (f.estado !== 'observada' ? '<button class="btn sec" data-acc="observar">' + ic('excepcion') + 'Observar</button>' : '') +
         (f.estado !== 'rechazada' ? '<button class="btn sec" data-acc="rechazar">Rechazar</button>' : '') +
         (f.estado !== 'recibida' ? '<button class="btn sec" data-acc="reabrir">Volver a «Por revisar»</button>' : '') +
+        (X.semanas.puedeCorregir() && f.estado !== 'porAnular' ? '<button class="btn sec" data-acc="datos">' + ic('factura') + 'Cambiar factura</button>' : '') +
         '<button class="btn sec" data-acc="repartidor">' + ic('repartidor') + 'Ver repartidor</button></div>' : '');
     X.cajon('Factura N.º ' + esc(f.numero) + ' ' + chipFactura(f), esc(f.nombre) + ' · ID ' + esc(f.id), html, function (cu, cerrar) {
       var zona = cu.querySelector('#zonaPdf');
@@ -323,6 +324,7 @@
         b.addEventListener('click', function () {
           var a = b.getAttribute('data-acc');
           if (a === 'repartidor') { cerrar(); X.detalleRepartidor(f.uid); return; }
+          if (a === 'datos') { cerrar(); X.semanas.cambiarFactura(null, f); return; }
           if (a === 'aprobar') {
             var go = function () { b.disabled = true; b.innerHTML = X.anilloBoton() + 'Aprobando'; cambiarEstado(f._id, 'aprobada').then(function () { cerrar(); X.aviso('Factura aprobada'); }, falla(b)); };
             var verificar = function () {

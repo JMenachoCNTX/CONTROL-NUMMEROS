@@ -995,11 +995,78 @@
     marcarPagado(b.getAttribute('data-pend-pagado'), f || null, !!b.getAttribute('data-verif'));
   }, true);
   /* Botones de cada pago en el historial y en la ficha del repartidor */
+  /* ── Cambiar de factura: casos excepcionales, como una duplicada que solo se puede anular al revés.
+     Se llama con el pago (h) del historial o con la factura (f). La factura anterior va al Panel para anularla. ── */
+  function cambiarFactura(h, f) {
+    if (!puedeCorregir()) { X.aviso('Solo un administrador puede cambiar una factura.'); return; }
+    var fs = D.facturas || [], id = String((h || f).id), nombre = (h || f).nombre || id, txt = function (v) { return String(v == null ? '' : v).trim(); };
+    if (h && !f) f = fs.filter(function (x) { return String(x.id) === id && (x.semanas || []).indexOf(h.semana) >= 0 && !/anulada|porAnular|rechazada/.test(x.estado || ''); })[0] || null;
+    var pagos = h ? [h] : (D.hist || []).filter(function (y) { return y.id === id && (f.semanas || []).indexOf(y.semana) >= 0 && (!y.factura || txt(y.factura) === txt(f.numero)); });
+    var viejo = h ? { num: txt(h.factura || (f && f.numero)), fecha: h.fechaFactura || (f && f.fechaEmision) || '', aut: txt(h.autorizacion || (f && f.autorizacion)), nit: txt(h.nit || (f && f.nitEmisor)) } :
+      { num: txt(f.numero), fecha: f.fechaEmision || '', aut: txt(f.autorizacion), nit: txt(f.nitEmisor) };
+    var iso = X.conciliacion._puro.fechaRCV, importe = h ? h.importe : Number(f.importe) || 0, viejoISO = iso(viejo.fecha);
+    var candidatas = fs.filter(function (x) { return x !== f && String(x.id) === id && x.caso === 'duplicadaContax' && /porAnular|anulada/.test(x.estado || '') && txt(x.numero) !== viejo.num; });
+    var sug = candidatas.filter(function (x) { return Math.abs((Number(x.importe) || 0) - importe) < 0.05; })[0] || null;
+    var cliente = X.conciliacion._puro.contadorVivo(id) === 'CONTAX';
+    X.ventana('Cambiar la factura', esc(nombre) + ' · ID ' + esc(id) + ' · ' + esc(h ? semCorta(h.semana) + ' · ' : '') + bs(importe),
+      '<div class="aviso-caja mb">' + ic('ayuda') + '<div><b>Factura actual: N.º ' + esc(viejo.num || 's/n') + ' · ' + esc(X.fecha(viejoISO) || '—') + '</b>Solo para casos excepcionales. Cambia el número, la fecha y la autorización en el historial, en la factura y en lo que ve el repartidor en su portal. Queda registrado en la bitácora.</div></div>' +
+      '<div class="fm"><div class="fila"><label for="cfNum">N.º de la factura que queda</label><input id="cfNum" inputmode="numeric" maxlength="30" value="' + esc(sug ? sug.numero : '') + '"></div>' +
+      '<div class="fila"><label for="cfFecha">Fecha de la factura</label><input id="cfFecha" type="date" value="' + esc(sug ? iso(sug.fechaEmision) : '') + '"></div>' +
+      '<div class="fila"><label for="cfAut">Código de autorización</label><input id="cfAut" maxlength="120" value="' + esc(sug ? sug.autorizacion : '') + '"></div>' +
+      '<div class="fila"><label for="cfMotivo">Motivo</label><input id="cfMotivo" maxlength="160" placeholder="Por ejemplo: duplicada, solo se pudo anular la N.º ' + esc(viejo.num) + '"></div></div>' +
+      '<label class="interruptor"><input type="checkbox" id="cfPanel"' + (cliente || sug ? ' checked' : '') + '>Mandar la factura N.º ' + esc(viejo.num || 's/n') + ' al Panel para anularla</label>' +
+      '<p class="muted" id="cfNota" style="margin:8px 0 0">' + (sug ? 'Datos tomados de la factura N.º ' + esc(sug.numero) + ' que estaba como duplicada: esa ya no se anula.' : '') + '</p>',
+      '<button class="btn sec" data-cerrar>Cancelar</button><button class="btn" data-ok>' + ic('check') + 'Cambiar factura</button>',
+      function (v, cerrar) {
+        var ok = v.querySelector('[data-ok]'), q = function (k) { return v.querySelector(k); };
+        q('#cfNum').addEventListener('input', function () {
+          var g = candidatas.filter(function (x) { return txt(x.numero) === txt(q('#cfNum').value); })[0];
+          if (g) { q('#cfFecha').value = iso(g.fechaEmision); q('#cfAut').value = txt(g.autorizacion); q('#cfPanel').checked = true; }
+          q('#cfNota').textContent = g ? 'Datos tomados de la factura N.º ' + g.numero + ' que estaba como duplicada: esa ya no se anula.' : '';
+        });
+        ok.addEventListener('click', function () {
+          var num = txt(q('#cfNum').value), fecha = q('#cfFecha').value, aut = txt(q('#cfAut').value), motivo = txt(q('#cfMotivo').value), alPanel = q('#cfPanel').checked;
+          if (!num || !fecha || !aut || !motivo) { X.aviso('Completa el número, la fecha, la autorización y el motivo.'); return; }
+          if (num === viejo.num) { X.aviso('Es la misma factura: escribe el número de la que queda.'); return; }
+          var gemela = candidatas.filter(function (x) { return txt(x.numero) === num; })[0] || null, limpia = X.conciliacion._puro.limpiaNum;
+          var otra = fs.filter(function (x) { return x !== f && x !== gemela && x.estado !== 'anulada' && limpia(x.numero) === limpia(num) && limpia(x.nitEmisor) === limpia(viejo.nit); })[0];
+          var pagada = (D.hist || []).filter(function (y) { return y.id === id && txt(y.factura) === num && pagos.indexOf(y) < 0; })[0];
+          if (otra || pagada) { X.aviso('La factura N.º ' + num + ' ya está registrada' + (pagada ? ' en ' + semCorta(pagada.semana) : '') + '. Revísala antes de seguir.'); return; }
+          ok.disabled = true; ok.innerHTML = X.anilloBoton() + 'Guardando';
+          var quien = S.usuario.email, detalle = 'Se reemplazó por la N.º ' + num + '. ' + motivo;
+          pagos.reduce(function (p, y) {
+            return p.then(function () { return leerPago(y); }).then(function (r) {
+              var dmy = fecha.split('-').reverse().map(function (t) { return String(Number(t)); }).join('/');
+              r.fila[6] = typeof r.fila[6] === 'number' ? Number(num) : num; r.fila[7] = /\//.test(String(y.fechaFactura)) ? dmy : fecha; r.fila[9] = aut;
+              r.filas.push(r.fila);
+              var ops = [opParte(r)];
+              if (r.rider) { r.rider.filas[r.rider.i][4] = num; ops.push(opRider(r)); }
+              return escribir(ops);
+            });
+          }, Promise.resolve()).then(function () {
+            var ops = [], col = X.dbP.collection('facturas');
+            if (f) {
+              var d = { numero: num, fechaEmision: fecha, autorizacion: aut, revisado: X.servidor(), revisadoPor: quien, cambioFactura: { antes: viejo.num, fechaAntes: viejoISO, autorizacionAntes: viejo.aut, motivo: motivo, quien: quien, dia: X.hoyISO() } };
+              if (f.verificacion) d['verificacion.autorizacion'] = aut;
+              ops.push({ tipo: 'update', ref: col.doc(f._id), datos: d });
+            }
+            if (gemela) ops.push({ tipo: 'update', ref: col.doc(gemela._id), datos: alPanel ? { numero: viejo.num, fechaEmision: viejoISO, autorizacion: viejo.aut, nitEmisor: viejo.nit, estado: 'porAnular', detalle: detalle } : { estado: 'anulada', detalle: detalle } });
+            else if (alPanel) ops.push({ tipo: 'set', ref: col.doc(), datos: X.conciliacion._puro.nuevaFactura({ id: id, nombre: nombre, semana: '', num: viejo.num, imp: importe, fecha: viejoISO, nit: viejo.nit, nom: (f && f.razonEmisor) || nombre, aut: viejo.aut }, 'porAnular', { uid: '', caso: 'duplicadaContax', semanas: [], detalle: detalle }) });
+            return escribir(ops);
+          }).then(function () {
+            return X.bitacora('Cambió la factura de un repartidor', nombre + ' · ID ' + id + ' · N.º ' + viejo.num + ' por N.º ' + num + ' · ' + motivo);
+          }).then(function () {
+            cerrar(); X.aviso('Factura cambiada: ahora es la N.º ' + num + '.'); cargarHistorial(); X.recargarTodo();
+          }, function (e) { console.error(e); ok.disabled = false; ok.innerHTML = ic('check') + 'Cambiar factura'; X.aviso(e.message || 'No se pudo guardar.'); });
+        });
+      });
+  }
   function accionesPago(h) {
     if (!puedeCorregir() || !h.fecha || !D.hist) return '';
     var a = ' data-f="' + esc(h.fecha) + '" data-s="' + esc(h.semana) + '" data-i="' + esc(h.id) + '" data-m="' + esc(h.importe) + '"';
     return '<div class="fila-acc" style="flex-wrap:nowrap"><button class="btn sec chico" data-pago-acc="rebote"' + a + '>' + ic('recargar') + 'A pendiente</button>' +
-      '<button class="btn sec chico" data-pago-acc="fecha"' + a + '>' + ic('reloj') + 'Fecha</button></div>';
+      '<button class="btn sec chico" data-pago-acc="fecha"' + a + '>' + ic('reloj') + 'Fecha</button>' +
+      '<button class="btn sec chico" data-pago-acc="factura"' + a + '>' + ic('factura') + 'Factura</button></div>';
   }
   document.addEventListener('click', function (ev) {
     var b = ev.target.closest && ev.target.closest('[data-pago-acc]'); if (!b) return;
@@ -1007,7 +1074,8 @@
     var f = b.getAttribute('data-f'), q = { id: b.getAttribute('data-i'), semana: b.getAttribute('data-s'), importe: Number(b.getAttribute('data-m')) };
     var h = (D.hist || []).filter(function (x) { return x.fecha === f && mismoPago(x, q); })[0];
     if (!h) { X.aviso('Ese pago ya no está en el historial. Recarga la página.'); return; }
-    (b.getAttribute('data-pago-acc') === 'rebote' ? devolverPago : cambiarFechaPago)(h);
+    var acc = b.getAttribute('data-pago-acc');
+    if (acc === 'factura') cambiarFactura(h); else (acc === 'rebote' ? devolverPago : cambiarFechaPago)(h);
   }, true);
   function anularPlanilla(p, alTerminar) {
     X.confirmar('Anular planilla', 'Las semanas de esta planilla que sigan «en planilla» vuelven a pendientes, para incluirlas en otra. Úsalo si el banco rechazó la planilla o se generó por error.', function () {
@@ -1107,7 +1175,7 @@
   X.semanas = {
     completarNombres: completarNombres,
     modoControl: modoControl, cargar: cargar, aplicar: aplicar, cargarHistorial: cargarHistorial, aplicarHistorial: aplicarHistorial, agregarAlHistorial: agregarAlHistorial, importar: importar, verImportaciones: verImportaciones, verPorSemana: verPorSemana, migrar: migrar,
-    marcarEnPlanilla: marcarEnPlanilla, cambiarFecha: cambiarFecha, puedeCorregir: puedeCorregir, accionesPago: accionesPago, botonPagado: botonPagado, marcarFuera: marcarFuera, confirmarPago: confirmarPago, anularPlanilla: anularPlanilla, porConfirmar: porConfirmar, reporte: reporte,
+    marcarEnPlanilla: marcarEnPlanilla, cambiarFecha: cambiarFecha, puedeCorregir: puedeCorregir, cambiarFactura: cambiarFactura, accionesPago: accionesPago, botonPagado: botonPagado, marcarFuera: marcarFuera, confirmarPago: confirmarPago, anularPlanilla: anularPlanilla, porConfirmar: porConfirmar, reporte: reporte,
     // piezas que usa js/banco.js
     leerLibro: leerLibro, escribir: escribir, encolarNotif: encolarNotif, CIUDADES: CIUDADES, fechaISO: fechaISO,
     // lógica pura (para pruebas)
