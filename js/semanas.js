@@ -118,6 +118,7 @@
           pendientes: [], historial: [], enPlanilla: [], noHab: [], tramites: [], _ultima: 0, _ultimaNoHab: false };
         D.repartidores.set(uid, r);
       }
+      if (s.nombreSistema) r.nombreSistema = true;
       var item = { semana: s.semana, rango: s.rango || '', importe: Number(s.importe) || 0, ciudad: s.ciudad || '', _doc: s._id, _orden: s.orden || 0, rebote: s.rebote || null };
       if (s.estado === 'pendiente') { item.estado = 'Pendiente'; r.pendientes.push(item); }
       else if (s.estado === 'en_planilla') { item.estado = 'En planilla'; item.planilla = s.planilla || ''; r.enPlanilla.push(item); }
@@ -290,8 +291,11 @@
     });
     Object.keys(porDoc).forEach(function (k) {
       var r = porDoc[k], ant = o.existentes[k], rep = D.repartidores && D.repartidores.get(r.uid);
+      var dePlanilla = !!r.nombre;
       if (!r.nombre && rep) r.nombre = rep.nombre;
       if (!r.nombre) r.nombre = nombreBDY(r.id); // planillas que vienen solo con el ID
+      if (!r.nombre && ant) r.nombre = ant.nombre || '';
+      r.nombreSistema = !dePlanilla && !!r.nombre;
       r.cuenta = !!(rep && !rep.sinCuenta);
       r.estadoNuevo = r.importe > 0 ? 'pendiente' : 'no_habilitado';
       r.texto = ant ? ant.semana : textoSemana(o.patron, r.n, r.anio);
@@ -416,7 +420,7 @@
           ok.disabled = true; ok.innerHTML = X.anilloBoton() + 'Guardando';
           var lote = 'imp-' + X.nuevoId(), quien = S.usuario.email;
           var ops = aGuardar.map(function (r) {
-            var d = { id: r.id, uid: r.uid, nombre: r.nombre, celular: r.celular, ciudad: info.ciudad, anio: r.anio, orden: r.orden, ganancias: r.ganancias, importeAnterior: r.importeAnterior,
+            var d = { id: r.id, uid: r.uid, nombre: r.nombre, nombreSistema: !!r.nombreSistema, celular: r.celular, ciudad: info.ciudad, anio: r.anio, orden: r.orden, ganancias: r.ganancias, importeAnterior: r.importeAnterior,
               rango: r.rango || (r.ant && r.ant.rango) || '', importe: r.importe, estado: r.estadoNuevo, lote: lote, actualizado: X.servidor(), quien: quien };
             if (r.accion === 'nuevo') { d.semana = r.texto; d.origen = 'excel'; d.loteCreado = lote; d.creado = X.servidor(); d.planilla = null; d.fechaPago = null; }
             else d.anterior = { importe: Number(r.ant.importe) || 0, estado: r.ant.estado, lote: r.ant.lote || '' };
@@ -495,7 +499,7 @@
             var e = ev.semanas.filter(function (z) { return z.p.semana === x.semana; })[0];
             f = e ? (EST_FACT[e.estado] || 'Pago retenido') : 'Falta factura';
           }
-          filas.push({ ciudad: x.ciudad || '', id: id, nombre: x.nombre || (h && h.nombre) || nombreBDY(id), semana: x.semana, rango: x.rango || (h && h.rango) || '',
+          filas.push({ ciudad: x.ciudad || '', id: id, nombre: x.nombre || (h && h.nombre) || nombreBDY(id), nombreSistema: !!x.nombreSistema || !x.nombre, semana: x.semana, rango: x.rango || (h && h.rango) || '',
             importe: x.estado === 'no_habilitado' ? 0 : Number(x.importe) || 0, ganancias: Number(x.ganancias) || 0,
             estado: { pagado: 'Pagado', pendiente: 'Pendiente', en_planilla: 'Enviado a pagar', no_habilitado: 'No habilitado' }[x.estado] || x.estado,
             fechaPago: x.estado === 'pagado' ? X.fecha(x.fechaPago || (h && h.fecha)) : '', factura: x.estado === 'pagado' ? ((h && h.factura) || '—') : x.estado === 'no_habilitado' ? 'No corresponde' : f });
@@ -571,7 +575,7 @@
       var chip = function (e) { return X.chip({ 'Pagado': 'ok', 'Pendiente': 'pend', 'Enviado a pagar': 'pend', 'No habilitado': 'neutro' }[e] || 'neutro', e === 'No habilitado' ? 'No habilitado (Bs 0)' : e); };
       caja.innerHTML = l.length ? '<div class="tabla-ancha">' + X.tabla([
         { t: 'Ciudad', html: function (f) { return esc(CIUDADES[f.ciudad] || '—'); } },
-        { t: 'Repartidor', html: function (f) { return '<b>' + esc(f.nombre || 'Sin nombre') + '</b><span class="sub num">ID ' + esc(f.id) + '</span>'; } },
+        { t: 'Repartidor', html: function (f) { return '<b>' + esc(f.nombre || 'Sin nombre') + '</b><span class="sub num">ID ' + esc(f.id) + '</span>' + (f.nombreSistema ? '<span class="sub">' + X.chip('neutro', 'Nombre colocado por el sistema') + '</span>' : ''); } },
         { t: 'Importe', clase: 'monto', html: function (f) { return bs(f.importe); } },
         { t: 'Pago', html: function (f) { return chip(f.estado) + (f.fechaPago ? '<span class="sub num">' + esc(f.fechaPago) + '</span>' : ''); } },
         { t: 'Factura', html: function (f) { return esc(f.factura); } }
@@ -584,8 +588,8 @@
         { nombre: 'Resumen', filas: [['Planilla', textoOrden(PS.orden) + (PS.ciudad ? ' · ' + CIUDADES[PS.ciudad] : ' · todas las ciudades')], [], ['', 'Repartidores', 'Importe (Bs)'],
           ['Planilla completa', k.todos.n, k.todos.t], ['Pagados', k.pagado.n, k.pagado.t], ['Falta pagar', k.pendiente.n, k.pendiente.t], ['No habilitados (Bs 0)', k.nohab.n, 0],
           [], ['Por ciudad', 'Repartidores', 'Habilitados', 'No habilitados (Bs 0)', 'Importe (Bs)']].concat(porCiudad().map(function (c) { return [c.nom, c.k.n, c.k.hab, c.k.nohab, c.k.t]; })) },
-        { nombre: 'Detalle', filas: [['Ciudad', 'ID Yango', 'Nombre', 'Semana', 'Rango', 'Importe (Bs)', 'Ganancias (Bs)', 'Estado del pago', 'Fecha de pago', 'Factura']].concat(l.map(function (f) {
-          return [CIUDADES[f.ciudad] || '', f.id, f.nombre, f.semana, f.rango, f.importe, f.ganancias || '', f.estado, f.fechaPago, f.factura];
+        { nombre: 'Detalle', filas: [['Ciudad', 'ID Yango', 'Nombre', 'Semana', 'Rango', 'Importe (Bs)', 'Ganancias (Bs)', 'Estado del pago', 'Fecha de pago', 'Factura', 'Nota']].concat(l.map(function (f) {
+          return [CIUDADES[f.ciudad] || '', f.id, f.nombre, f.semana, f.rango, f.importe, f.ganancias || '', f.estado, f.fechaPago, f.factura, f.nombreSistema ? 'Nombre colocado por el sistema' : ''];
         })) }
       ], nom);
       X.bitacora('Descargó planilla por semana', nom);
@@ -919,7 +923,31 @@
     X.bitacora('Abrió reporte de pago', p.fecha);
   }
 
+  /* Semanas guardadas sin nombre: se completan con BDYango apenas el repartidor aparece ahí.
+     Solo se leen las que están en blanco, así que normalmente no gasta casi nada. */
+  function completarNombres() {
+    if (!X.puedeEditar() || !S.portalUsuario) return Promise.resolve(0);
+    return col().where('nombre', '==', '').get().then(function (q) {
+      var ops = [], nuevos = {};
+      q.forEach(function (d) {
+        var n = nombreBDY(String(d.data().id)); if (!n) return;
+        nuevos[d.id] = n;
+        ops.push({ tipo: 'update', ref: d.ref, datos: { nombre: n, nombreSistema: true, actualizado: X.servidor() } });
+      });
+      if (!ops.length) return 0;
+      return escribir(ops).then(function () {
+        (D.semanas || []).forEach(function (s) {
+          if (!nuevos[s._id]) return;
+          s.nombre = nuevos[s._id]; s.nombreSistema = true;
+          var r = D.repartidores && D.repartidores.get(s.uid || X.idSeguro(s.id)); if (r) r.nombreSistema = true;
+        });
+        X.bitacora('Nombres colocados por el sistema', ops.length + ' semanas sin nombre completadas con BDYango');
+        return ops.length;
+      });
+    }).catch(function (e) { console.warn('Nombres de semanas:', e); return 0; });
+  }
   X.semanas = {
+    completarNombres: completarNombres,
     modoControl: modoControl, cargar: cargar, aplicar: aplicar, cargarHistorial: cargarHistorial, aplicarHistorial: aplicarHistorial, agregarAlHistorial: agregarAlHistorial, importar: importar, verImportaciones: verImportaciones, verPorSemana: verPorSemana, migrar: migrar,
     marcarEnPlanilla: marcarEnPlanilla, cambiarFecha: cambiarFecha, marcarFuera: marcarFuera, confirmarPago: confirmarPago, anularPlanilla: anularPlanilla, porConfirmar: porConfirmar, reporte: reporte,
     // piezas que usa js/banco.js

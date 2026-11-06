@@ -510,6 +510,7 @@
       if (D.repartidores) D.repartidores.forEach(function (x) { var t = b.todos[x.id]; if (!x.nombre && t && t.nombre) x.nombre = t.nombre; });
       // Base propia: guarda a todos (y marca inactivos a los que Yango sacó)
       if (X.padron) X.padron.actualizar(b.todos);
+      if (X.semanas) X.semanas.completarNombres();
     }, function (e) { console.warn('BDYango:', e); D.bdyango = { cuentas: {}, lista: [], error: e.message || 'No se pudo leer BDYango.' }; })
       .then(function () { if (['bdyango', 'pagos', 'repartidores', 'informe', 'historial', 'tablero', 'clientes'].indexOf(S.pagina) >= 0 && !document.querySelector('.velo') && !/INPUT|SELECT|TEXTAREA/.test((document.activeElement || {}).tagName)) X.refrescar(); });
     return bdyPromesa;

@@ -217,7 +217,7 @@
         '<div class="herr"><div class="buscar">' + ic('buscar') +  '<input type="search" id="bPagos" placeholder="Buscar repartidor por nombre o ID" value="' + esc(P.buscar) + '"></div>' +
           '<select id="sSemana" aria-label="Semana"><option value="">Todas las semanas</option>' + semLista.map(function (s) { return '<option' + (s === P.semana ? ' selected' : '') + '>' + esc(s) + '</option>'; }).join('') + '</select></div>' +
         (f.length ? X.tabla([
-          { t: 'Repartidor', html: function (e) { return '<b>' + esc(e.r.nombre || 'Sin nombre') + '</b><span class="sub num">ID ' + esc(e.r.id) + (e.cliente ? ' · ' : '') + '</span>' + (e.cliente ? X.chip('contax', 'Cliente CONTAX') : ''); } },
+          { t: 'Repartidor', html: function (e) { return '<b>' + esc(e.r.nombre || 'Sin nombre') + '</b><span class="sub num">ID ' + esc(e.r.id) + (e.cliente ? ' · ' : '') + '</span>' + (e.cliente ? X.chip('contax', 'Cliente CONTAX') : '') + (e.r.nombreSistema ? '<span class="sub">' + X.chip('neutro', 'Nombre colocado por el sistema') + '</span>' : ''); } },
           { t: 'Semanas', html: function (e) { return e.semanas.map(function (s) { return '<div style="margin:2px 0"><span class="num">' + esc(semanaCorta(s.p.semana)) + '</span> ' + chipSemana(s.estado) + (s.p.rebote ? ' ' + X.chip('mal', 'Rebotó en el banco') : '') + '</div>'; }).join(''); } },
           { t: 'Estado', html: function (e) {
             var falta = e.listo && X.banco ? X.banco.faltaEnCuenta(X.banco.cuentaDe(e.r.id)) : [];
@@ -592,7 +592,7 @@
       }).join('') + '</div>' +
         '<div class="herr"><div class="buscar">' + ic('buscar') + '<input type="search" id="bRep" placeholder="Buscar por nombre, ID o celular" value="' + esc(R.buscar) + '"></div></div>' +
         (f.length ? X.tabla([
-          { t: 'Repartidor', html: function (r) { return '<b>' + esc(r.nombre || 'Sin nombre') + '</b><span class="sub num">ID ' + esc(r.id) + '</span>'; } },
+          { t: 'Repartidor', html: function (r) { return '<b>' + esc(r.nombre || 'Sin nombre') + '</b><span class="sub num">ID ' + esc(r.id) + '</span>' + (r.nombreSistema ? '<span class="sub">' + X.chip('neutro', 'Nombre colocado por el sistema') + '</span>' : ''); } },
           { t: 'Celular', html: function (r) { return '<span class="num">' + esc(X.telVisible(r.celular)) + '</span>'; } },
           { t: 'Situación', html: function (r) { return (r.habilitado === false ? X.chip('mal', 'No habilitado') : X.chip('ok', 'Habilitado')) + ' ' + (r.poliza ? '' : X.chip('pend', 'Sin póliza')) + (X.clienteDe(r) ? ' ' + X.chip('contax', 'CONTAX') : ''); } },
           { t: 'Pendiente', clase: 'monto', html: function (r) { var p = (r.resumen || {}).pendientes || {}; var nh = (r.noHab || [])[0]; return p.cantidad ? '<b>' + bs(p.total) + '</b><span class="sub">' + p.cantidad + ' sem.</span>' : nh ? '<span class="muted">Bs 0</span><span class="sub">' + esc(nh.semana) + ' no hab.</span>' : '<span class="muted">—</span>'; } },
