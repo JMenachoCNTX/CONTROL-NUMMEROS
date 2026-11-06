@@ -638,9 +638,10 @@
       .sort(function (a, z) { return X.normal(a.nombre).localeCompare(X.normal(z.nombre)); });
   }
   function tablaHist(filas, pag, pie) {
-    return '<div class="tabla-ancha">' + X.tabla(COLS_HIST.map(function (c) {
+    var acc = X.semanas && X.semanas.puedeCorregir() ? [{ t: 'Corregir', html: function (h) { return X.semanas.accionesPago(h); } }] : [];
+    return '<div class="tabla-ancha">' + X.tabla(acc.concat(COLS_HIST.map(function (c) {
       return { t: c[0], clase: c[1] === 'importe' ? 'monto' : '', html: function (h) { var v = valorHist(h, c); return c[1] === 'importe' ? bs(v) : c[1] === 'nombre' ? '<b>' + esc(v) + '</b>' : c[1] === 'rango' ? '<span style="white-space:nowrap">' + esc(v) + '</span>' : c[1] === 'autorizacion' ? '<span class="sub num" style="max-width:180px;display:block;overflow:hidden;text-overflow:ellipsis" title="' + esc(v) + '">' + esc(v) + '</span>' : esc(v); } };
-    }), filas, { clic: true, tam: 50, pag: pag || 0, pie: pie }) + '</div>';
+    })), filas, { clic: true, tam: 50, pag: pag || 0, pie: pie && acc.length ? '<td></td>' + pie : pie }) + '</div>';
   }
 
   /* ══════════ REPARTIDORES ══════════ */
@@ -730,7 +731,8 @@
         ((r.historial || []).length ? X.tabla([
           { t: 'Fecha de pago', html: function (h) { return esc(h.fechaPago); } },
           { t: 'Semana', html: function (h) { return esc(h.semana) + '<span class="sub">' + esc(h.rango || '') + '</span>'; } },
-          { t: 'Importe', clase: 'monto', html: function (h) { return bs(h.importe); } }
+          { t: 'Importe', clase: 'monto', html: function (h) { return bs(h.importe); } },
+          { t: '', html: function (h) { return X.semanas ? X.semanas.accionesPago({ fecha: h.fechaISO, semana: h.semana, id: r.id, importe: h.importe }) : ''; } }
         ], r.historial, { tam: 20 }) : X.vacio('Todavía no recibió pagos')) + '</div>' +
       '<div class="card"><div class="h2">Trámites <small>' + (r.tramites || []).length + '</small></div>' +
         ((r.tramites || []).length ? X.tabla([

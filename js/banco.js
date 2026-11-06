@@ -352,6 +352,7 @@
     var fecha = p.fechaPago || p.fechaProgramada || p.fecha, d = X.aFecha(fecha);
     return d ? z2(d.getDate()) + ' ' + MESES[d.getMonth()] : fecha;
   }
+  function ciudadCorta(c) { var t = String(c || '').trim().toUpperCase(); return CIUDAD_CORTA[t] || (t === 'SC' || t === 'LP' ? t : ''); }
   /* Los números que comparten el Excel y el PDF: así los dos reportes siempre dan lo mismo */
   function resumenPlanilla(p) {
     var lineas = p.lineas || [], principal = p.semanaPrincipal || semanaPrincipal(lineas), P = X.semanas._puro;
@@ -364,12 +365,23 @@
     // Toda la semana principal, por ciudad: lo que se paga y lo que queda retenido
     if (X.semanas.modoControl() && D.semanas && principal) {
       var enPlanilla = {}; lineas.forEach(function (l) { enPlanilla[l.doc] = l; });
-      var docs = D.semanas.filter(function (s) { return semBanco(s.semana, s.orden) === principal && (Number(s.importe) || 0) > 0; })
-        .sort(function (a, b) { return (Number(a.importe) || 0) - (Number(b.importe) || 0); });
-      var pl = { docs: docs, linea: function (s) { return enPlanilla[s._id] || (s.estado === 'pagado' || s.estado === 'en_planilla' ? { excepcion: false, factura: null } : null); },
+      var docs = D.semanas.filter(function (s) { return semBanco(s.semana, s.orden) === principal && (Number(s.importe) || 0) > 0; });
+      // D.semanas solo trae lo abierto: lo ya pagado de esa semana sale de la planilla y del historial
+      var vistos = {}; docs.forEach(function (s) { vistos[String(s.id)] = 1; });
+      lineas.forEach(function (l) {
+        if (l.sem !== principal || vistos[String(l.id)]) return;
+        vistos[String(l.id)] = 1; docs.push({ _id: l.doc, id: l.id, nombre: l.nombre, importe: l.importe, ciudad: l.ciudad, rango: l.rango });
+      });
+      (D.hist || []).forEach(function (h) {
+        if (vistos[String(h.id)] || !(h.importe > 0) || semBanco(h.semana) !== principal) return;
+        vistos[String(h.id)] = 1;
+        docs.push({ _id: '', id: h.id, nombre: h.nombre, importe: h.importe, ciudad: h.ciudad, rango: h.rango, _linea: { excepcion: false, factura: h.factura ? { numero: String(h.factura), fecha: h.fechaFactura, nit: String(h.nit || ''), autorizacion: String(h.autorizacion || '') } : null } });
+      });
+      docs.sort(function (a, b) { return (Number(a.importe) || 0) - (Number(b.importe) || 0); });
+      var pl = { docs: docs, linea: function (s) { return s._linea || enPlanilla[s._id] || (s.estado === 'pagado' || s.estado === 'en_planilla' ? { excepcion: false, factura: null } : null); },
         ciudades: {}, habilitado: { n: 0, t: 0 }, excepcion: { n: 0, t: 0 }, retenido: { n: 0, t: 0 }, n: 0, t: 0 };
       docs.forEach(function (s) {
-        var v = Number(s.importe) || 0, l = pl.linea(s), k = CIUDAD_CORTA[s.ciudad] || '', c = pl.ciudades[k] = pl.ciudades[k] || { n: 0, t: 0, ret: 0 };
+        var v = Number(s.importe) || 0, l = pl.linea(s), k = ciudadCorta(s.ciudad), c = pl.ciudades[k] = pl.ciudades[k] || { n: 0, t: 0, ret: 0 };
         var g = !l ? pl.retenido : l.excepcion ? pl.excepcion : pl.habilitado;
         g.n++; g.t += v; c.n++; c.t += v; if (!l) c.ret += v; pl.n++; pl.t += v;
       });
@@ -388,7 +400,7 @@
         .concat(pl.docs.map(function (s, i) {
           var l = pl.linea(s);
           var rep = D.repartidores && D.repartidores.get(s.uid);
-          return [i + 1, principal, rangoLargo(s.rango, anio), numOTexto(s.id), s.nombre || (rep && rep.nombre) || '', Number(s.importe) || 0, CIUDAD_CORTA[s.ciudad] || '']
+          return [i + 1, principal, rangoLargo(s.rango, anio), numOTexto(s.id), s.nombre || (rep && rep.nombre) || '', Number(s.importe) || 0, ciudadCorta(s.ciudad)]
             .concat(l ? facturaCols(l) : ['Pago Retenido', 'Pago Retenido', 'Pago Retenido', 'Pago Retenido'])
             .concat([l ? estadoLinea(l) : 'Retención ❌', Number(anio) || '', '']);
         })) });

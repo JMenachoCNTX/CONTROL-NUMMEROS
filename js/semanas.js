@@ -171,7 +171,7 @@
     D.repartidores.forEach(function (r) {
       var l = (por[r.uid] || []).map(function (h) {
         var d = X.aFecha(h.fecha);
-        return { semana: h.semana, rango: h.rango, importe: h.importe, ciudad: h.ciudad, factura: h.factura, fechaPago: X.fecha(h.fecha), _o: d ? d.getTime() : 0 };
+        return { semana: h.semana, rango: h.rango, importe: h.importe, ciudad: h.ciudad, factura: h.factura, fechaPago: X.fecha(h.fecha), fechaISO: h.fecha, _o: d ? d.getTime() : 0 };
       }).sort(function (a, b) { return b._o - a._o; });
       r.historial = l;
       if (!r.nombre && por[r.uid] && por[r.uid][0]) r.nombre = por[r.uid][0].nombre;
@@ -851,6 +851,117 @@
         });
       });
   }
+  /* ══════════ CORREGIR UN PAGO DEL HISTORIAL (solo administrador) ══════════
+     Devolver a pendiente (rebotó en el banco) o cambiar la fecha de un solo pago. Primero se lee todo y luego
+     se escribe en un solo lote: o queda completo (historial, semana y portal del repartidor) o no cambia nada. */
+  function puedeCorregir() { return X.esAdmin() && modoControl(); }
+  function mismoPago(f, h) { return String(f.id) === String(h.id) && String(f.semana) === String(h.semana) && Math.abs((Number(f.importe) || 0) - (Number(h.importe) || 0)) < 0.005; }
+  function totalFilas(l) { return X.redondear(l.reduce(function (t, f) { return t + (Number(f[4]) || 0); }, 0)); }
+  function leerPago(h) {
+    var n = numSemana(h.semana), uid = X.idSeguro(h.id);
+    if (!n) return Promise.reject(new Error('No se reconoce la semana de este pago.'));
+    var anio = anioSemana(h.semana, h.gestion, X.aFecha(h.fecha) || new Date()), ref = X.dbP.collection('historialRider').doc(uid);
+    return Promise.all([colH().where('fecha', '==', h.fecha).get(), col().doc(idDoc(uid, anio, n)).get(), ref.get()]).then(function (res) {
+      var r = { uid: uid, anio: anio, orden: anio * 100 + n, semana: res[1], rider: null, parte: null, filas: null, fila: null };
+      res[0].forEach(function (d) {
+        if (r.fila || d.data().origen === 'hojaControl') return;
+        var l = []; try { l = JSON.parse(d.data().filas || '[]'); } catch (e) { return; }
+        for (var i = 0; i < l.length; i++) if (mismoPago({ id: l[i][2], semana: l[i][0], importe: l[i][4] }, h)) { r.parte = d; r.fila = l.splice(i, 1)[0]; r.filas = l; return; }
+      });
+      if (!r.fila) throw new Error('Ese pago ya no está en el historial. Recarga la página.');
+      if (res[2].exists) {
+        var lr = []; try { lr = JSON.parse(res[2].data().filas || '[]'); } catch (e) { lr = []; }
+        var k = lr.findIndex(function (f) { return f[3] === h.fecha && String(f[0]) === String(h.semana) && Math.abs((Number(f[2]) || 0) - h.importe) < 0.005; });
+        if (k >= 0) r.rider = { ref: ref, filas: lr, i: k };
+      }
+      return r;
+    });
+  }
+  function opParte(r) {
+    return { tipo: 'update', ref: r.parte.ref, datos: { filas: JSON.stringify(r.filas), cantidad: r.filas.length, total: totalFilas(r.filas), actualizado: X.servidor(), quien: S.usuario.email } };
+  }
+  function opRider(r) { return { tipo: 'update', ref: r.rider.ref, datos: { filas: JSON.stringify(r.rider.filas), cantidad: r.rider.filas.length, actualizado: X.servidor() } }; }
+  function resumenPago(h) { return (h.nombre || h.id) + ' · ' + semCorta(h.semana) + ' · ' + bs(h.importe); }
+  function semCorta(t) { return 'Sem ' + numSemana(t); }
+
+  function devolverPago(h) {
+    if (!puedeCorregir()) { X.aviso('Solo un administrador puede corregir un pago.'); return; }
+    X.ventana('Volver a pendiente', resumenPago(h) + ' · pagado el ' + X.fecha(h.fecha),
+      '<div class="fm"><div class="fila"><label for="dpMotivo">Motivo (opcional)</label><input id="dpMotivo" maxlength="120" placeholder="Por ejemplo: cuenta cerrada, número de cuenta errado"></div></div>' +
+      '<label class="interruptor"><input type="checkbox" id="dpAvisar" checked>Avisar al repartidor que su pago fue devuelto</label>' +
+      '<div class="aviso-caja">' + ic('ayuda') + '<div><b>Qué pasa</b>El pago sale del historial y vuelve a Pagos pendientes con la marca «Rebotó en el banco». Si cumple las condiciones, entra en la próxima planilla. Antes corrige su cuenta en «Cuentas bancarias» si estaba mal.</div></div>',
+      '<button class="btn sec" data-cerrar>Cancelar</button><button class="btn" data-ok>' + ic('recargar') + 'Volver a pendiente</button>',
+      function (v, cerrar) {
+        var ok = v.querySelector('[data-ok]');
+        ok.addEventListener('click', function () {
+          var motivo = v.querySelector('#dpMotivo').value.trim(), avisar = v.querySelector('#dpAvisar').checked, quien = S.usuario.email, planilla = '', uidAviso = '';
+          ok.disabled = true; ok.innerHTML = X.anilloBoton() + 'Guardando';
+          leerPago(h).then(function (r) {
+            var x = r.semana.exists ? r.semana.data() : null;
+            if (x && x.estado !== 'pagado') throw new Error('Esa semana ya figura como «' + x.estado + '», no como pagada. Revísala antes de seguir.');
+            planilla = (x && x.planilla) || ''; uidAviso = (x && x.uid) || r.uid;
+            var rebote = { fecha: X.hoyISO(), estadoBanco: motivo || 'Devuelto', banco: '', planilla: planilla, fechaPago: h.fecha, manual: true, quien: quien };
+            var ops = [opParte(r)];
+            if (x) ops.push({ tipo: 'update', ref: r.semana.ref, datos: { estado: 'pendiente', planilla: null, fechaPago: null, fueraDePlanilla: null, rebote: rebote, actualizado: X.servidor(), quien: quien } });
+            else ops.push({ ref: r.semana.ref, datos: { id: String(h.id), uid: r.uid, nombre: h.nombre || '', celular: '', ciudad: CIUDAD_HOJA[String(h.ciudad || '').trim().toUpperCase()] || '', semana: h.semana, anio: r.anio, orden: r.orden,
+              rango: h.rango || '', importe: h.importe, estado: 'pendiente', planilla: null, fechaPago: null, rebote: rebote, origen: 'rebote', creado: X.servidor(), actualizado: X.servidor(), quien: quien } });
+            if (r.rider) { r.rider.filas.splice(r.rider.i, 1); ops.push(opRider(r)); }
+            return escribir(ops);
+          }).then(function () {
+            var extra = [X.bitacora('Devolvió pago a pendiente', resumenPago(h) + ' · pagado el ' + X.fecha(h.fecha) + (motivo ? ' · ' + motivo : ''))];
+            if (planilla) extra.push(X.dbC.collection('pagos').doc(planilla).update({ rebotados: firebase.firestore.FieldValue.arrayUnion({ id: String(h.id), nombre: h.nombre || '', sem: h.semana, importe: h.importe, estado: motivo || 'Devuelto', banco: '' }) }).catch(function (e) { console.warn('Planilla:', e); }));
+            if (avisar) extra.push(encolarNotif('Tu pago fue devuelto por el banco', 'El banco no pudo depositar tu pago. Revisa que tu número de cuenta esté bien y escríbenos para volver a enviarlo.', [uidAviso], 'inicio'));
+            return Promise.all(extra);
+          }).then(function () {
+            cerrar(); X.aviso('El pago volvió a pendientes.'); cargarHistorial(); X.recargarTodo();
+          }, function (e) { console.error(e); ok.disabled = false; ok.innerHTML = ic('recargar') + 'Volver a pendiente'; X.aviso(e.message || 'No se pudo guardar. No cambió nada.'); });
+        });
+      });
+  }
+  function cambiarFechaPago(h) {
+    if (!puedeCorregir()) { X.aviso('Solo un administrador puede corregir un pago.'); return; }
+    X.ventana('Cambiar fecha de este pago', resumenPago(h) + ' · pagado el ' + X.fecha(h.fecha),
+      '<div class="fm"><div class="fila"><label for="fpFecha">Nueva fecha de pago</label><input id="fpFecha" type="date" value="' + esc(h.fecha) + '"></div></div>' +
+      '<div class="aviso-caja">' + ic('ayuda') + '<div><b>Qué cambia</b>Solo este pago pasa a la nueva fecha, en el historial y en lo que ve el repartidor en su portal. No se le envía ningún aviso.</div></div>',
+      '<button class="btn sec" data-cerrar>Cancelar</button><button class="btn" data-ok>' + ic('check') + 'Cambiar fecha</button>',
+      function (v, cerrar) {
+        var ok = v.querySelector('[data-ok]');
+        ok.addEventListener('click', function () {
+          var nueva = v.querySelector('#fpFecha').value, quien = S.usuario.email;
+          if (!nueva || nueva === h.fecha) { X.aviso('Elige una fecha distinta.'); return; }
+          ok.disabled = true; ok.innerHTML = X.anilloBoton() + 'Cambiando';
+          var destino = colH().doc(nueva + '_c');
+          Promise.all([leerPago(h), destino.get()]).then(function (res) {
+            var r = res[0], d = res[1], ant = [];
+            try { ant = d.exists ? JSON.parse(d.data().filas || '[]') : []; } catch (e) { throw new Error('No se pudo leer el historial de la nueva fecha.'); }
+            var todas = ant.concat([r.fila]);
+            var ops = [opParte(r), { ref: destino, merge: true, datos: { fecha: nueva, parte: 'c', origen: 'control', cantidad: todas.length, total: totalFilas(todas), filas: JSON.stringify(todas), actualizado: X.servidor(), quien: quien } }];
+            if (r.semana.exists && r.semana.data().estado === 'pagado') ops.push({ tipo: 'update', ref: r.semana.ref, datos: { fechaPago: nueva, actualizado: X.servidor(), quien: quien } });
+            if (r.rider) { r.rider.filas[r.rider.i][3] = nueva; ops.push(opRider(r)); }
+            return escribir(ops);
+          }).then(function () {
+            return X.bitacora('Cambió fecha de un pago', resumenPago(h) + ' · ' + X.fecha(h.fecha) + ' → ' + X.fecha(nueva));
+          }).then(function () {
+            cerrar(); X.aviso('El pago pasó al ' + X.fecha(nueva) + '.'); cargarHistorial(); X.recargarTodo();
+          }, function (e) { console.error(e); ok.disabled = false; ok.innerHTML = ic('check') + 'Cambiar fecha'; X.aviso(e.message || 'No se pudo guardar. No cambió nada.'); });
+        });
+      });
+  }
+  /* Botones de cada pago en el historial y en la ficha del repartidor */
+  function accionesPago(h) {
+    if (!puedeCorregir() || !h.fecha || !D.hist) return '';
+    var a = ' data-f="' + esc(h.fecha) + '" data-s="' + esc(h.semana) + '" data-i="' + esc(h.id) + '" data-m="' + esc(h.importe) + '"';
+    return '<div class="fila-acc" style="flex-wrap:nowrap"><button class="btn sec chico" data-pago-acc="rebote"' + a + '>' + ic('recargar') + 'A pendiente</button>' +
+      '<button class="btn sec chico" data-pago-acc="fecha"' + a + '>' + ic('reloj') + 'Fecha</button></div>';
+  }
+  document.addEventListener('click', function (ev) {
+    var b = ev.target.closest && ev.target.closest('[data-pago-acc]'); if (!b) return;
+    ev.preventDefault(); ev.stopPropagation();
+    var f = b.getAttribute('data-f'), q = { id: b.getAttribute('data-i'), semana: b.getAttribute('data-s'), importe: Number(b.getAttribute('data-m')) };
+    var h = (D.hist || []).filter(function (x) { return x.fecha === f && mismoPago(x, q); })[0];
+    if (!h) { X.aviso('Ese pago ya no está en el historial. Recarga la página.'); return; }
+    (b.getAttribute('data-pago-acc') === 'rebote' ? devolverPago : cambiarFechaPago)(h);
+  }, true);
   function anularPlanilla(p, alTerminar) {
     X.confirmar('Anular planilla', 'Las semanas de esta planilla que sigan «en planilla» vuelven a pendientes, para incluirlas en otra. Úsalo si el banco rechazó la planilla o se generó por error.', function () {
       Promise.all(docsDe(p).map(function (k) { return col().doc(k).get(); })).then(function (snaps) {
@@ -949,7 +1060,7 @@
   X.semanas = {
     completarNombres: completarNombres,
     modoControl: modoControl, cargar: cargar, aplicar: aplicar, cargarHistorial: cargarHistorial, aplicarHistorial: aplicarHistorial, agregarAlHistorial: agregarAlHistorial, importar: importar, verImportaciones: verImportaciones, verPorSemana: verPorSemana, migrar: migrar,
-    marcarEnPlanilla: marcarEnPlanilla, cambiarFecha: cambiarFecha, marcarFuera: marcarFuera, confirmarPago: confirmarPago, anularPlanilla: anularPlanilla, porConfirmar: porConfirmar, reporte: reporte,
+    marcarEnPlanilla: marcarEnPlanilla, cambiarFecha: cambiarFecha, puedeCorregir: puedeCorregir, accionesPago: accionesPago, marcarFuera: marcarFuera, confirmarPago: confirmarPago, anularPlanilla: anularPlanilla, porConfirmar: porConfirmar, reporte: reporte,
     // piezas que usa js/banco.js
     leerLibro: leerLibro, escribir: escribir, encolarNotif: encolarNotif, CIUDADES: CIUDADES, fechaISO: fechaISO,
     // lógica pura (para pruebas)
