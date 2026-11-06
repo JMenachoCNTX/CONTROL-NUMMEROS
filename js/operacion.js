@@ -211,7 +211,7 @@
   });
 
   /* ══════════ PAGOS ══════════ */
-  var P = { filtro: 'todos', semana: '', buscar: '', pag: 0 };
+  var P = { filtro: 'todos', semana: '', ciudad: '', buscar: '', pag: 0 };
   X.pagina('pagos', {
     t: 'Pagos pendientes', i: 'pagos', orden: 3, sec: 'Operación',
     render: function () {
@@ -260,7 +260,8 @@
           return '<button role="tab" aria-selected="' + (P.filtro === p[0]) + '" data-filtro="' + p[0] + '">' + p[1] + ' <em class="num">' + entero(cuenta(p[0])) + '</em></button>';
         }).join('') + '</div>' +
         '<div class="herr"><div class="buscar">' + ic('buscar') +  '<input type="search" id="bPagos" placeholder="Buscar por nombre, ID, celular, NIT, razón social o autorización" value="' + esc(P.buscar) + '"></div>' +
-          '<select id="sSemana" aria-label="Semana"><option value="">Todas las semanas</option>' + semLista.map(function (s) { return '<option' + (s === P.semana ? ' selected' : '') + '>' + esc(s) + '</option>'; }).join('') + '</select></div>' +
+          '<select id="sSemana" aria-label="Semana"><option value="">Todas las semanas</option>' + semLista.map(function (s) { return '<option' + (s === P.semana ? ' selected' : '') + '>' + esc(s) + '</option>'; }).join('') + '</select>' +
+          '<select id="sCiudad" aria-label="Ciudad"><option value="">Todas las ciudades</option>' + ['SCZ', 'CBBA', 'LPZ'].map(function (c) { return '<option value="' + c + '"' + (c === P.ciudad ? ' selected' : '') + '>' + esc(X.semanas.CIUDADES[c]) + '</option>'; }).join('') + '</select></div>' +
         (f.length ? X.tabla([
           { t: 'Repartidor', html: function (e) { return '<b>' + esc(e.r.nombre || 'Sin nombre') + '</b><span class="sub num">ID ' + esc(e.r.id) + (e.cliente ? ' · ' : '') + '</span>' + (e.cliente ? X.chip('contax', 'Cliente CONTAX') : '') + (e.r.nombreSistema ? '<span class="sub">' + X.chip('neutro', 'Nombre colocado por el sistema') + '</span>' : ''); } },
           { t: 'Semanas', html: function (e) { return e.semanas.map(function (s) { return '<div style="margin:2px 0"><span class="num">' + esc(semanaCorta(s.p.semana)) + '</span> ' + chipSemana(s.estado) + (s.p.rebote ? ' ' + X.chip('mal', 'Rebotó en el banco') : '') + '</div>'; }).join(''); } },
@@ -280,6 +281,7 @@
       el.querySelectorAll('[data-filtro]').forEach(function (b) { b.addEventListener('click', function () { P.filtro = b.getAttribute('data-filtro'); P.pag = 0; X.refrescar(); }); });
       var bq = el.querySelector('#bPagos'); if (bq) bq.addEventListener('input', debounce(function () { P.buscar = bq.value; P.pag = 0; X.refrescar(); setFoco('#bPagos'); }, 300));
       var ss = el.querySelector('#sSemana'); if (ss) ss.addEventListener('change', function () { P.semana = ss.value; P.pag = 0; X.refrescar(); });
+      var sc = el.querySelector('#sCiudad'); if (sc) sc.addEventListener('change', function () { P.ciudad = sc.value; P.pag = 0; X.refrescar(); });
       el.querySelectorAll('[data-pag]').forEach(function (b) { b.addEventListener('click', function () { P.pag = Number(b.getAttribute('data-pag')); X.refrescar(); }); });
       el.querySelectorAll('tr[data-fila]').forEach(function (tr) {
         tr.addEventListener('click', function () {
@@ -302,6 +304,7 @@
   function filtrarPagos(ev) {
     return ev.filter(function (e) {
       if (P.semana && !e.semanas.some(function (s) { return s.p.semana === P.semana; })) return false;
+      if (P.ciudad && !e.semanas.some(function (s) { return (s.p.ciudad || e.r.ciudad) === P.ciudad; })) return false;
       if (P.filtro === 'listos' && !e.listo) return false;
       if (P.filtro === 'retenidos' && e.listo) return false;
       if (P.filtro === 'contax' && !e.cliente) return false;
