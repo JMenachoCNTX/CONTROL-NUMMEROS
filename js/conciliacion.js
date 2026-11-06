@@ -119,6 +119,7 @@
       });
       return { ids: Object.keys(ids), exactos: exactos };
     }
+    var contadorDe = ctx.contadorDe || function () { return ''; };
     var nombreDe = {}; nombres.forEach(function (x) { if (!nombreDe[x.id]) nombreDe[x.id] = x.nombre; });
     var usados = {}, vistas = {}, cubre = {};
     var abierto = function (p, link) { return !usados[p.id + '|' + p.semana] && !(p.f && p.f.verificacion && !(link && p.f._id === link._id)); };
@@ -148,7 +149,7 @@
         var quien = p ? p.id : (id || (f ? f.id : '')), lista = pagosDe[quien] || [];
         return Object.assign({}, x, { r: r, det: det || '', como: como || '', id: quien, nombre: p ? p.nombre : (f ? f.nombre : (lista[0] ? lista[0].nombre : nombreDe[quien] || '')), semana: p ? p.semana : '',
           pago: p ? p.importe : 0, tipo: p ? p.tipo : '', uid: p ? p.uid : (f ? f.uid : (lista[0] ? lista[0].uid : '')), fid: f ? f._id : '', fest: f ? f.estado : '', forig: f ? (f.origen || '') : '', fmotivo: f ? (f.motivo || '') : '',
-          cnit: (nits[quien] || []).join(', '), abiertos: r === 'coincide' ? '' : textoPagos(lista) }, datosFactura(f));
+          cnit: (nits[quien] || []).join(', '), contador: contadorDe(quien), abiertos: r === 'coincide' ? '' : textoPagos(lista) }, datosFactura(f));
       };
       var ident = function () {
         if (link) return { ids: [String(link.id)], por: 'factura' };
@@ -207,7 +208,7 @@
       var fe = fechaRCV(f.fechaEmision), dentro = fe && desde && fe >= desde && fe <= hasta;
       res.push(Object.assign({ num: limpiaNum(f.numero), imp: Number(f.importe) || 0, nit: limpiaNum(f.nitEmisor), nom: f.razonEmisor || '', est: '', fecha: fe, aut: f.autorizacion || '',
         r: !dentro ? 'espera' : f.origen === 'contax' ? 'contaxFalta' : 'noEsta', det: '', como: '', id: f.id, nombre: f.nombre, semana: (f.semanas || []).join(', '), pago: 0, tipo: '', uid: f.uid,
-        fid: f._id, fest: f.estado, forig: f.origen || '', fmotivo: f.motivo || '', cnit: (nits[f.id] || []).join(', '), portal: 1 }, datosFactura(f)));
+        fid: f._id, fest: f.estado, forig: f.origen || '', fmotivo: f.motivo || '', cnit: (nits[f.id] || []).join(', '), contador: contadorDe(f.id), portal: 1 }, datosFactura(f)));
     });
     var enExcel = res.filter(function (r) { return !r.portal; }), n = function (g) { return enExcel.filter(function (r) { return grupo(r.r) === g; }).length; };
     var pagos = ctx.pagos || [], antes = pagos.filter(function (p) { return p.f && p.f.verificacion; }).length, nuevos = n('ok'), cubiertos = {};
@@ -217,6 +218,14 @@
       posibleFraude: res.filter(function (r) { return r.r === 'noEsta'; }).length, contaxFaltan: res.filter(function (r) { return r.r === 'contaxFalta'; }).length, esperan: res.filter(function (r) { return r.r === 'espera'; }).length,
       pagos: pagos.length, verificadosAntes: antes, quedan: pagos.filter(function (p) { return !(p.f && p.f.verificacion) && !cubiertos[p.id + '|' + p.semana]; }).length } };
   }
+
+  /* ¿Lo atiende CONTAX u otro contador? Mismo criterio que la lista de facturación */
+  function contadorVivo(id) {
+    if (!id) return '';
+    var r = D.repartidores && D.repartidores.get(X.idSeguro(id));
+    return X.clienteDe(r || { id: id, nombre: '' }) ? 'CONTAX' : 'Otro';
+  }
+  function contadorFila(x) { return x.contador || contadorVivo(x.id); } // las conciliaciones anteriores no lo guardaron
 
   /* ── Datos para cruzar ── */
   function contexto() {
@@ -238,7 +247,7 @@
         else if (limpiaNum(h.nit)) pagadas[limpiaNum(h.nit) + '|' + limpiaNum(h.factura)] = txt; // sin código, solo queda NIT + N.º
       });
       var pagos = X.listaFacturacionDatos().map(function (x) { return { id: x.id, uid: x.r ? x.r.uid : X.idSeguro(x.id), nombre: x.nombre, semana: x.semana, importe: x.importe, tipo: x.tipo, f: x.f }; });
-      return { pagos: pagos, facturas: D.facturas || [], nombres: nombres, nits: nits, pagadas: pagadas };
+      return { pagos: pagos, facturas: D.facturas || [], nombres: nombres, nits: nits, pagadas: pagadas, contadorDe: contadorVivo };
     });
   }
 
@@ -343,6 +352,7 @@
     { g: 'e', k: 'aut', t: 'Autorización', v: function (x) { return x.portal ? '' : x.aut; }, html: deExcel(function (x) { var a = String(x.aut || ''); return a ? '<span class="num" title="' + esc(a) + '">' + esc(a.length > 14 ? a.slice(0, 6) + '…' + a.slice(-6) : a) + '</span>' : vacia; }) },
     { g: 'c', k: 'id', t: 'ID', v: function (x) { return x.id || ''; }, html: function (x) { return x.id ? '<span class="num">' + esc(x.id) + '</span>' : vacia; } },
     { g: 'c', k: 'nombre', t: 'Repartidor', v: function (x) { return X.normal(x.nombre); }, html: function (x) { return x.nombre ? '<b>' + esc(x.nombre) + '</b>' : vacia; } },
+    { g: 'c', k: 'contador', t: 'Contador', v: contadorFila, html: function (x) { var c = contadorFila(x); return c === 'CONTAX' ? X.chip('contax', 'CONTAX') : c ? '<span class="muted">Otro</span>' : vacia; } },
     { g: 'c', k: 'cnit', t: 'NIT registrado', v: function (x) { return x.cnit || ''; }, html: function (x) { return x.cnit ? '<span class="num">' + esc(x.cnit) + '</span>' : vacia; } },
     { g: 'c', k: 'semana', t: 'Pago', v: function (x) { return X.ordenSemana(x.semana); }, n: 1, html: function (x) { return x.semana ? esc(X.semanaCorta(x.semana)) + (x.pago ? ' · ' + bs(x.pago) : '') + (x.tipo === 'retenido' ? '<span class="sub">Ya pagado con retención</span>' : '') : vacia; } },
     { g: 'c', k: 'fac', t: 'Factura en CONTROL', v: textoFactura, html: function (x) { return textoFactura(x) ? esc(textoFactura(x)) : vacia; } },
@@ -364,13 +374,13 @@
       (total > 1 ? '<div class="fila-acc" style="margin-top:10px"><button class="btn sec chico" data-pag="' + (E.pag - 1) + '"' + (E.pag ? '' : ' disabled') + '>Anterior</button><span class="muted">Página ' + (E.pag + 1) + ' de ' + total + '</span><button class="btn sec chico" data-pag="' + (E.pag + 1) + '"' + (E.pag >= total - 1 ? ' disabled' : '') + '>Siguiente</button></div>' : '');
   }
   function exportar(c, filas) {
-    X.excel([{ nombre: 'Conciliación', filas: [['Excel: Fecha', 'Excel: N.º factura', 'Excel: NIT', 'Excel: Razón social', 'Excel: Importe', 'Excel: Estado', 'Excel: Autorización', 'CONTROL: ID', 'CONTROL: Repartidor', 'CONTROL: NIT registrado', 'CONTROL: Semana', 'CONTROL: Importe del pago', 'CONTROL: Factura', 'CONTROL: Pagos del repartidor', 'Resultado', 'Detalle']].concat(filas.map(function (x) {
+    X.excel([{ nombre: 'Conciliación', filas: [['Excel: Fecha', 'Excel: N.º factura', 'Excel: NIT', 'Excel: Razón social', 'Excel: Importe', 'Excel: Estado', 'Excel: Autorización', 'CONTROL: ID', 'CONTROL: Repartidor', 'CONTROL: Contador', 'CONTROL: NIT registrado', 'CONTROL: Semana', 'CONTROL: Importe del pago', 'CONTROL: Factura', 'CONTROL: Pagos del repartidor', 'Resultado', 'Detalle']].concat(filas.map(function (x) {
       var e = x.portal ? ['', '', '', '', '', '', ''] : [x.fecha, x.num, x.nit, x.nom, x.imp, x.est, x.aut];
-      return e.concat([x.id, x.nombre, x.cnit || '', x.semana, x.pago || '', textoFactura(x), x.abiertos || '', (RES[x.r] || [0, x.r])[1], textoDetalle(x)]);
+      return e.concat([x.id, x.nombre, contadorFila(x), x.cnit || '', x.semana, x.pago || '', textoFactura(x), x.abiertos || '', (RES[x.r] || [0, x.r])[1], textoDetalle(x)]);
     })) }], 'Conciliacion-' + (c.hasta || X.hoyISO()));
   }
   function pintar(cu, c, cerrar, vivo) {
-    var E = { g: c.resumen.noCuadran ? 'mal' : '', pag: 0, buscar: '', res: '', sem: '', orden: 'nombre', dir: 1 }, r = c.resumen, zona = document.createElement('div');
+    var E = { g: c.resumen.noCuadran ? 'mal' : '', pag: 0, buscar: '', res: '', sem: '', cont: '', orden: 'nombre', dir: 1 }, r = c.resumen, zona = document.createElement('div');
     if (cu.parentNode) cu.parentNode.classList.add('completa');
     var verif = vivo ? opsVerificar(c) : [], obs = vivo ? opsObservar(c) : [];
     var aprobadasMal = c.filas.filter(function (x) { return x.fest === 'aprobada' && ['importe', 'suma', 'nitDistinto', 'fechaAntes', 'anulada', 'noEsta'].indexOf(x.r) >= 0; }).length;
@@ -393,6 +403,7 @@
     var filtros = document.createElement('div'); filtros.className = 'herr';
     filtros.innerHTML = '<div class="buscar">' + ic('buscar') + '<input type="search" id="cnBus" placeholder="Buscar por nombre, ID, NIT, N.º o importe"></div>' +
       '<select id="cnRes" aria-label="Filtrar por resultado"><option value="">Todos los resultados</option>' + Object.keys(RES).filter(function (k) { return resultados[k]; }).map(function (k) { return '<option value="' + k + '">' + esc(RES[k][1]) + ' (' + entero(resultados[k]) + ')</option>'; }).join('') + '</select>' +
+      '<select id="cnCont" aria-label="Filtrar por contador"><option value="">CONTAX y otros</option><option value="CONTAX">Clientes CONTAX</option><option value="Otro">Otro contador</option></select>' +
       '<select id="cnSem" aria-label="Filtrar por semana"><option value="">Todas las semanas</option>' + Object.keys(semanas).sort(function (a, b) { return X.ordenSemana(b) - X.ordenSemana(a); }).map(function (k) { return '<option value="' + esc(k) + '">' + esc(k) + '</option>'; }).join('') + '</select>';
     cu.appendChild(filtros); cu.appendChild(zona);
     var col = function (k) { return COLS.filter(function (x) { return x.k === k; })[0]; };
@@ -402,6 +413,7 @@
         if (E.g && grupo(x.r) !== E.g) return false;
         if (E.res && x.r !== E.res) return false;
         if (E.sem && x.semana !== E.sem) return false;
+        if (E.cont && contadorFila(x) !== E.cont) return false;
         return !b || X.normal([x.nombre, x.nom, x.id, x.nit, x.cnit, x.num, x.fnum, formasImporte(x.imp), formasImporte(x.pago), formasImporte(x.fimp)].join(' ')).indexOf(b) >= 0;
       }).sort(function (p, q) {
         var a = o.v(p), z = o.v(q);
@@ -421,6 +433,7 @@
     }
     filtros.querySelector('#cnBus').addEventListener('input', X.debounce(function (e) { E.buscar = filtros.querySelector('#cnBus').value; if (E.buscar) E.g = ''; E.pag = 0; tabla(); }, 200));
     filtros.querySelector('#cnRes').addEventListener('change', function (e) { E.res = e.target.value; if (E.res) E.g = ''; E.pag = 0; tabla(); });
+    filtros.querySelector('#cnCont').addEventListener('change', function (e) { E.cont = e.target.value; E.pag = 0; tabla(); });
     filtros.querySelector('#cnSem').addEventListener('change', function (e) { E.sem = e.target.value; E.pag = 0; tabla(); });
     tabla();
     cu.querySelector('#cnExc').addEventListener('click', function () { exportar(c, visibles()); });
