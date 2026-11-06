@@ -102,7 +102,7 @@
       return { ids: Object.keys(ids), exactos: exactos };
     }
     var usados = {}, vistas = {};
-    var abierto = function (p) { return !usados[p.id + '|' + p.semana] && !(p.f && p.f.verificacion); };
+    var abierto = function (p, link) { return !usados[p.id + '|' + p.semana] && !(p.f && p.f.verificacion && !(link && p.f._id === link._id)); };
     var orden = function (a, b) { return X.ordenSemana(a.semana) - X.ordenSemana(b.semana); };
     var igual = function (a, b) { return Math.abs(a - b) <= 0.05; };
     function elegir(eq, row, link) {
@@ -136,13 +136,14 @@
       var clave = x.aut ? claveAut(x.aut) : x.nit + '|' + x.num;
       if (vistas[clave]) return fin('usada', 'Fila repetida en el Excel');
       vistas[clave] = 1;
-      if (link && link.verificacion) return fin('usada', 'Ya verificada en una conciliación anterior');
+      // Verificada antes pero nunca aprobada (sigue «Por revisar»): vuelve a cruzarse para poder aprobarla
+      if (link && link.verificacion && link.estado !== 'recibida') return fin('usada', 'Ya verificada en una conciliación anterior');
       if (pagadas[claveAut(x.aut)] || pagadas[x.nit + '|' + x.num]) return fin('usada', 'Ya se pagó con esta factura');
 
       var who = ident();
       if (!who.ids.length) return fin('otros');
       var pool = [];
-      who.ids.forEach(function (id) { (pagosDe[id] || []).forEach(function (p) { if (abierto(p)) pool.push(p); }); });
+      who.ids.forEach(function (id) { (pagosDe[id] || []).forEach(function (p) { if (abierto(p, link)) pool.push(p); }); });
       var eq = pool.filter(function (p) { return igual(p.importe, x.imp); });
       if (!eq.length) {
         if (!pool.length) return fin('sinPago', 'El repartidor no tiene un pago abierto para esta factura', null, '', who.ids[0]);
@@ -180,11 +181,12 @@
         fid: f._id, fest: f.estado, forig: f.origen || '', fmotivo: f.motivo || '', portal: 1 });
     });
     var enExcel = res.filter(function (r) { return !r.portal; }), n = function (g) { return enExcel.filter(function (r) { return grupo(r.r) === g; }).length; };
-    var pagos = ctx.pagos || [], antes = pagos.filter(function (p) { return p.f && p.f.verificacion; }).length, nuevos = n('ok');
+    var pagos = ctx.pagos || [], antes = pagos.filter(function (p) { return p.f && p.f.verificacion; }).length, nuevos = n('ok'), cubiertos = {};
+    enExcel.forEach(function (r) { if (r.r === 'coincide') cubiertos[r.id + '|' + r.semana] = 1; });
     return { filas: res, desde: desde, hasta: hasta, resumen: {
       filasExcel: enExcel.length, repartidores: n('ok') + n('mal') + n('ya'), otros: n('otros'), anuladas: n('anulada'), coinciden: nuevos, noCuadran: n('mal'), yaVerificadas: n('ya'),
       posibleFraude: res.filter(function (r) { return r.r === 'noEsta'; }).length, contaxFaltan: res.filter(function (r) { return r.r === 'contaxFalta'; }).length, esperan: res.filter(function (r) { return r.r === 'espera'; }).length,
-      pagos: pagos.length, verificadosAntes: antes, quedan: pagos.length - antes - nuevos } };
+      pagos: pagos.length, verificadosAntes: antes, quedan: pagos.filter(function (p) { return !(p.f && p.f.verificacion) && !cubiertos[p.id + '|' + p.semana]; }).length } };
   }
 
   /* ── Datos para cruzar ── */
@@ -298,7 +300,7 @@
     var verif = vivo ? opsVerificar(c) : [], obs = vivo ? opsObservar(c) : [];
     var aprobadasMal = c.filas.filter(function (x) { return x.fest === 'aprobada' && ['importe', 'suma', 'nitDistinto', 'fechaAntes', 'anulada', 'noEsta'].indexOf(x.r) >= 0; }).length;
     cu.innerHTML = '<div class="aviso-caja mb">' + ic('ayuda') + '<div><b>' + entero(r.filasExcel) + ' en el Excel · ' + entero(r.repartidores) + ' de repartidores · ' + entero(r.otros) + ' de otros · ' + entero(r.anuladas) + ' anuladas</b>' +
-        'De ' + entero(r.pagos) + ' pagos que deben factura, quedan ' + entero(r.quedan) + ' por emitir o verificar.</div></div>' +
+        'De ' + entero(r.pagos) + ' pagos que deben factura, quedan ' + entero(r.quedan) + ' por emitir o verificar.' + (vivo && verif.length ? ' <b>Las facturas todavía no cambiaron: toca «Registrar» antes de cerrar.</b>' : '') + '</div></div>' +
       '<div class="rejilla r4 mb">' +
         '<div class="kpi"><small>Coinciden</small><b class="num">' + entero(r.coinciden) + '</b><em>facturas que cubren un pago</em></div>' +
         '<div class="kpi' + (r.noCuadran ? ' alerta' : '') + '"><small>Algo no cuadra</small><b class="num">' + entero(r.noCuadran) + '</b><em>son de repartidores, para revisar</em></div>' +
