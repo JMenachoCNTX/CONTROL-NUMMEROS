@@ -25,6 +25,7 @@
   }
   function semCorta(k) { var m = String(k).match(/^SEM(\d+)G\d{2}(\d{2})$/); return m ? 'Sem ' + m[1] + '/' + m[2] : String(k); }
   function pct(v, t) { return t ? (v / t * 100).toFixed(1).replace('.', ',') + ' %' : '—'; }
+  function pagos(n) { return entero(n) + (n === 1 ? ' pago' : ' pagos'); }
   function ordenCiudades(o) { return ['SC', 'CBBA', 'LP', ''].filter(function (k) { return o[k]; }); }
   /* «Sem 42: Falta factura · Sem 41: Factura observada» → cuántas semanas retenidas hay por cada motivo */
   function motivos(ret) {
@@ -94,7 +95,7 @@
     /* ── Cifras principales ── */
     var totRet = pl ? X.redondear(pl.retenido.t) : X.redondear(ret.reduce(function (s, r) { return s + (Number(r.importe) || 0); }, 0));
     var kpis = [
-      { t: 'Total ' + verbo, v: bs(p.total), s: entero((p.lineas || []).length) + ' pagos' },
+      { t: 'Total ' + verbo, v: bs(p.total), s: pagos((p.lineas || []).length) },
       { t: 'Repartidores', v: entero(p.cantidad), s: 'en esta planilla' }
     ].concat(pl ? [
       { t: 'Planilla ' + semCorta(R.principal), v: bs(pl.t), s: entero(pl.n) + ' repartidores' },
@@ -116,19 +117,19 @@
     /* ── Gráficos ── */
     var ciu = ordenCiudades(R.ciudades);
     seccion(Verbo + ' por ciudad', 'Todas las semanas incluidas en esta planilla.', ciu.length * 7);
-    barras(ciu.map(function (k) { var c = R.ciudades[k]; return { k: NOMBRE[k], v: c.t, txt: bs(c.t) + ' · ' + entero(c.n) + ' pagos' }; }));
+    barras(ciu.map(function (k) { var c = R.ciudades[k]; return { k: NOMBRE[k], v: c.t, txt: bs(c.t) + ' · ' + pagos(c.n) }; }));
 
     if (pl) {
       var cp = ordenCiudades(pl.ciudades);
-      seccion('Planilla de la ' + semCorta(R.principal) + ' por ciudad', 'Cuánto de la semana se paga y cuánto queda retenido.', cp.length * 11 + 5);
-      leyenda([{ color: PRINCIPAL, t: 'Pagado' }, { color: RETENIDO, t: 'Retenido' }]);
+      seccion('Planilla de la ' + semCorta(R.principal) + ' por ciudad', 'Cuánto de la semana sale en planilla y cuánto queda retenido.', cp.length * 11 + 5);
+      leyenda([{ color: PRINCIPAL, t: Verbo }, { color: RETENIDO, t: 'Retenido' }]);
       var maxC = Math.max.apply(null, cp.map(function (k) { return pl.ciudades[k].t; }).concat([1])), eti = 28, largo = UTIL - eti - 2;
       cp.forEach(function (k) {
         var c = pl.ciudades[k], wP = (c.t - c.ret) / maxC * largo, wR = c.ret / maxC * largo;
         doc.text(letra(NOMBRE[k], 9, TINTA), M + eti - 3, y + 3.6, { align: 'right' });
         if (wP > 0) barra(M + eti, y, wP - (wR > 0 ? 0.5 : 0), 4.6, PRINCIPAL);
         if (wR > 0) barra(M + eti + wP, y, wR, 4.6, RETENIDO);
-        doc.text(letra('Pagado ' + bs(c.t - c.ret) + '  ·  Retenido ' + bs(c.ret) + ' (' + pct(c.ret, c.t) + ')', 8.5, SUAVE), M + eti, y + 8);
+        doc.text(letra(Verbo + ' ' + bs(c.t - c.ret) + '  ·  Retenido ' + bs(c.ret) + ' (' + pct(c.ret, c.t) + ')', 8.5, SUAVE), M + eti, y + 8);
         y += 11;
       });
 
@@ -142,7 +143,7 @@
     }
 
     seccion(Verbo + ' por semana', 'Cada semana incluida en esta planilla.', Math.min(R.semanas.length, 8) * 7);
-    barras(R.semanas.map(function (s) { return { k: semCorta(s.sem), v: s.t, txt: bs(s.t) + ' · ' + entero(s.n) + ' pagos' }; }));
+    barras(R.semanas.map(function (s) { return { k: semCorta(s.sem), v: s.t, txt: bs(s.t) + ' · ' + pagos(s.n) }; }));
 
     /* ── Cuadros ── */
     doc.addPage(); y = M;
