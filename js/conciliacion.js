@@ -41,8 +41,13 @@
     m = String(v || '').match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? m[0] : '';
   }
   function claveAut(v) { return String(v || '').replace(/\s+/g, '').toUpperCase(); }
-  /* El N.º se repite en facturas del mismo repartidor (empieza de nuevo cada tanto): si las dos tienen código de autorización, manda el código */
-  function esLaMisma(f, x) { var a = claveAut(f && f.autorizacion), b = claveAut(x.aut); return !!f && (!a || !b || a === b); }
+  /* El N.º se repite en facturas del mismo repartidor (empieza de nuevo cada tanto): si las dos tienen código de autorización, manda el código.
+     La IA a veces lee mal una letra del código: con el mismo NIT, N.º e importe sigue siendo la misma factura. */
+  function esLaMisma(f, x) {
+    if (!f) return false;
+    var a = claveAut(f.autorizacion), b = claveAut(x.aut);
+    return !a || !b || a === b || Math.abs((Number(f.importe) || 0) - x.imp) <= 0.05;
+  }
   function leerFilas(filas, c) {
     var txt = function (f, k) { return c[k] >= 0 ? String(f[c[k]] == null ? '' : f[c[k]]).trim() : ''; };
     return filas.map(function (f) {
@@ -256,7 +261,7 @@
       if (!limpiaNum(f.numero)) d.numero = x.num;           // las de CONTAX se marcan sin número: se completan con el Excel
       if (!limpiaNum(f.nitEmisor)) d.nitEmisor = x.nit;
       if (!f.razonEmisor) d.razonEmisor = x.nom;
-      if (!f.autorizacion) d.autorizacion = x.aut;
+      if (x.aut && claveAut(f.autorizacion) !== claveAut(x.aut)) d.autorizacion = x.aut; // manda el código del Excel
       if ((f.semanas || []).length !== 1 || f.semanas[0] !== x.semana) d.semanas = [x.semana];
       return { tipo: 'update', ref: col.doc(x.fid), datos: d };
     });
