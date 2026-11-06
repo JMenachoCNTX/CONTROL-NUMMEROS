@@ -153,7 +153,10 @@
   /* ══════════ EXCEPCIONES ══════════ */
   function nuevaExcepcion(base) {
     var e = Object.assign({ activa: true, semana: '*', tipo: 'habilitar' }, base || {});
-    X.formulario(e._id ? 'Editar excepción' : 'Nueva excepción de pago', 'La excepción hace que esas semanas cuenten como «listas para pagar» aunque falte la factura.', [
+    var conBuscador = !e._id && !e.idYango;
+    X.formulario(e._id ? 'Editar excepción' : 'Nueva excepción de pago', 'La excepción hace que esas semanas cuenten como «listas para pagar» aunque falte la factura.', (conBuscador ? [
+      { k: 'busRep', tipo: 'nota', t: '<label for="exRep">Buscar repartidor</label><input id="exRep" type="search" autocomplete="off" placeholder="Nombre, NIT o celular"><div class="lista-res" id="exRes"></div>' }
+    ] : []).concat([
       { k: 'idYango', t: 'ID de Yango', max: 30, obligatorio: true },
       { k: 'nombre', t: 'Nombre (referencia)', max: 120 },
       { k: 'semana', t: 'Semana', max: 30, ayuda: 'Escribe la semana tal como aparece (por ejemplo SEM42G2026) o * para todas sus semanas.' },
@@ -161,7 +164,7 @@
       { k: 'motivo', t: 'Motivo', tipo: 'textarea', filas: 2, max: 300, obligatorio: true },
       { k: 'hasta', t: 'Vence el (opcional)', tipo: 'date' },
       { k: 'activa', t: 'Activa', tipo: 'switch' }
-    ], e, function (v) {
+    ]), e, function (v) {
       var id = v._id || X.nuevoId();
       var d = { idYango: String(v.idYango).trim(), nombre: v.nombre || '', semana: v.semana || '*', tipo: v.tipo, motivo: v.motivo, hasta: v.hasta || '', activa: !!v.activa, quien: S.usuario.email, actualizado: X.servidor() };
       if (!d.nombre && D.repartidores) { var r = D.repartidores.get(X.idSeguro(d.idYango)); if (r) d.nombre = r.nombre; }
@@ -171,6 +174,28 @@
         X.ir('excepciones');
       });
     });
+    if (conBuscador) buscadorRepartidor();
+  }
+  /* Al elegir a alguien se llenan solos el ID y el nombre */
+  function buscadorRepartidor() {
+    var inp = document.querySelector('#exRep'), res = document.querySelector('#exRes');
+    var pintar = function () {
+      var l = X.informe._puro.buscar(inp.value);
+      res.innerHTML = inp.value.trim().length < 2 ? '' : l.length ? l.map(function (x) {
+        var cel = X.celularDe(x.id);
+        return '<button type="button" class="fila-res" data-rep="' + esc(x.id) + '"><b>' + esc(x.nombre || 'Sin nombre') + '</b><span class="num muted">ID ' + esc(x.id) + (cel ? ' · ' + esc(cel) : '') + '</span></button>';
+      }).join('') : '<p class="muted">No encontramos a nadie con ese dato.</p>';
+      res.querySelectorAll('[data-rep]').forEach(function (b) {
+        b.addEventListener('click', function () {
+          document.querySelector('#f_idYango').value = b.getAttribute('data-rep');
+          document.querySelector('#f_nombre').value = b.querySelector('b').textContent;
+          inp.value = ''; res.innerHTML = '';
+          document.querySelector('#f_motivo').focus();
+        });
+      });
+    };
+    inp.addEventListener('input', X.debounce(pintar, 250));
+    inp.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') ev.preventDefault(); });
   }
   CTRL.nuevaExcepcion = nuevaExcepcion;
 
@@ -244,6 +269,11 @@
         q('form').addEventListener('submit', function (ev) { ev.preventDefault(); enviar(); });
       });
   }
+  var EX = { buscar: '' };
+  function excepcionVisible(e, b) {
+    if (!b) return true;
+    return X.normal([e.nombre, e.idYango, e.motivo].join(' ')).indexOf(b) >= 0 || (!e.grupo && X.buscaRepartidor(e.idYango, b));
+  }
   X.pagina('excepciones', {
     t: 'Excepciones', i: 'excepcion', sec: 'CONTAX',
     render: function () {
@@ -253,21 +283,23 @@
       var hoy = X.hoyISO();
       // Las vencidas se apagan solas en pantalla
       D.excepciones.forEach(function (e) { if (e.activa && e.hasta && e.hasta < hoy) e.activa = false; });
-      var l = D.excepciones.slice().sort(function (a, b) { return (b.activa - a.activa) || String(a.nombre).localeCompare(String(b.nombre)); });
+      var bq = X.normal(EX.buscar);
+      var l = D.excepciones.filter(function (e) { return excepcionVisible(e, bq); }).sort(function (a, b) { return (b.activa - a.activa) || String(a.nombre).localeCompare(String(b.nombre)); });
       // Cuántos pagos libera hoy cada grupo: solo los que no estaban habilitados
       var usa = {};
       if (l.some(function (e) { return e.grupo; })) X.lista().forEach(function (r) { X.evaluar(r).semanas.forEach(function (s) { if (s.ex && s.ex.grupo) usa[s.ex._id] = (usa[s.ex._id] || 0) + 1; }); });
-      return cab + '<div class="card">' + (l.length ? X.tabla([
+      return cab + '<div class="card"><div class="herr"><div class="buscar">' + ic('buscar') + '<input type="search" id="bEx" placeholder="Buscar por nombre, ID, NIT o celular" value="' + esc(EX.buscar) + '"></div></div>' + (l.length ? X.tabla([
         { t: 'Repartidor', html: function (e) { return '<b>' + esc(e.nombre || '—') + '</b><span class="sub' + (e.grupo ? '">Por grupo · habilita ' + entero(usa[e._id] || 0) + ' pagos' : ' num">ID ' + esc(e.idYango)) + '</span>'; } },
         { t: 'Semana', html: function (e) { return e.grupo ? esc(semanaGrupo(e)) : e.semana === '*' ? 'Todas' : esc(e.semana); } },
         { t: 'Tipo', html: function (e) { return X.chip(e.tipo === 'contax' ? 'contax' : 'neutro', { habilitar: 'Pago sin factura', contax: 'Pendiente de CONTAX', otro: 'Otro' }[e.tipo] || e.tipo); } },
         { t: 'Motivo', html: function (e) { return esc(e.motivo) + '<span class="sub">' + esc(e.quien || '') + (e.hasta ? ' · vence ' + X.fecha(e.hasta) : '') + '</span>'; } },
         { t: 'Estado', html: function (e) { return e.activa ? X.chip('ok', 'Activa') : X.chip('neutro', 'Inactiva'); } },
         { t: '', html: function (e) { return X.puedeEditar() ? '<span class="fila-acc"><button class="icono-btn" data-ed="' + esc(e._id) + '" aria-label="Editar">' + ic('editar') + '</button><button class="icono-btn" data-bo="' + esc(e._id) + '" aria-label="Borrar">' + ic('borrar') + '</button></span>' : ''; } }
-      ], l, { tam: 200 }) : X.vacio('No hay excepciones', 'Cuando un pago se deba liberar sin factura, regístralo aquí.', 'marca/graficos/rel-vencimientos-' + (S.oscuro ? 'oscuro' : 'claro') + '.png')) + '</div>';
+      ], l, { tam: 200 }) : X.vacio(EX.buscar ? 'Nada con esa búsqueda' : 'No hay excepciones', EX.buscar ? 'Prueba con otro dato.' : 'Cuando un pago se deba liberar sin factura, regístralo aquí.', 'marca/graficos/rel-vencimientos-' + (S.oscuro ? 'oscuro' : 'claro') + '.png')) + '</div>';
     },
     despues: function (el) {
       var n = el.querySelector('#nuevaEx'); if (n) n.addEventListener('click', function () { nuevaExcepcion(); });
+      var be = el.querySelector('#bEx'); if (be) be.addEventListener('input', X.debounce(function () { EX.buscar = be.value; X.refrescar(); X.setFoco('#bEx'); }, 300));
       var ng = el.querySelector('#nuevaGr'); if (ng) ng.addEventListener('click', function () { excepcionGrupo(); });
       el.querySelectorAll('[data-ed]').forEach(function (b) { b.addEventListener('click', function () { var e = D.excepciones.filter(function (x) { return x._id === b.getAttribute('data-ed'); })[0]; if (e.grupo) excepcionGrupo(e); else nuevaExcepcion(e); }); });
       el.querySelectorAll('[data-bo]').forEach(function (b) {
