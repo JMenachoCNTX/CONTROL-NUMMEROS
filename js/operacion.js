@@ -65,15 +65,17 @@
   /* Excepción por grupo (clientes CONTAX o una ciudad): una sola regla en vez de una por repartidor */
   function cubreGrupo(e, r, p) {
     if (e.grupo === 'contax' ? !X.clienteDe(r) : (p.ciudad || r.ciudad) !== e.grupo) return false;
+    return cubreSemana(e, p);
+  }
+  function cubreSemana(e, p) {
     if (!e.semana || e.semana === '*') return true;
     if (e.yAnteriores) return ordenSemana(p.semana) <= ordenSemana(e.semana);
     return String(e.semana).trim() === String(p.semana).trim();
   }
   function excepcionDe(r, p) {
-    var id = String(r.id || ''), semana = p.semana, l = (D.excepciones || []).filter(excepcionVigente);
+    var id = String(r.id || ''), l = (D.excepciones || []).filter(excepcionVigente);
     return l.filter(function (e) {
-      if (e.grupo || String(e.idYango || '').trim() !== id) return false;
-      return !e.semana || e.semana === '*' || String(e.semana).trim() === String(semana).trim();
+      return !e.grupo && String(e.idYango || '').trim() === id && cubreSemana(e, p);
     })[0] || l.filter(function (e) { return e.grupo && cubreGrupo(e, r, p); })[0] || null;
   }
   /* Estado de cada semana pendiente y del repartidor completo */
@@ -267,8 +269,9 @@
             return (e.listo ? X.chip('ok', e.parcial ? 'Pago parcial' : 'Listo para pagar') : X.chip('mal', 'Retenido')) + (falta.length ? '<span class="sub">' + X.chip('pend', 'No entra al banco') + ' ' + esc(falta.join(', ')) + '</span>' : '');
           } },
           { t: 'Pendiente', clase: 'monto', html: function (e) { return bs(e.total); } },
-          { t: 'A pagar', clase: 'monto', html: function (e) { return '<b>' + bs(e.totalPagar) + '</b>'; } }
-        ], f, { clic: true, pag: P.pag, pie: '<td colspan="3">Total (' + entero(nSem(f)) + ' pagos · ' + entero(f.length) + ' repartidores)</td><td class="monto">' + bs(tot(f, 'total')) + '</td><td class="monto">' + bs(tot(f, 'totalPagar')) + '</td>' })
+          { t: 'A pagar', clase: 'monto', html: function (e) { return '<b>' + bs(e.totalPagar) + '</b>'; } },
+          { t: '', html: function (e) { return X.botonHabilitar(e.r.id); } }
+        ], f, { clic: true, pag: P.pag, pie: '<td colspan="3">Total (' + entero(nSem(f)) + ' pagos · ' + entero(f.length) + ' repartidores)</td><td class="monto">' + bs(tot(f, 'total')) + '</td><td class="monto">' + bs(tot(f, 'totalPagar')) + '</td><td></td>' })
           : X.vacio('Nada que mostrar con estos filtros', '', 'marca/graficos/ilu-crecimiento-reportes.png')) +
         '</div>';
     },
@@ -640,6 +643,7 @@
           { t: 'Situación', html: function (r) { return (r.habilitado === false ? X.chip('mal', 'No habilitado') : X.chip('ok', 'Habilitado')) + ' ' + (r.poliza ? '' : X.chip('pend', 'Sin póliza')) + (X.clienteDe(r) ? ' ' + X.chip('contax', 'CONTAX') : ''); } },
           { t: 'Pendiente', clase: 'monto', html: function (r) { var p = (r.resumen || {}).pendientes || {}; var nh = (r.noHab || [])[0]; return p.cantidad ? '<b>' + bs(p.total) + '</b><span class="sub">' + p.cantidad + ' sem.</span>' : nh ? '<span class="muted">Bs 0</span><span class="sub">' + esc(nh.semana) + ' no hab.</span>' : '<span class="muted">—</span>'; } },
           { t: 'Último pago', clase: 'monto', html: function (r) { var h = (r.historial || [])[0]; return h ? bs(h.importe) + '<span class="sub">' + esc(h.fechaPago) + '</span>' : '<span class="muted">—</span>'; } }
+          ,{ t: '', html: function (r) { return X.botonHabilitar(r.id); } }
         ], f, { clic: true, pag: R.pag }) : X.vacio('No hay repartidores con ese filtro', '', 'marca/graficos/rel-equipo-' + (S.oscuro ? 'oscuro' : 'claro') + '.png')) + '</div>';
     },
     despues: function (el) {
@@ -672,7 +676,7 @@
       '</div>' +
       '<div class="fila-acc mb"><a class="btn sec chico" href="' + X.wa(r.celular, 'Hola ' + String(r.nombre || '').split(' ')[0] + ', te escribimos de CONTAX.') + '" target="_blank" rel="noopener">' + ic('whatsapp') + 'WhatsApp</a>' +
         '<button class="btn sec chico" data-copiar="' + esc(r.id) + '">' + ic('copiar') + 'Copiar ID</button>' +
-        (X.puedeEditar() ? '<button class="btn sec chico" id="btnNota">' + ic('editar') + (nota ? 'Editar nota' : 'Nota interna') + '</button><button class="btn sec chico" id="btnExc">' + ic('excepcion') + 'Excepción de pago</button>' : '') + '</div>' +
+        (X.puedeEditar() ? '<button class="btn sec chico" id="btnNota">' + ic('editar') + (nota ? 'Editar nota' : 'Nota interna') + '</button>' + X.botonHabilitar(r.id) + '<button class="btn sec chico" id="btnExc">' + ic('excepcion') + 'Excepción de pago</button>' : '') + '</div>' +
       (nota && nota.texto ? '<div class="nota-interna mb"><b>Nota interna:</b> ' + esc(nota.texto) + '<span class="sub">' + esc(nota.quien || '') + ' · ' + X.fechaHora(nota.cuando) + '</span></div>' : '') +
       (cli ? '<div class="card mb"><div class="h2">Cliente CONTAX ' + X.chip('contax', cli.estado || 'ACTIVO') + '</div>' + accesosCliente(cli) + '</div>' : '') +
       '<div class="card mb" id="perfilNit"><div class="h2">NIT para facturar</div><p class="muted">Trayendo…</p></div>' +

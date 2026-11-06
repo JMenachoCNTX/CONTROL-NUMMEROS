@@ -199,6 +199,53 @@
   }
   CTRL.nuevaExcepcion = nuevaExcepcion;
 
+  /* Botón «Habilitar»: excepción de un repartidor sin ir a la página de Excepciones.
+     Cubre sus semanas pendientes de hoy; una semana nueva no entra sola. */
+  function porHabilitar(id) {
+    var r = D.repartidores && D.repartidores.get(X.idSeguro(id));
+    if (!r) return null;
+    var ev = X.evaluar(r), l = ev.semanas.filter(function (s) { return !s.ok; });
+    return l.length ? { r: r, l: l } : null;
+  }
+  X.botonHabilitar = function (id) {
+    return X.puedeEditar() && porHabilitar(id) ? '<button class="btn sec chico" data-habilitar="' + esc(id) + '">Habilitar</button>' : '';
+  };
+  function habilitar(id) {
+    var h = porHabilitar(id); if (!h) { X.aviso('Ya no tiene pagos por habilitar.'); return; }
+    var r = h.r, l = h.l.slice().sort(function (a, b) { return X.ordenSemana(a.p.semana) - X.ordenSemana(b.p.semana); });
+    var total = X.redondear(l.reduce(function (s, x) { return s + (Number(x.p.importe) || 0); }, 0));
+    var mala = l.filter(function (s) { return s.estado === 'observada'; }).length;
+    var html = '<form class="fm" novalidate><p class="mb"><b>' + esc(r.nombre || 'Sin nombre') + '</b> · ID ' + esc(r.id) + '</p>' +
+      '<p class="mb">' + l.map(function (s) { return esc(X.semanaCorta(s.p.semana)) + ' · ' + X.bs(s.p.importe); }).join('<br>') + '<br><b>Total: ' + X.bs(total) + '</b></p>' +
+      (mala ? '<div class="aviso-caja error mb">' + ic('excepcion') + '<div><b>Tiene ' + entero(mala) + ' con factura observada</b>También se habilitan.</div></div>' : '') +
+      '<div class="fila"><label for="hbMot">Motivo</label><textarea id="hbMot" rows="2" maxlength="300">Habilitado por CONTAX</textarea></div>' +
+      '<p class="login-err" data-err role="alert"></p></form>';
+    X.ventana('Habilitar pago', 'Queda en Excepciones y puedes borrarla ahí. Las semanas nuevas no entran solas.', html,
+      '<button class="btn sec" data-cerrar>Cancelar</button><button class="btn" data-guardar>Habilitar</button>', function (el, cerrar) {
+        var btn = el.querySelector('[data-guardar]'), err = el.querySelector('[data-err]');
+        var enviar = function () {
+          var motivo = el.querySelector('#hbMot').value.trim();
+          if (!motivo) { err.textContent = 'Falta: Motivo'; return; }
+          var ultima = l[l.length - 1].p.semana, nid = X.nuevoId();
+          var d = { idYango: String(r.id), nombre: r.nombre || '', semana: ultima, yAnteriores: true, tipo: X.clienteDe(r) ? 'contax' : 'habilitar', motivo: motivo, hasta: '', activa: true, quien: S.usuario.email, actualizado: X.servidor() };
+          btn.disabled = true;
+          X.dbC.collection('excepciones').doc(nid).set(d).then(function () {
+            d._id = nid; D.excepciones = (D.excepciones || []).concat([d]);
+            X.bitacora('Habilitó pago', d.idYango + ' · ' + X.semanaCorta(ultima) + ' y anteriores · ' + motivo);
+            cerrar(); X.refrescar(); X.aviso('Pago habilitado');
+            document.querySelectorAll('[data-habilitar="' + d.idYango + '"]').forEach(function (b) { b.outerHTML = X.chip('ok', 'Habilitado'); });
+          }, function (x) { console.error(x); btn.disabled = false; err.textContent = 'No se pudo guardar. Revisa tu conexión o tus permisos.'; });
+        };
+        btn.addEventListener('click', enviar);
+        el.querySelector('form').addEventListener('submit', function (ev) { ev.preventDefault(); enviar(); });
+      });
+  }
+  // Va en filas que se pueden tocar: se atiende antes para que no se abra la ficha
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest && e.target.closest('[data-habilitar]'); if (!b) return;
+    e.stopPropagation(); e.preventDefault(); habilitar(b.getAttribute('data-habilitar'));
+  }, true);
+
   /* Excepción por grupo: un solo registro para todos los clientes CONTAX o todo La Paz. No cubre facturas observadas. */
   var GRUPOS = { contax: 'Clientes CONTAX', LPZ: 'La Paz' };
   function semanaGrupo(e) {
@@ -290,7 +337,7 @@
       if (l.some(function (e) { return e.grupo; })) X.lista().forEach(function (r) { X.evaluar(r).semanas.forEach(function (s) { if (s.ex && s.ex.grupo) usa[s.ex._id] = (usa[s.ex._id] || 0) + 1; }); });
       return cab + '<div class="card"><div class="herr"><div class="buscar">' + ic('buscar') + '<input type="search" id="bEx" placeholder="Buscar por nombre, ID, NIT o celular" value="' + esc(EX.buscar) + '"></div></div>' + (l.length ? X.tabla([
         { t: 'Repartidor', html: function (e) { return '<b>' + esc(e.nombre || '—') + '</b><span class="sub' + (e.grupo ? '">Por grupo · habilita ' + entero(usa[e._id] || 0) + ' pagos' : ' num">ID ' + esc(e.idYango)) + '</span>'; } },
-        { t: 'Semana', html: function (e) { return e.grupo ? esc(semanaGrupo(e)) : e.semana === '*' ? 'Todas' : esc(e.semana); } },
+        { t: 'Semana', html: function (e) { return e.grupo || e.yAnteriores ? esc(semanaGrupo(e)) : e.semana === '*' ? 'Todas' : esc(e.semana); } },
         { t: 'Tipo', html: function (e) { return X.chip(e.tipo === 'contax' ? 'contax' : 'neutro', { habilitar: 'Pago sin factura', contax: 'Pendiente de CONTAX', otro: 'Otro' }[e.tipo] || e.tipo); } },
         { t: 'Motivo', html: function (e) { return esc(e.motivo) + '<span class="sub">' + esc(e.quien || '') + (e.hasta ? ' · vence ' + X.fecha(e.hasta) : '') + '</span>'; } },
         { t: 'Estado', html: function (e) { return e.activa ? X.chip('ok', 'Activa') : X.chip('neutro', 'Inactiva'); } },

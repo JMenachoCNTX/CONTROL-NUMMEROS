@@ -153,6 +153,7 @@
         { t: 'NIT', html: function (x) { return nf(x, 'nitEmisor'); } },
         { t: 'Autorización', html: function (x) { return x.f && x.f.autorizacion ? '<span class="num" title="' + esc(x.f.autorizacion) + '">' + esc(corto(x.f.autorizacion)) + '</span>' : '<span class="muted">❌</span>'; } },
         { t: 'Estado', html: function (x) { return x.f ? chipFactura(x.f) + (x.f.verificacion ? '<span class="sub">' + X.chip('ok', 'Verificada en RCV') + '</span>' : '') : '<span class="muted">—</span>'; } }
+        ,{ t: '', html: function (x) { return X.botonHabilitar(x.id); } }
       ], f, { clic: true, pag: LF.pag }) : X.vacio(LF.vista === 'faltan' ? 'No falta ninguna factura' : 'Nada con estos filtros', '', 'marca/graficos/rel-aprobado-' + (S.oscuro ? 'oscuro' : 'claro') + '.png'));
   }
   function lfDespues(el) {
@@ -214,6 +215,7 @@
           { t: 'Semanas', html: function (x) { return esc((x.semanas || []).map(X.semanaCorta).join(', ')); } },
           { t: 'Importe', clase: 'monto', html: function (x) { var c = comparar(x); return '<b>' + bs(x.importe) + '</b>' + (x.estado === 'recibida' ? '<span class="sub">' + (c.cuadra ? X.chip('ok', 'Cuadra') : X.chip('mal', c.faltan.length ? 'Semana no pendiente' : 'Dif. ' + bs(c.dif))) + '</span>' : ''); } },
           { t: 'Estado', html: function (x) { return chipFactura(x) + (x.revisadoPor ? '<span class="sub">' + esc(String(x.revisadoPor).split('@')[0]) + '</span>' : ''); } }
+          ,{ t: '', html: function (x) { return X.botonHabilitar(x.id); } }
         ]), f, { clic: true, pag: F.pag }) : X.vacio(F.tab === 'recibida' ? 'No hay facturas por revisar' : 'Nada con estos filtros', F.tab === 'recibida' ? 'Todo al día.' : '', 'marca/graficos/rel-aprobado-' + (S.oscuro ? 'oscuro' : 'claro') + '.png')) +
         '</div>');
     },

@@ -202,7 +202,7 @@
           (d.faltaFactura ? X.chip('pend', 'Falta factura') : X.chip('ok', 'Facturación en orden')) + ' ' + (d.poliza ? X.chip('ok', 'Con póliza') : X.chip('pend', 'Sin póliza')) + ' ' + (d.contador === 'CONTAX' ? X.chip('contax', 'Cliente CONTAX') : '') + '</div></div>' +
         '<div class="fila-acc inf-acc"><button class="btn" id="infPdf">' + ic('descargar') + 'Descargar PDF</button>' +
           (d.telefono ? '<a class="btn sec" href="' + X.wa(d.telefono, 'Hola ' + String(d.nombre || '').split(' ')[0] + ', te escribimos de CONTAX.') + '" target="_blank" rel="noopener">' + ic('whatsapp') + 'WhatsApp</a>' : '') +
-          (d.r ? '<button class="btn sec" id="infFicha">' + ic('ojo') + 'Ficha completa</button>' : '') + '</div></div>' +
+          (d.r ? '<button class="btn sec" id="infFicha">' + ic('ojo') + 'Ficha completa</button>' + X.botonHabilitar(d.r.id) : '') + '</div></div>' +
       '<div class="rejilla r4 mb">' +
         '<div class="kpi"><small>Total cobrado</small><b class="num">' + bs(c.tot) + '</b><em>' + entero(d.hist.length) + ' pagos recibidos</em></div>' +
         '<div class="kpi' + (c.totPend ? ' alerta' : '') + '"><small>Pendiente</small><b class="num">' + bs(c.totPend) + '</b><em>' + entero(c.pend.length) + ' semanas' + (d.retenido ? ' · retenido' : '') + '</em></div>' +

@@ -387,6 +387,7 @@
     { g: 'c', k: 'abiertos', t: 'Pagos del repartidor', v: function (x) { return x.abiertos || ''; }, html: function (x) { return x.abiertos ? esc(x.abiertos).replace(/ \| /g, '<br>') : vacia; } },
     { g: 'r', k: 'r', t: 'Resultado', v: function (x) { return (RES[x.r] || [0, x.r])[1]; }, html: function (x) { var e = RES[x.r] || ['neutro', x.r]; return X.chip(e[0], e[1]); } },
     { g: 'r', k: 'det', t: 'Detalle', v: textoDetalle, html: function (x) { return esc(textoDetalle(x)) || vacia; } },
+    { g: 'r', k: 'hab', t: 'Habilitar', v: function () { return ''; }, html: function (x) { return x.id ? X.botonHabilitar(x.id) : ''; } },
     { g: 'r', k: 'acc', t: 'Observar', v: function (x) { return x._obs ? 1 : 0; }, html: function (x) { return x._obs >= 0 ? '<button class="btn sec chico" data-obs1="' + x._obs + '">Observar</button>' : x.observada ? '<span class="muted">Hecho</span>' : ''; } }
   ];
   function tablaHTML(l, E) {
