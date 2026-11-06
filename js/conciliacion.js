@@ -23,7 +23,8 @@
     nitDistinto: ['mal', 'NIT distinto', 'mal'],
     fechaAntes: ['mal', 'Emitida antes de tiempo', 'mal'],
     dudosa: ['pend', 'Revisar a mano', 'mal'],
-    sinPago: ['pend', 'Sin pago pendiente', 'mal'],
+    duplicada: ['pend', 'Factura duplicada', 'demas'],
+    sinPago: ['pend', 'Factura de más', 'demas'],
     anulada: ['mal', 'Anulada', 'anulada'],
     otros: ['neutro', 'No es de repartidores', 'otros'],
     usada: ['neutro', 'Ya verificada antes', 'ya'],
@@ -117,7 +118,7 @@
       return { ids: Object.keys(ids), exactos: exactos };
     }
     var nombreDe = {}; nombres.forEach(function (x) { if (!nombreDe[x.id]) nombreDe[x.id] = x.nombre; });
-    var usados = {}, vistas = {};
+    var usados = {}, vistas = {}, cubre = {};
     var abierto = function (p, link) { return !usados[p.id + '|' + p.semana] && !(p.f && p.f.verificacion && !(link && p.f._id === link._id)); };
     var orden = function (a, b) { return X.ordenSemana(a.semana) - X.ordenSemana(b.semana); };
     var igual = function (a, b) { return Math.abs(a - b) <= 0.05; };
@@ -166,7 +167,12 @@
       who.ids.forEach(function (id) { (pagosDe[id] || []).forEach(function (p) { if (abierto(p, link)) pool.push(p); }); });
       var eq = pool.filter(function (p) { return igual(p.importe, x.imp); });
       if (!eq.length) {
-        if (!pool.length) return fin('sinPago', 'El repartidor no tiene un pago abierto para esta factura', null, '', who.ids[0]);
+        // Muchos emiten dos veces: el pago ya está cubierto y esta es una factura extra
+        var todos = []; who.ids.forEach(function (id) { todos = todos.concat(pagosDe[id] || []); });
+        var cubierta = function (p) { return 'N.º ' + (cubre[p.id + '|' + p.semana] || (p.f && p.f.numero) || 's/n'); };
+        var gemela = todos.filter(function (p) { return igual(p.importe, x.imp); })[0];
+        if (gemela) return fin('duplicada', X.semanaCorta(gemela.semana) + ' ya lo cubre la factura ' + cubierta(gemela), gemela);
+        if (!pool.length) return fin('sinPago', todos.length ? 'Sus pagos ya están cubiertos: ' + todos.map(function (p) { return X.semanaCorta(p.semana) + ' con la ' + cubierta(p); }).join(', ') : 'No tiene pagos pendientes', null, '', who.ids[0]);
         if (esSuma(pool, x.imp)) return fin('suma', 'Cada pago necesita su propia factura', null, '', who.ids[0]);
         return fin('importe', 'Ningún pago pendiente del repartidor es de ese importe', null, '', who.ids[0]);
       }
@@ -182,7 +188,7 @@
       if (!link) { var mismo = eq[0] && porIdNum[eq[0].id + '|' + x.num]; if (mismo && mismo.estado !== 'rechazada' && esLaMisma(mismo, x)) link = mismo; }
       var p = elegir(eq, x, link);
       if (!p) return fin('dudosa', 'Ese pago ya tiene otra factura con otro número', eq[0]);
-      usados[p.id + '|' + p.semana] = 1;
+      usados[p.id + '|' + p.semana] = 1; cubre[p.id + '|' + p.semana] = x.num;
       var conocidos = nits[p.id] || [];
       if (x.nit && conocidos.length && conocidos.indexOf(x.nit) < 0) return fin('nitDistinto', 'Tenemos el NIT ' + conocidos[0], p);
       var min = desdeCuando(p.semana);
@@ -204,7 +210,7 @@
     var pagos = ctx.pagos || [], antes = pagos.filter(function (p) { return p.f && p.f.verificacion; }).length, nuevos = n('ok'), cubiertos = {};
     enExcel.forEach(function (r) { if (r.r === 'coincide') cubiertos[r.id + '|' + r.semana] = 1; });
     return { filas: res, desde: desde, hasta: hasta, resumen: {
-      filasExcel: enExcel.length, repartidores: n('ok') + n('mal') + n('ya'), otros: n('otros'), anuladas: n('anulada'), coinciden: nuevos, noCuadran: n('mal'), yaVerificadas: n('ya'),
+      filasExcel: enExcel.length, repartidores: n('ok') + n('mal') + n('ya') + n('demas'), otros: n('otros'), anuladas: n('anulada'), coinciden: nuevos, noCuadran: n('mal'), deMas: n('demas'), yaVerificadas: n('ya'),
       posibleFraude: res.filter(function (r) { return r.r === 'noEsta'; }).length, contaxFaltan: res.filter(function (r) { return r.r === 'contaxFalta'; }).length, esperan: res.filter(function (r) { return r.r === 'espera'; }).length,
       pagos: pagos.length, verificadosAntes: antes, quedan: pagos.filter(function (p) { return !(p.f && p.f.verificacion) && !cubiertos[p.id + '|' + p.semana]; }).length } };
   }
@@ -304,7 +310,7 @@
   function CTRL_abrir(id) { if ((D.facturas || []).some(function (f) { return f._id === id; })) X.abrirFactura(id); else X.aviso('Esa factura ya no está en la lista.'); }
 
   /* ── Pantalla del resultado (la misma para un cruce nuevo y para uno guardado) ── */
-  var PEST = [['', 'Todas'], ['ok', 'Coinciden'], ['mal', 'Algo no cuadra'], ['anulada', 'Anuladas'], ['otros', 'No son de repartidores'], ['ya', 'Ya verificadas'], ['portal', 'En CONTROL y no en el Excel']];
+  var PEST = [['', 'Todas'], ['ok', 'Coinciden'], ['mal', 'Algo no cuadra'], ['demas', 'Facturas de más'], ['anulada', 'Anuladas'], ['otros', 'No son de repartidores'], ['ya', 'Ya verificadas'], ['portal', 'En CONTROL y no en el Excel']];
   /* Las filas «portal» no están en el Excel: sus datos son de CONTROL y las columnas del Excel quedan vacías */
   var vacia = '<span class="muted">—</span>';
   var deExcel = function (fn) { return function (x) { return x.portal ? vacia : fn(x); }; };
@@ -356,7 +362,7 @@
     if (cu.parentNode) cu.parentNode.classList.add('completa');
     var verif = vivo ? opsVerificar(c) : [], obs = vivo ? opsObservar(c) : [];
     var aprobadasMal = c.filas.filter(function (x) { return x.fest === 'aprobada' && ['importe', 'suma', 'nitDistinto', 'fechaAntes', 'anulada', 'noEsta'].indexOf(x.r) >= 0; }).length;
-    cu.innerHTML = '<div class="aviso-caja mb">' + ic('ayuda') + '<div><b>' + entero(r.filasExcel) + ' en el Excel · ' + entero(r.repartidores) + ' de repartidores · ' + entero(r.otros) + ' de otros · ' + entero(r.anuladas) + ' anuladas</b>' +
+    cu.innerHTML = '<div class="aviso-caja mb">' + ic('ayuda') + '<div><b>' + entero(r.filasExcel) + ' en el Excel · ' + entero(r.repartidores) + ' de repartidores · ' + entero(r.otros) + ' de otros · ' + entero(r.anuladas) + ' anuladas</b>' + (r.deMas ? entero(r.deMas) + ' facturas de más: el pago ya está cubierto por otra factura. ' : '') + +
         'De ' + entero(r.pagos) + ' pagos que deben factura, quedan ' + entero(r.quedan) + ' por emitir o verificar.' + (vivo && verif.length ? ' <b>Las facturas todavía no cambiaron: toca «Registrar» antes de cerrar.</b>' : '') + '</div></div>' +
       '<div class="rejilla r4 mb">' +
         '<div class="kpi"><small>Coinciden</small><b class="num">' + entero(r.coinciden) + '</b><em>facturas que cubren un pago</em></div>' +
