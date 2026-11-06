@@ -42,6 +42,7 @@
     lista: ['ok', 'Factura aprobada'],
     contax: ['contax', 'Emitida por CONTAX'],
     excepcion: ['ok', 'Habilitada por excepción'],
+    preaprobada: ['pend', 'Falta verificar en Impuestos'],
     revision: ['pend', 'Factura en revisión'],
     observada: ['mal', 'Factura observada'],
     porEmitir: ['contax', 'CONTAX debe emitir'],
@@ -54,8 +55,10 @@
       var f = fs[p.semana], ex = excepcionDe(r, p.semana), e;
       // Corte: solo entran a la planilla las facturas subidas hasta el último jueves 18:00 (las de CONTAX no tienen corte)
       var tarde = f && f.origen !== 'contax' && f.origen !== 'impuestos' && f.subidoF && f.subidoF.getTime() > ultimoCorte();
-      if (f && f.estado === 'aprobada' && !tarde) e = f.origen === 'contax' ? 'contax' : 'lista';
+      // Solo se paga con factura verificada en el Excel de Impuestos (también las de CONTAX). Aprobar a mano es una pre-aprobación.
+      if (f && f.estado === 'aprobada' && f.verificacion && !tarde) e = f.origen === 'contax' ? 'contax' : 'lista';
       else if (ex) e = 'excepcion';
+      else if (f && f.estado === 'aprobada' && !f.verificacion) e = 'preaprobada';
       else if (f && f.estado === 'aprobada') e = 'tarde';
       else if (f && f.estado === 'recibida') e = 'revision';
       else if (f && (f.estado === 'observada' || f.estado === 'rechazada')) e = 'observada';

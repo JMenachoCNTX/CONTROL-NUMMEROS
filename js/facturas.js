@@ -17,6 +17,7 @@
   };
   function chipFactura(f) {
     if (f.origen === 'contax') return X.chip('contax', 'Emitida por CONTAX');
+    if (f.estado === 'aprobada' && !f.verificacion) return X.chip('pend', 'Pre-aprobada');
     var e = ESTADOS[f.estado] || ['neutro', f.estado || '—']; return X.chip(e[0], e[1]);
   }
   CTRL.chipFactura = chipFactura;
