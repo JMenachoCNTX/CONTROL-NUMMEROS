@@ -64,8 +64,17 @@
   function excepcionVigente(e) { return e.activa && !(e.hasta && e.hasta < X.hoyISO()); }
   /* Excepción por grupo (clientes CONTAX o una ciudad): una sola regla en vez de una por repartidor */
   function cubreGrupo(e, r, p) {
-    if (e.grupo === 'contax' ? !X.clienteDe(r) : (p.ciudad || r.ciudad) !== e.grupo) return false;
+    if (e.grupo === 'contax' ? !X.clienteDe(r) : ciudadDe(r, p) !== e.grupo) return false;
     return cubreSemana(e, p);
+  }
+  /* Las semanas antiguas no guardan ciudad: se completa con BDYango o la base propia */
+  var CB = { lista: null, mapa: {} };
+  function ciudadDe(r, p) {
+    if (p.ciudad || r.ciudad) return p.ciudad || r.ciudad;
+    var l = D.bdyango && D.bdyango.lista;
+    if (l && l !== CB.lista) { CB.lista = l; CB.mapa = {}; l.forEach(function (x) { CB.mapa[String(x.id)] = x.ciudad; }); }
+    var d = X.padron && X.padron.dato(r.id);
+    return CB.mapa[String(r.id)] || (d && d.ciudad) || '';
   }
   function cubreSemana(e, p) {
     if (!e.semana || e.semana === '*') return true;
@@ -261,7 +270,7 @@
         }).join('') + '</div>' +
         '<div class="herr"><div class="buscar">' + ic('buscar') +  '<input type="search" id="bPagos" placeholder="Buscar por nombre, ID, celular, NIT, razón social o autorización" value="' + esc(P.buscar) + '"></div>' +
           '<select id="sSemana" aria-label="Semana"><option value="">Todas las semanas</option>' + semLista.map(function (s) { return '<option' + (s === P.semana ? ' selected' : '') + '>' + esc(s) + '</option>'; }).join('') + '</select>' +
-          '<select id="sCiudad" aria-label="Ciudad"><option value="">Todas las ciudades</option>' + ['SCZ', 'CBBA', 'LPZ'].map(function (c) { return '<option value="' + c + '"' + (c === P.ciudad ? ' selected' : '') + '>' + esc(X.semanas.CIUDADES[c]) + '</option>'; }).join('') + '</select></div>' +
+          '<select id="sCiudad" aria-label="Ciudad"><option value="">Todas las ciudades</option>' + ['SCZ', 'CBBA', 'LPZ'].map(function (c) { return '<option value="' + c + '"' + (c === P.ciudad ? ' selected' : '') + '>' + esc(X.semanas.CIUDADES[c]) + '</option>'; }).join('') + '<option value="sin"' + (P.ciudad === 'sin' ? ' selected' : '') + '>Sin ciudad</option></select></div>' +
         (f.length ? X.tabla([
           { t: 'Repartidor', html: function (e) { return '<b>' + esc(e.r.nombre || 'Sin nombre') + '</b><span class="sub num">ID ' + esc(e.r.id) + (e.cliente ? ' · ' : '') + '</span>' + (e.cliente ? X.chip('contax', 'Cliente CONTAX') : '') + (e.r.nombreSistema ? '<span class="sub">' + X.chip('neutro', 'Nombre colocado por el sistema') + '</span>' : ''); } },
           { t: 'Semanas', html: function (e) { return e.semanas.map(function (s) { return '<div style="margin:2px 0"><span class="num">' + esc(semanaCorta(s.p.semana)) + '</span> ' + chipSemana(s.estado) + (s.p.rebote ? ' ' + X.chip('mal', 'Rebotó en el banco') : '') + '</div>'; }).join(''); } },
@@ -304,7 +313,7 @@
   function filtrarPagos(ev) {
     return ev.filter(function (e) {
       if (P.semana && !e.semanas.some(function (s) { return s.p.semana === P.semana; })) return false;
-      if (P.ciudad && !e.semanas.some(function (s) { return (s.p.ciudad || e.r.ciudad) === P.ciudad; })) return false;
+      if (P.ciudad && !e.semanas.some(function (s) { return (ciudadDe(e.r, s.p) || 'sin') === P.ciudad; })) return false;
       if (P.filtro === 'listos' && !e.listo) return false;
       if (P.filtro === 'retenidos' && e.listo) return false;
       if (P.filtro === 'contax' && !e.cliente) return false;
