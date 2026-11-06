@@ -237,6 +237,21 @@
     ], nombre, X.banco.estiloDetalle).then(function () { X.bitacora('Descargó RCV para auditores', nombreMes(V.mes)); });
   }
 
+  function pdf() {
+    var l = vista(), por = function (fn) { return suma(l.filter(fn)); };
+    var corto = { }; corto[RIDER] = 'Riders'; corto[OTRAS] = 'Otras'; corto[DUP] = 'Duplicadas'; corto[IMP] = 'No autorizadas'; corto[NOT] = 'No tomar'; corto[IDENT] = 'Identificar';
+    var color = function (k) { return k === RIDER ? '#235347' : k === OTRAS ? '#8EB69B' : '#B54708'; };
+    var rub = {}; l.forEach(function (x) { if (x.rubro) (rub[x.rubro] = rub[x.rubro] || []).push(x); });
+    var c = V.doc.cols;
+    return X.rcvPdf({ titulo: nombreMes(V.mes), archivo: V.doc.archivo, total: suma(l),
+      clases: CLASES.map(function (k) { return { k: k, corto: corto[k], color: color(k), s: por(function (x) { return x.o.c === k; }) }; }),
+      rider: por(function (x) { return x.o.c === RIDER; }), noTomar: por(function (x) { return x.g === 'notomar'; }),
+      pagadas: por(function (x) { return x.g === 'pagada'; }), porPagar: por(function (x) { return x.g === 'porPagar'; }), sinPago: por(function (x) { return x.o.c === RIDER && x.g === 'ident'; }),
+      rubros: Object.keys(rub).map(function (k) { return { k: k, s: suma(rub[k]) }; }).sort(function (a, b) { return b.s.t - a.s.t; }),
+      revisar: l.filter(function (x) { return x.g === 'notomar' || x.g === 'ident'; }).map(function (x) { return { num: x.o.d[c.num], nom: x.nom, imp: x.imp, clase: x.o.c === RIDER ? 'Rider sin pago identificado' : x.o.c.replace('NO TOMAR EN CUENTA / ', '') }; })
+    });
+  }
+
   /* ── Página ── */
   var GRUPOS = [['', 'Facturas del mes'], ['pagada', 'Riders pagadas'], ['porPagar', 'Riders por pagar'], ['ident', 'Por identificar'], ['otras', 'Otras facturas'], ['notomar', 'No tomar en cuenta']];
   function chipClase(k) { return X.chip(k === RIDER ? 'ok' : k === OTRAS ? 'neutro' : k === IDENT ? 'pend' : 'mal', k.replace('NO TOMAR EN CUENTA / ', 'No tomar: ').replace('NO TOMAR EN CUENTA', 'No tomar').replace('FACTURAS RIDERS', 'Rider').replace('OTRAS FACTURAS', 'Otra').replace('IDENTIFICAR', 'Identificar')); }
@@ -245,7 +260,7 @@
     render: function () {
       var ed = X.puedeEditar();
       var cab = X.titulo('RCV mensual', 'El Registro de Compras completo del mes para los auditores: todas las facturas, con su clasificación y su fecha de pago.',
-        (V.filas ? '<button class="btn sec" id="rvExcel">' + ic('descargar') + 'Excel para auditores</button>' + (ed ? '<button class="btn sec" id="rvAct">' + ic('recargar') + 'Actualizar cruce</button>' : '') : '') + (ed ? '<button class="btn" id="rvSubir">' + ic('subir') + 'Subir RCV del mes</button>' : ''));
+        (V.filas ? '<button class="btn sec" id="rvExcel">' + ic('descargar') + 'Excel para auditores</button><button class="btn sec" id="rvPdf">' + ic('grafico') + 'PDF</button>' + (ed ? '<button class="btn sec" id="rvAct">' + ic('recargar') + 'Actualizar cruce</button>' : '') : '') + (ed ? '<button class="btn" id="rvSubir">' + ic('subir') + 'Subir RCV del mes</button>' : ''));
       if (!V.lista) { cargarLista(); return cab + X.cargaN('Trayendo el RCV', ''); }
       if (!V.lista.length) return cab + '<div class="card">' + X.vacio('Todavía no subiste ningún RCV', 'Descarga el Registro de Compras del mes en Impuestos Nacionales y súbelo aquí.') + '</div>';
       var sel = '<div class="herr"><select id="rvMes" aria-label="Mes">' + V.lista.map(function (x) { return '<option value="' + esc(x.rcvMes) + '"' + (x.rcvMes === V.mes ? ' selected' : '') + '>' + esc(nombreMes(x.rcvMes)) + ' · ' + entero(x.filasTotal) + ' facturas</option>'; }).join('') + '</select>';
@@ -276,6 +291,7 @@
       var on = function (s, f) { var b = el.querySelector(s); if (b) b.addEventListener('click', f); };
       on('#rvSubir', subir); on('#rvAct', actualizar);
       on('#rvExcel', function () { excel().catch(function (e) { console.error(e); X.aviso('No se pudo generar el Excel.'); }); });
+      on('#rvPdf', function () { pdf().catch(function (e) { console.error(e); X.aviso(e.message || 'No se pudo generar el PDF.'); }); });
       var m = el.querySelector('#rvMes'); if (m) m.addEventListener('change', function () { abrirMes(m.value); });
       el.querySelectorAll('[data-rf]').forEach(function (b) { b.addEventListener('click', function () { V.filtro = b.getAttribute('data-rf'); V.pag = 0; X.refrescar(); }); });
       var bu = el.querySelector('#rvBuscar'); if (bu) bu.addEventListener('input', X.debounce(function () { V.buscar = bu.value; V.pag = 0; X.refrescar(); X.setFoco('#rvBuscar'); }, 300));

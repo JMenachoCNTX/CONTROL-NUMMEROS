@@ -405,6 +405,7 @@
       var v = String(x.v);
       if (c === h.estado && h.colorEstado) { var ce = h.colorEstado(v); s = fondo(ce[0], ce[1], true); }
       else if (c === h.estado) s = /Retenci/.test(v) ? fondo('FBE5D6', 'B54708', true) : /Exception/.test(v) ? fondo('DAF1DE', '163832', true) : fondo('8EB69B', '051F20', true);
+      if (/^TOTAL/.test(String(h.filas[r][0]))) s = fondo('163832', 'FFFFFF', true);
       x.s = c === h.importe ? plata(x, s) : s;
     }
     if (h.resumen) for (var f = 0; f <= rango.e.r; f++) {

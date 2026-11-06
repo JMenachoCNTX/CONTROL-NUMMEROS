@@ -51,7 +51,7 @@
   }
 
   function armar(Pdf, p, logos) {
-    var doc = new Pdf({ unit: 'mm', format: 'letter' }), y = TOPE, R = X.banco.resumenPlanilla(p), pl = R.planilla, ret = p.retenidosDet || [], sc = p.sinCuenta || [];
+    var doc = new Pdf({ unit: 'mm', format: 'letter' }), y = TOPE, R = p.rcv ? {} : X.banco.resumenPlanilla(p), pl = R.planilla, ret = p.retenidosDet || [], sc = p.sinCuenta || [];
     var pagada = p.estado === 'pagada', verbo = pagada ? 'pagado' : 'a pagar', Verbo = pagada ? 'Pagado' : 'A pagar';
     var letra = function (t, n, color, gruesa) { doc.setFont('helvetica', gruesa ? 'bold' : 'normal'); doc.setFontSize(n); doc.setTextColor(color || TINTA); return t; };
     var espacio = function (h) { if (y + h > PIE) { doc.addPage(); y = TOPE; } };
@@ -98,6 +98,52 @@
       filas.forEach(function (f, i) { fila(f, conTotal && i === filas.length - 1); });
     };
 
+    /* ── RCV mensual: mismo formato, otro contenido ── */
+    var contenidoRcv = function (d) {
+      var t = d.total, corto = function (v, n) { v = String(v || ''); return v.length > n ? v.slice(0, n - 1) + '…' : v; };
+      doc.text(letra('Registro de Compras · ' + d.titulo, 19, TINTA, true), M, y + 4); y += 11;
+      doc.text(letra(((C.facturacion || {}).razonSocial || 'MILTHAGOR S.R.L.') + '  ·  Conciliación para auditores  ·  ' + d.archivo, 9.5, SUAVE), M, y); y += 6;
+      var kw = (UTIL - 9) / 4, tiles = [
+        { t: 'Total del mes', v: bs(t.t), s: entero(t.n) + ' facturas' },
+        { t: 'Crédito fiscal', v: bs(t.cf), s: 'todas las facturas' },
+        { t: 'Facturas riders', v: bs(d.rider.t), s: entero(d.rider.n) + ' facturas' },
+        { t: 'No tomar en cuenta', v: bs(d.noTomar.t), s: entero(d.noTomar.n) + ' facturas' }
+      ];
+      tiles.forEach(function (k, i) {
+        var x = M + i * (kw + 3);
+        doc.setDrawColor(LINEA); doc.setLineWidth(0.4); doc.roundedRect(x, y, kw, 20, 1.5, 1.5, 'S');
+        doc.text(letra(k.t, 8, SUAVE), x + 3, y + 5.5); doc.text(letra(k.v, 11, TINTA, true), x + 3, y + 11.5); doc.text(letra(k.s, 8, SUAVE), x + 3, y + 16.5);
+      });
+      y += 23;
+      var usadas = d.clases.filter(function (c) { return c.s.n; });
+      seccion('Importe por clasificación', 'Todas las facturas del Registro de Compras del mes.', usadas.length * 7);
+      barras(usadas.map(function (c) { return { k: c.corto, v: c.s.t, color: c.color, txt: bs(c.s.t) + ' · ' + entero(c.s.n) + (c.s.n === 1 ? ' factura' : ' facturas') }; }));
+      var est = [{ k: 'Pagadas', g: d.pagadas, color: PRINCIPAL }, { k: 'Por pagar', g: d.porPagar, color: CLARO }, { k: 'Sin pago identificado', g: d.sinPago, color: RETENIDO }].filter(function (e) { return e.g.n; });
+      if (est.length) {
+        var nR = est.reduce(function (a, e) { return a + e.g.n; }, 0), x0 = M;
+        seccion('Pago de las facturas de riders', 'Cuántas facturas de repartidores ya se pagaron.', 18);
+        est.forEach(function (e) { var w = e.g.n / nR * UTIL; barra(x0, y, w - 0.5, 6, e.color); x0 += w; });
+        y += 10;
+        leyenda(est.map(function (e) { return { color: e.color, t: e.k + ': ' + entero(e.g.n) + ' (' + pct(e.g.n, nR) + ')' }; }));
+      }
+      if (d.rubros.length) {
+        seccion('Otras facturas por rubro', 'Sugerencia según el nombre del proveedor: el RCV no dice qué se compró.', Math.min(d.rubros.length, 8) * 7);
+        barras(d.rubros.map(function (r) { return { k: corto(r.k, 15), v: r.s.t, color: r.k === 'Sin identificar' ? CLARO : PRINCIPAL, txt: bs(r.s.t) + ' · ' + entero(r.s.n) }; }));
+      }
+      espacio(50); y += 8;
+      doc.text(letra('Resumen en cifras', 15, TINTA, true), M, y + 3); y += 7;
+      var C4 = [{ t: 'Clasificación', w: 92 }, { t: 'Facturas', w: 22, der: true }, { t: 'Importe', w: 36, der: true }, { t: 'Crédito fiscal', w: UTIL - 150, der: true }];
+      var f4 = function (t, g) { return [t, entero(g.n), bs(g.t), bs(g.cf)]; };
+      seccion('Por clasificación', '', 20);
+      tabla(C4, d.clases.map(function (c) { return f4(corto(c.k, 46), c.s); }).concat([f4('TOTAL DEL MES', t)]), true);
+      if (d.rubros.length) { seccion('Otras facturas por rubro', '', 20); C4[0] = { t: 'Rubro sugerido', w: 92 }; tabla(C4, d.rubros.map(function (r) { return f4(r.k, r.s); })); }
+      if (d.revisar.length) {
+        seccion('Facturas para revisar', 'No tomar en cuenta e Identificar. El detalle de todas las facturas está en el Excel.', 20);
+        tabla([{ t: 'N.º', w: 18 }, { t: 'Proveedor', w: 74 }, { t: 'Importe', w: 30, der: true }, { t: 'Clasificación', w: UTIL - 122 }],
+          d.revisar.map(function (r) { return [corto(r.num, 9), corto(r.nom, 36), bs(r.imp), corto(r.clase, 30)]; }));
+      }
+    };
+    if (p.rcv) contenidoRcv(p.rcv); else {
     /* ── Encabezado ── */
     doc.text(letra('Reporte de pago a repartidores', 19, TINTA, true), M, y + 4); y += 11;
     var fechaP = p.fechaPago || p.fechaProgramada || p.fecha;
@@ -180,6 +226,8 @@
       doc.text(letra(entero(sc.length) + ' repartidores listos para cobrar quedaron fuera por no tener cuenta completa: ' + bs(tsc) + '.', 9.5, TINTA), M, y + 2); y += 6;
     }
 
+    }
+
     /* ── Hoja membretada en cada página: logos arriba; datos y franja verde abajo ── */
     var total = doc.getNumberOfPages(), cuando = X.fechaHora(new Date());
     for (var i = 1; i <= total; i++) {
@@ -196,11 +244,20 @@
     return doc;
   }
 
+  function conLogos() {
+    return Promise.all([cargarPdf(), logo('marca/logos/nummeros-logotipo-firma-principal.svg', 1000, Math.round(1000 * LOGO_N)), logo('marca/logos/contax-logo.png', 600, 159)]);
+  }
   X.reportePdf = function (p) {
-    return Promise.all([cargarPdf(), logo('marca/logos/nummeros-logotipo-firma-principal.svg', 1000, Math.round(1000 * LOGO_N)), logo('marca/logos/contax-logo.png', 600, 159)]).then(function (r) {
+    return conLogos().then(function (r) {
       var titulo = X.banco.tituloPlanilla(p);
       armar(r[0], p, [r[1], r[2]]).save('Reporte Pagos ' + titulo + '.pdf');
       X.bitacora('Descargó reporte de pago en PDF', titulo);
+    });
+  };
+  X.rcvPdf = function (d) {
+    return conLogos().then(function (r) {
+      armar(r[0], { rcv: d }, [r[1], r[2]]).save('RCV ' + d.titulo.replace(' ', '') + '.pdf');
+      X.bitacora('Descargó RCV en PDF', d.titulo);
     });
   };
 })();
