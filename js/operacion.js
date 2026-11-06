@@ -29,13 +29,20 @@
     });
     return m;
   }
-  function excepcionDe(r, semana) {
-    var id = String(r.id || '');
-    return (D.excepciones || []).filter(function (e) {
-      if (!e.activa || String(e.idYango || '').trim() !== id) return false;
-      if (e.hasta && e.hasta < X.hoyISO()) return false;
+  function excepcionVigente(e) { return e.activa && !(e.hasta && e.hasta < X.hoyISO()); }
+  /* Excepción por grupo (clientes CONTAX o una ciudad): una sola regla en vez de una por repartidor */
+  function cubreGrupo(e, r, p) {
+    if (e.grupo === 'contax' ? !X.clienteDe(r) : (p.ciudad || r.ciudad) !== e.grupo) return false;
+    if (!e.semana || e.semana === '*') return true;
+    if (e.yAnteriores) return ordenSemana(p.semana) <= ordenSemana(e.semana);
+    return String(e.semana).trim() === String(p.semana).trim();
+  }
+  function excepcionDe(r, p) {
+    var id = String(r.id || ''), semana = p.semana, l = (D.excepciones || []).filter(excepcionVigente);
+    return l.filter(function (e) {
+      if (e.grupo || String(e.idYango || '').trim() !== id) return false;
       return !e.semana || e.semana === '*' || String(e.semana).trim() === String(semana).trim();
-    })[0] || null;
+    })[0] || l.filter(function (e) { return e.grupo && cubreGrupo(e, r, p); })[0] || null;
   }
   /* Estado de cada semana pendiente y del repartidor completo */
   var ESTADO_SEMANA = {
@@ -52,7 +59,9 @@
   function evaluar(r) {
     var fs = facturasPorSemana(r.uid), cli = X.clienteDe(r);
     var semanas = (r.pendientes || []).map(function (p) {
-      var f = fs[p.semana], ex = excepcionDe(r, p.semana), e;
+      var f = fs[p.semana], ex = excepcionDe(r, p), e;
+      // Una excepción por grupo nunca libera una factura con problema: esas se deciden una por una
+      if (ex && ex.grupo && f && (f.estado === 'observada' || f.estado === 'rechazada')) ex = null;
       // Corte: solo entran a la planilla las facturas subidas hasta el último jueves 18:00 (las de CONTAX no tienen corte)
       var tarde = f && f.origen !== 'contax' && f.origen !== 'impuestos' && f.subidoF && f.subidoF.getTime() > ultimoCorte();
       // Solo se paga con factura verificada en el Excel de Impuestos (también las de CONTAX). Aprobar a mano es una pre-aprobación.
@@ -768,6 +777,6 @@
     });
   }
 
-  X.evaluar = evaluar; X.ordenSemana = ordenSemana; X.semanaCorta = semanaCorta; X.lista = lista;
+  X.evaluar = evaluar; X.cubreGrupo = cubreGrupo; X.ordenSemana = ordenSemana; X.semanaCorta = semanaCorta; X.lista = lista;
   X.detalleRepartidor = detalleRepartidor; X.accesosCliente = accesosCliente; X.debounce = debounce; X.setFoco = setFoco; X.corte = corte;
 })();

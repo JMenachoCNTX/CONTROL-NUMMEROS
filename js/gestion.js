@@ -173,19 +173,90 @@
     });
   }
   CTRL.nuevaExcepcion = nuevaExcepcion;
+
+  /* Excepción por grupo: un solo registro para todos los clientes CONTAX o todo La Paz. No cubre facturas observadas. */
+  var GRUPOS = { contax: 'Clientes CONTAX', LPZ: 'La Paz' };
+  function semanaGrupo(e) {
+    if (!e.semana || e.semana === '*') return 'Todas, también las próximas';
+    return X.semanaCorta(e.semana) + (e.yAnteriores ? ' y anteriores' : '');
+  }
+  /* Qué cambiaría esta regla hoy. Si se edita una existente, se mide sin ella. */
+  function impactoGrupo(e, actual) {
+    var n = { repartidores: 0, pagos: 0, monto: 0, obs: 0, listos: 0, montoListos: 0 }, porSemana = C.reglaPago === 'semana', antes = actual && actual.activa;
+    if (actual) actual.activa = false;
+    X.lista().forEach(function (r) {
+      var ev = X.evaluar(r), nuevos = 0, trabados = 0, suma = 0;
+      ev.semanas.forEach(function (s) {
+        if (s.ok) return;
+        var cubre = X.cubreGrupo(e, r, s.p), mala = s.f && (s.f.estado === 'observada' || s.f.estado === 'rechazada');
+        if (cubre && !mala) { nuevos++; suma += Number(s.p.importe) || 0; return; }
+        trabados++; if (cubre) n.obs++;
+      });
+      if (!nuevos) return;
+      n.repartidores++; n.pagos += nuevos; n.monto += suma;
+      if (porSemana || !trabados) { n.listos++; n.montoListos += porSemana ? suma : ev.total; }
+    });
+    if (actual) actual.activa = antes;
+    return n;
+  }
+  function excepcionGrupo(base) {
+    if (!D.repartidores) { X.aviso('Espera a que terminen de cargar los datos.'); return; }
+    var sem = {};
+    X.lista().forEach(function (r) { (r.pendientes || []).forEach(function (p) { sem[p.semana] = 1; }); });
+    var semanas = Object.keys(sem).sort(function (a, b) { return X.ordenSemana(b) - X.ordenSemana(a); });
+    var e = Object.assign({ grupo: 'contax', semana: semanas[0] || '*', yAnteriores: true, motivo: '', hasta: '', activa: true }, base || {});
+    if (e.semana !== '*' && semanas.indexOf(e.semana) < 0) semanas.unshift(e.semana);
+    var html = '<form class="fm" novalidate>' +
+      '<div class="fila"><label for="gGrupo">¿A quién?</label><select id="gGrupo">' + Object.keys(GRUPOS).map(function (k) { return '<option value="' + k + '"' + (k === e.grupo ? ' selected' : '') + '>' + GRUPOS[k] + '</option>'; }).join('') + '</select></div>' +
+      '<div class="fila"><label for="gSem">¿Qué semana?</label><select id="gSem">' + semanas.map(function (s) { return '<option value="' + esc(s) + '"' + (s === e.semana ? ' selected' : '') + '>' + esc(X.semanaCorta(s)) + '</option>'; }).join('') + '<option value="*"' + (e.semana === '*' ? ' selected' : '') + '>Todas, también las próximas</option></select></div>' +
+      '<div class="fila" id="gAntFila"><label class="interruptor"><input type="checkbox" id="gAnt"' + (e.yAnteriores ? ' checked' : '') + '>Incluir también sus semanas anteriores pendientes</label></div>' +
+      '<div class="fila"><label for="gMot">Motivo</label><textarea id="gMot" rows="2" maxlength="300">' + esc(e.motivo) + '</textarea></div>' +
+      '<div class="fila"><label for="gHasta">Vence el (opcional)</label><input id="gHasta" type="date" value="' + esc(e.hasta) + '"></div>' +
+      '<div id="gImpacto"></div><p class="login-err" data-err role="alert"></p></form>';
+    X.ventana(e._id ? 'Editar excepción por grupo' : 'Excepción por grupo', 'Habilita de una vez los pagos del grupo, sin ir uno por uno. Las facturas observadas no se liberan.', html,
+      '<button class="btn sec" data-cerrar>Cancelar</button><button class="btn" data-guardar>' + (e._id ? 'Guardar' : 'Crear excepción') + '</button>', function (el, cerrar) {
+        var q = function (s) { return el.querySelector(s); }, err = q('[data-err]'), btn = q('[data-guardar]');
+        var leer = function () { var s = q('#gSem').value; return { grupo: q('#gGrupo').value, semana: s, yAnteriores: s !== '*' && q('#gAnt').checked }; };
+        var pintar = function () {
+          var v = leer(), n = impactoGrupo(v, e._id ? e : null);
+          q('#gAntFila').hidden = v.semana === '*';
+          q('#gImpacto').innerHTML = '<div class="aviso-caja">' + ic('excepcion') + '<div><b>Se habilitan ' + entero(n.pagos) + ' pagos de ' + entero(n.repartidores) + ' repartidores · ' + X.bs(n.monto) + '</b>' +
+            'Quedan listos para pagar: ' + entero(n.listos) + ' repartidores · ' + X.bs(n.montoListos) + '.' +
+            (n.repartidores > n.listos ? ' Los demás aún tienen otra semana pendiente.' : '') +
+            (n.obs ? ' ' + entero(n.obs) + ' pagos con factura observada no se liberan.' : '') +
+            (v.semana === '*' ? ' Seguirá habilitando las semanas nuevas hasta que la apagues o venza.' : '') + '</div></div>';
+        };
+        ['#gGrupo', '#gSem', '#gAnt'].forEach(function (s) { q(s).addEventListener('change', pintar); });
+        pintar();
+        var enviar = function () {
+          var v = leer(), motivo = q('#gMot').value.trim();
+          if (!motivo) { err.textContent = 'Falta: Motivo'; return; }
+          var id = e._id || X.nuevoId();
+          var d = { grupo: v.grupo, idYango: '', nombre: GRUPOS[v.grupo], semana: v.semana, yAnteriores: v.yAnteriores, tipo: v.grupo === 'contax' ? 'contax' : 'habilitar', motivo: motivo, hasta: q('#gHasta').value, activa: e.activa !== false, quien: S.usuario.email, actualizado: X.servidor() };
+          btn.disabled = true;
+          X.dbC.collection('excepciones').doc(id).set(d, { merge: true }).then(function () {
+            d._id = id; D.excepciones = (D.excepciones || []).filter(function (x) { return x._id !== id; }).concat([d]);
+            X.bitacora(e._id ? 'Editó excepción por grupo' : 'Creó excepción por grupo', d.nombre + ' · ' + semanaGrupo(d) + ' · ' + motivo);
+            cerrar(); X.ir('excepciones');
+          }, function (x) { console.error(x); btn.disabled = false; err.textContent = 'No se pudo guardar. Revisa tu conexión o tus permisos.'; });
+        };
+        btn.addEventListener('click', enviar);
+        q('form').addEventListener('submit', function (ev) { ev.preventDefault(); enviar(); });
+      });
+  }
   X.pagina('excepciones', {
     t: 'Excepciones', i: 'excepcion', sec: 'CONTAX',
     render: function () {
       var cab = X.titulo('Excepciones de pago', 'Casos que se pagan aunque falte la factura (por ejemplo, la factura de un cliente CONTAX que no alcanzó a emitirse antes del corte).',
-        X.puedeEditar() ? '<button class="btn" id="nuevaEx">' + ic('mas') + 'Nueva excepción</button>' : '');
+        X.puedeEditar() ? '<button class="btn sec" id="nuevaGr">' + ic('excepcion') + 'Excepción por grupo</button><button class="btn" id="nuevaEx">' + ic('mas') + 'Nueva excepción</button>' : '');
       if (!D.excepciones) return cab + X.esqueleto(3);
       var hoy = X.hoyISO();
       // Las vencidas se apagan solas en pantalla
       D.excepciones.forEach(function (e) { if (e.activa && e.hasta && e.hasta < hoy) e.activa = false; });
       var l = D.excepciones.slice().sort(function (a, b) { return (b.activa - a.activa) || String(a.nombre).localeCompare(String(b.nombre)); });
       return cab + '<div class="card">' + (l.length ? X.tabla([
-        { t: 'Repartidor', html: function (e) { return '<b>' + esc(e.nombre || '—') + '</b><span class="sub num">ID ' + esc(e.idYango) + '</span>'; } },
-        { t: 'Semana', html: function (e) { return e.semana === '*' ? 'Todas' : esc(e.semana); } },
+        { t: 'Repartidor', html: function (e) { return '<b>' + esc(e.nombre || '—') + '</b><span class="sub' + (e.grupo ? '">Excepción por grupo' : ' num">ID ' + esc(e.idYango)) + '</span>'; } },
+        { t: 'Semana', html: function (e) { return e.grupo ? esc(semanaGrupo(e)) : e.semana === '*' ? 'Todas' : esc(e.semana); } },
         { t: 'Tipo', html: function (e) { return X.chip(e.tipo === 'contax' ? 'contax' : 'neutro', { habilitar: 'Pago sin factura', contax: 'Pendiente de CONTAX', otro: 'Otro' }[e.tipo] || e.tipo); } },
         { t: 'Motivo', html: function (e) { return esc(e.motivo) + '<span class="sub">' + esc(e.quien || '') + (e.hasta ? ' · vence ' + X.fecha(e.hasta) : '') + '</span>'; } },
         { t: 'Estado', html: function (e) { return e.activa ? X.chip('ok', 'Activa') : X.chip('neutro', 'Inactiva'); } },
@@ -194,12 +265,13 @@
     },
     despues: function (el) {
       var n = el.querySelector('#nuevaEx'); if (n) n.addEventListener('click', function () { nuevaExcepcion(); });
-      el.querySelectorAll('[data-ed]').forEach(function (b) { b.addEventListener('click', function () { nuevaExcepcion(D.excepciones.filter(function (x) { return x._id === b.getAttribute('data-ed'); })[0]); }); });
+      var ng = el.querySelector('#nuevaGr'); if (ng) ng.addEventListener('click', function () { excepcionGrupo(); });
+      el.querySelectorAll('[data-ed]').forEach(function (b) { b.addEventListener('click', function () { var e = D.excepciones.filter(function (x) { return x._id === b.getAttribute('data-ed'); })[0]; if (e.grupo) excepcionGrupo(e); else nuevaExcepcion(e); }); });
       el.querySelectorAll('[data-bo]').forEach(function (b) {
         b.addEventListener('click', function () {
           var e = D.excepciones.filter(function (x) { return x._id === b.getAttribute('data-bo'); })[0];
           X.confirmar('Borrar excepción', '¿Borrar la excepción de <b>' + esc(e.nombre || e.idYango) + '</b>?', function () {
-            X.dbC.collection('excepciones').doc(e._id).delete().then(function () { D.excepciones = D.excepciones.filter(function (x) { return x._id !== e._id; }); X.bitacora('Borró excepción', e.idYango + ' · ' + e.motivo); X.refrescar(); }, function () { X.aviso('No se pudo borrar.'); });
+            X.dbC.collection('excepciones').doc(e._id).delete().then(function () { D.excepciones = D.excepciones.filter(function (x) { return x._id !== e._id; }); X.bitacora('Borró excepción', (e.idYango || e.nombre) + ' · ' + e.motivo); X.refrescar(); }, function () { X.aviso('No se pudo borrar.'); });
           }, 'Borrar', true);
         });
       });
