@@ -9,8 +9,9 @@
   var X = window.CTRL, C = X.C, bs = X.bs, entero = X.entero;
   var TINTA = '#051F20', SUAVE = '#557363', LINEA = '#DAF1DE', PRINCIPAL = '#235347', CLARO = '#8EB69B', RETENIDO = '#B54708';
   var NOMBRE = { SC: 'Santa Cruz', CBBA: 'Cochabamba', LP: 'La Paz', '': 'Sin ciudad' };
-  var ANCHO = 210, ALTO = 297, M = 16, UTIL = ANCHO - M * 2, PIE = 281;
+  var ANCHO = 215.9, ALTO = 279.4, M = 16, UTIL = ANCHO - M * 2, TOPE = 31, PIE = 260; // hoja carta, como la hoja membretada del manual de marca
 
+  var LOGO_N = 539 / 2000, LOGO_C = 159 / 600; // alto ÷ ancho de cada logo
   var cargado = null;
   function cargarPdf() {
     if (window.jspdf) return Promise.resolve(window.jspdf.jsPDF);
@@ -22,6 +23,17 @@
       document.head.appendChild(s);
     });
     return cargado;
+  }
+  /* jsPDF no lee SVG: el logo se pasa a imagen en el navegador. Si no carga, el PDF sale igual, sin ese logo. */
+  function logo(url, w, h) {
+    return new Promise(function (ok) {
+      var i = new Image();
+      i.onload = function () {
+        try { var c = document.createElement('canvas'); c.width = w; c.height = h; c.getContext('2d').drawImage(i, 0, 0, w, h); ok(c.toDataURL('image/png')); } catch (e) { ok(null); }
+      };
+      i.onerror = function () { ok(null); };
+      i.src = url;
+    });
   }
   function semCorta(k) { var m = String(k).match(/^SEM(\d+)G\d{2}(\d{2})$/); return m ? 'Sem ' + m[1] + '/' + m[2] : String(k); }
   function pct(v, t) { return t ? (v / t * 100).toFixed(1).replace('.', ',') + ' %' : '—'; }
@@ -38,11 +50,11 @@
     return l;
   }
 
-  function armar(Pdf, p) {
-    var doc = new Pdf({ unit: 'mm', format: 'a4' }), y = M, R = X.banco.resumenPlanilla(p), pl = R.planilla, ret = p.retenidosDet || [], sc = p.sinCuenta || [];
+  function armar(Pdf, p, logos) {
+    var doc = new Pdf({ unit: 'mm', format: 'letter' }), y = TOPE, R = X.banco.resumenPlanilla(p), pl = R.planilla, ret = p.retenidosDet || [], sc = p.sinCuenta || [];
     var pagada = p.estado === 'pagada', verbo = pagada ? 'pagado' : 'a pagar', Verbo = pagada ? 'Pagado' : 'A pagar';
     var letra = function (t, n, color, gruesa) { doc.setFont('helvetica', gruesa ? 'bold' : 'normal'); doc.setFontSize(n); doc.setTextColor(color || TINTA); return t; };
-    var espacio = function (h) { if (y + h > PIE - 4) { doc.addPage(); y = M; } };
+    var espacio = function (h) { if (y + h > PIE) { doc.addPage(); y = TOPE; } };
     var seccion = function (t, sub, h) {
       espacio(h + 12); y += 5;
       doc.text(letra(t, 12, PRINCIPAL, true), M, y); y += 4.5;
@@ -146,7 +158,7 @@
     barras(R.semanas.map(function (s) { return { k: semCorta(s.sem), v: s.t, txt: bs(s.t) + ' · ' + pagos(s.n) }; }));
 
     /* ── Cuadros ── */
-    doc.addPage(); y = M;
+    espacio(50); y += 8;
     doc.text(letra('Resumen en cifras', 15, TINTA, true), M, y + 3); y += 7;
     seccion('Detalle por semana', '', 20);
     tabla([{ t: 'Semana', w: 70 }, { t: 'Cant', w: 28, der: true }, { t: 'Importe', w: 46, der: true }, { t: '% del total', w: UTIL - 144, der: true }],
@@ -168,20 +180,26 @@
       doc.text(letra(entero(sc.length) + ' repartidores listos para cobrar quedaron fuera por no tener cuenta completa: ' + bs(tsc) + '.', 9.5, TINTA), M, y + 2); y += 6;
     }
 
-    /* ── Pie de página ── */
+    /* ── Hoja membretada en cada página: logos arriba; datos y franja verde abajo ── */
     var total = doc.getNumberOfPages(), cuando = X.fechaHora(new Date());
     for (var i = 1; i <= total; i++) {
       doc.setPage(i);
-      doc.text(letra('Generado por CONTROL · NUMMEROS (CONTAX) el ' + cuando, 8, SUAVE), M, ALTO - 9);
-      doc.text(letra('Página ' + i + ' de ' + total, 8, SUAVE), ANCHO - M, ALTO - 9, { align: 'right' });
+      if (logos[0]) doc.addImage(logos[0], 'PNG', M, 11, 35, 35 * LOGO_N, 'nummeros', 'FAST');
+      if (logos[1]) doc.addImage(logos[1], 'PNG', ANCHO - M - 36, 11, 36, 36 * LOGO_C, 'contax', 'FAST');
+      doc.setDrawColor(LINEA); doc.setLineWidth(0.3); doc.line(M, ALTO - 15.5, ANCHO - M, ALTO - 15.5);
+      doc.text(letra('NUMMEROS by CONTAX', 8, TINTA, true), M, ALTO - 11.5);
+      var ancho = doc.getTextWidth('NUMMEROS by CONTAX');
+      doc.text(letra('  ·  info@contaxbolivia.com  ·  Santa Cruz, Bolivia  ·  Generado el ' + cuando, 8, SUAVE), M + ancho, ALTO - 11.5);
+      doc.text(letra('Página ' + i + ' de ' + total, 8, SUAVE), ANCHO - M, ALTO - 11.5, { align: 'right' });
+      doc.setFillColor(PRINCIPAL); doc.rect(0, ALTO - 4, ANCHO, 4, 'F');
     }
     return doc;
   }
 
   X.reportePdf = function (p) {
-    return cargarPdf().then(function (Pdf) {
+    return Promise.all([cargarPdf(), logo('marca/logos/nummeros-logotipo-firma-principal.svg', 1000, Math.round(1000 * LOGO_N)), logo('marca/logos/contax-logo.png', 600, 159)]).then(function (r) {
       var titulo = X.banco.tituloPlanilla(p);
-      armar(Pdf, p).save('Reporte Pagos ' + titulo + '.pdf');
+      armar(r[0], p, [r[1], r[2]]).save('Reporte Pagos ' + titulo + '.pdf');
       X.bitacora('Descargó reporte de pago en PDF', titulo);
     });
   };

@@ -389,6 +389,34 @@
     }
     return r;
   }
+  /* Colores NUMMEROS del Detalle: títulos en verde, filas alternadas, estados y totales resaltados */
+  function estiloDetalle(ws, h, XL) {
+    var borde = { style: 'thin', color: { rgb: 'DAF1DE' } }, bordes = { top: borde, bottom: borde, left: borde, right: borde };
+    var titulo = { fill: { patternType: 'solid', fgColor: { rgb: '235347' } }, font: { bold: true, color: { rgb: 'FFFFFF' } }, alignment: { horizontal: 'center', vertical: 'center', wrapText: true }, border: bordes };
+    var fondo = function (rgb, letra, gruesa) { return { fill: { patternType: 'solid', fgColor: { rgb: rgb } }, font: { bold: !!gruesa, color: { rgb: letra || '051F20' } }, border: bordes }; };
+    var rango = XL.utils.decode_range(ws['!ref']), tabla = h.columnas || (rango.e.c + 1);
+    var plata = function (c, s) { if (c && c.t === 'n') { c.z = '#,##0.00'; s.numFmt = '#,##0.00'; } return s; };
+    for (var r = 0; r <= rango.e.r; r++) for (var c = 0; c < tabla; c++) {
+      var k = XL.utils.encode_cell({ r: r, c: c }), x = ws[k];
+      if (!x) x = ws[k] = { t: 's', v: '' };
+      if (!r) { x.s = titulo; continue; }
+      if (!h.filas[r] || h.filas[r][0] === '') continue;
+      var s = r % 2 ? { border: bordes } : fondo('F3FAF5');
+      var v = String(x.v);
+      if (c === h.estado) s = /Retenci/.test(v) ? fondo('FBE5D6', 'B54708', true) : /Exception/.test(v) ? fondo('DAF1DE', '163832', true) : fondo('8EB69B', '051F20', true);
+      x.s = c === h.importe ? plata(x, s) : s;
+    }
+    if (h.resumen) for (var f = 0; f <= rango.e.r; f++) {
+      var q = ws[XL.utils.encode_cell({ r: f, c: 16 })], nom = q ? String(q.v) : ''; if (!nom) continue;
+      for (var j = 16; j <= 18; j++) {
+        var z = ws[XL.utils.encode_cell({ r: f, c: j })]; if (!z) continue;
+        var e = !f ? titulo : /^TOTAL/.test(nom) ? fondo('163832', 'FFFFFF', true) : /^PLANILLA/.test(nom) ? fondo('DAF1DE') : { border: bordes };
+        z.s = j === 18 && f ? plata(z, Object.assign({}, e)) : e;
+      }
+    }
+    ws['!rows'] = [{ hpt: 32 }];
+    if (rango.e.r > 0) ws['!autofilter'] = { ref: XL.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: rango.e.r, c: tabla - 1 } }) };
+  }
   function detalleExcel(p) {
     var lineas = p.lineas || [], fecha = p.fechaPago || p.fechaProgramada || p.fecha, titulo = tituloPlanilla(p);
     var R = resumenPlanilla(p), principal = R.principal, pl = R.planilla, hojas = [], hojaPl = '';
@@ -396,7 +424,7 @@
     if (pl) {
       var anio = (principal.match(/G(\d{4})/) || [])[1];
       hojaPl = 'Planilla ' + principal.replace(/G\d{4}$/, '').replace('SEM', 'Sem');
-      hojas.push({ nombre: hojaPl, filas: [['Nro', 'Semana', 'Rango (Días)', 'ID del mensajero', 'Nombre completo', 'Importe total', 'Comentarios', 'Nro Factura', 'Fecha Factura', 'NIT Factura', 'Nro Autorización', 'ESTADO DE PAGO', 'Gestión SEM', 'Ciudad']]
+      hojas.push({ nombre: hojaPl, columnas: 14, importe: 5, estado: 11, filas: [['Nro', 'Semana', 'Rango (Días)', 'ID del mensajero', 'Nombre completo', 'Importe total', 'Comentarios', 'Nro Factura', 'Fecha Factura', 'NIT Factura', 'Nro Autorización', 'ESTADO DE PAGO', 'Gestión SEM', 'Ciudad']]
         .concat(pl.docs.map(function (s, i) {
           var l = pl.linea(s);
           var rep = D.repartidores && D.repartidores.get(s.uid);
@@ -431,11 +459,11 @@
       }
       pagos.push(fila.concat(bloque[i] || ['', '', '']));
     }
-    hojas.push({ nombre: 'Pagos ' + titulo, filas: pagos });
-    if ((p.retenidosDet || []).length) hojas.push({ nombre: 'Retenidos', filas: [['ID del mensajero', 'Nombre completo', 'Importe retenido', 'Motivo']].concat(p.retenidosDet.map(function (r) { return [numOTexto(r.id), r.nombre, r.importe, r.motivo]; })) });
-    if ((p.sinCuenta || []).length) hojas.push({ nombre: 'Sin cuenta bancaria', filas: [['ID del mensajero', 'Nombre completo', 'Importe', 'Semanas']].concat(p.sinCuenta.map(function (r) { return [numOTexto(r.id), r.nombre, r.importe, (r.semanas || []).join(', ')]; })) });
-    if ((p.rebotados || []).length) hojas.push({ nombre: 'Rebotados', filas: [['ID del mensajero', 'Nombre', 'Semana', 'Importe', 'Estado en el banco', 'Banco']].concat(p.rebotados.map(function (r) { return [numOTexto(r.id), r.nombre, r.sem, r.importe, r.estado, r.banco]; })) });
-    return X.excel(hojas, 'Detalle Pagos ' + titulo).then(function () { X.bitacora('Descargó detalle de pagos', titulo); });
+    hojas.push({ nombre: 'Pagos ' + titulo, columnas: 14, importe: 6, estado: 12, resumen: true, filas: pagos });
+    if ((p.retenidosDet || []).length) hojas.push({ nombre: 'Retenidos', importe: 2, filas: [['ID del mensajero', 'Nombre completo', 'Importe retenido', 'Motivo']].concat(p.retenidosDet.map(function (r) { return [numOTexto(r.id), r.nombre, r.importe, r.motivo]; })) });
+    if ((p.sinCuenta || []).length) hojas.push({ nombre: 'Sin cuenta bancaria', importe: 2, filas: [['ID del mensajero', 'Nombre completo', 'Importe', 'Semanas']].concat(p.sinCuenta.map(function (r) { return [numOTexto(r.id), r.nombre, r.importe, (r.semanas || []).join(', ')]; })) });
+    if ((p.rebotados || []).length) hojas.push({ nombre: 'Rebotados', importe: 3, filas: [['ID del mensajero', 'Nombre', 'Semana', 'Importe', 'Estado en el banco', 'Banco']].concat(p.rebotados.map(function (r) { return [numOTexto(r.id), r.nombre, r.sem, r.importe, r.estado, r.banco]; })) });
+    return X.excel(hojas, 'Detalle Pagos ' + titulo, estiloDetalle).then(function () { X.bitacora('Descargó detalle de pagos', titulo); });
   }
   /* Los dos reportes que acompañan a la planilla del banco */
   function informesPlanilla(p) {

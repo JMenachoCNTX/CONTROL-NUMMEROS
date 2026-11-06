@@ -345,8 +345,19 @@
     return xlsxListo;
   }
   /* hojas = [{nombre, filas:[[...]]}] → archivo .xlsx */
-  function excel(hojas, nombre) {
-    return cargarXLSX().then(function (X) {
+  /* La versión con colores solo se carga para los reportes que la piden; si falla, el Excel sale igual, sin color */
+  var estilosListos = null;
+  function cargarEstilos() {
+    if (!estilosListos) estilosListos = new Promise(function (ok) {
+      var s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js';
+      s.onload = function () { ok(true); }; s.onerror = function () { estilosListos = null; ok(false); };
+      document.head.appendChild(s);
+    });
+    return estilosListos;
+  }
+  function excel(hojas, nombre, estilo) {
+    return (estilo ? cargarEstilos().then(function (hay) { if (!hay) estilo = null; return window.XLSX || cargarXLSX(); }) : cargarXLSX()).then(function (X) {
       var lb = X.utils.book_new();
       hojas.forEach(function (h) {
         var ws = X.utils.aoa_to_sheet(h.filas);
@@ -354,6 +365,7 @@
           var ancho = 10; h.filas.slice(0, 200).forEach(function (f) { ancho = Math.max(ancho, String(f[i] == null ? '' : f[i]).length + 2); });
           return { wch: Math.min(ancho, 48) };
         });
+        if (estilo) estilo(ws, h, X);
         X.utils.book_append_sheet(lb, ws, String(h.nombre).slice(0, 31));
       });
       X.writeFile(lb, nombre + '.xlsx');
