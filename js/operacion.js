@@ -29,6 +29,37 @@
     });
     return m;
   }
+  /* Búsqueda común: nombre, ID, celular, NIT, CI, razón social y autorización de cada repartidor.
+     Se arma una vez y se rehace solo cuando cambian los datos. */
+  var IB = { firma: '', txt: {}, aut: {} };
+  function indiceBusqueda() {
+    var l = lista(), fac = D.facturas || [], hist = D.hist || [], by = (D.bdyango && D.bdyango.lista) || [];
+    var firma = [l.length, fac.length, hist.length, by.length, (D.clientes || []).length].join('|');
+    if (firma === IB.firma) return IB;
+    var txt = {}, aut = {};
+    var pon = function (id) {
+      id = String(id == null ? '' : id).trim(); if (!id) return;
+      var s = [].slice.call(arguments, 1).filter(Boolean).map(function (v) { var n = X.normal(v); return n + ' ' + n.replace(/[^0-9A-Z]/g, ''); }).join(' ');
+      if (s) txt[id] = (txt[id] || '') + ' ' + s;
+    };
+    l.forEach(function (r) { var c = X.clienteDe(r); pon(r.id, r.nombre, r.celular, c && c.nit, c && c.celular, c && c.nombre); });
+    by.forEach(function (x) { pon(x.id, x.nombre, x.nit, x.ci, x.telefono); });
+    hist.forEach(function (h) { pon(h.id, h.nit); });
+    fac.forEach(function (f) {
+      pon(f.id, f.razonEmisor, f.nitEmisor);
+      var a = X.normal(f.autorizacion), id = String(f.id || '').trim(); if (a && id) aut[id] = (aut[id] || '') + ' ' + a;
+    });
+    IB = { firma: firma, txt: txt, aut: aut };
+    return IB;
+  }
+  /* El código de autorización mezcla letras y números: con menos de 6 caracteres saldría cualquiera */
+  function buscaRepartidor(id, b) {
+    if (!b) return true;
+    var i = indiceBusqueda(); id = String(id == null ? '' : id).trim();
+    var c = b.replace(/[^0-9A-Z]/g, ''), t = (i.txt[id] || '') + ' ' + id;
+    return t.indexOf(b) >= 0 || (/^\d+$/.test(c) && t.indexOf(c) >= 0) || (b.length >= 6 && (i.aut[id] || '').indexOf(b) >= 0);
+  }
+  function celularDe(id) { var r = D.repartidores && D.repartidores.get(X.idSeguro(id)); return r ? String(r.celular || '').replace(/\D/g, '') : ''; }
   function excepcionVigente(e) { return e.activa && !(e.hasta && e.hasta < X.hoyISO()); }
   /* Excepción por grupo (clientes CONTAX o una ciudad): una sola regla en vez de una por repartidor */
   function cubreGrupo(e, r, p) {
@@ -225,7 +256,7 @@
         '<div class="card"><div class="pestanas" role="tablist">' + [['todos', 'Todos'], ['listos', 'Listos'], ['retenidos', 'Retenidos'], ['revision', 'En revisión'], ['contax', 'Clientes CONTAX']].map(function (p) {
           return '<button role="tab" aria-selected="' + (P.filtro === p[0]) + '" data-filtro="' + p[0] + '">' + p[1] + ' <em class="num">' + entero(cuenta(p[0])) + '</em></button>';
         }).join('') + '</div>' +
-        '<div class="herr"><div class="buscar">' + ic('buscar') +  '<input type="search" id="bPagos" placeholder="Buscar repartidor por nombre o ID" value="' + esc(P.buscar) + '"></div>' +
+        '<div class="herr"><div class="buscar">' + ic('buscar') +  '<input type="search" id="bPagos" placeholder="Buscar por nombre, ID, celular, NIT, razón social o autorización" value="' + esc(P.buscar) + '"></div>' +
           '<select id="sSemana" aria-label="Semana"><option value="">Todas las semanas</option>' + semLista.map(function (s) { return '<option' + (s === P.semana ? ' selected' : '') + '>' + esc(s) + '</option>'; }).join('') + '</select></div>' +
         (f.length ? X.tabla([
           { t: 'Repartidor', html: function (e) { return '<b>' + esc(e.r.nombre || 'Sin nombre') + '</b><span class="sub num">ID ' + esc(e.r.id) + (e.cliente ? ' · ' : '') + '</span>' + (e.cliente ? X.chip('contax', 'Cliente CONTAX') : '') + (e.r.nombreSistema ? '<span class="sub">' + X.chip('neutro', 'Nombre colocado por el sistema') + '</span>' : ''); } },
@@ -271,7 +302,7 @@
       if (P.filtro === 'retenidos' && e.listo) return false;
       if (P.filtro === 'contax' && !e.cliente) return false;
       if (P.filtro === 'revision' && !e.semanas.some(function (s) { return s.estado === 'revision'; })) return false;
-      if (P.buscar) { var b = X.normal(P.buscar); if ((X.normal(e.r.nombre) + ' ' + e.r.id + ' ' + e.r.celular).indexOf(b) < 0) return false; }
+      if (P.buscar && !buscaRepartidor(e.r.id, X.normal(P.buscar))) return false;
       return true;
     }).sort(function (a, b) { return (b.listo - a.listo) || X.normal(a.r.nombre).localeCompare(X.normal(b.r.nombre)); });
   }
@@ -446,7 +477,7 @@
   function filtrarHist() {
     completarNombres();
     var b = X.normal(H.buscar);
-    return (D.hist || []).filter(function (h) { return !b || (X.normal(h.nombre) + ' ' + h.id + ' ' + h.semana + ' ' + h.factura + ' ' + h.nit).indexOf(b) >= 0; })
+    return (D.hist || []).filter(function (h) { return !b || (X.normal(h.nombre) + ' ' + h.id + ' ' + h.semana + ' ' + h.factura + ' ' + h.nit).indexOf(b) >= 0 || buscaRepartidor(h.id, b); })
       .sort(function (a, z) { return String(z.fecha).localeCompare(String(a.fecha)) || X.normal(a.nombre).localeCompare(X.normal(z.nombre)); });
   }
   function pagosPorFecha() {
@@ -505,13 +536,13 @@
         var totF = filasF.reduce(function (s, h) { return s + (Number(h.importe) || 0); }, 0);
         cuerpo = '<div class="herr">' +
             '<select id="sFecha" aria-label="Fecha de pago">' + l.map(function (x) { var k = x.iso || x.fecha; return '<option value="' + esc(k) + '"' + (k === H.fecha ? ' selected' : '') + '>' + esc(x.fecha) + ' · ' + entero(x.filas.length) + ' pagos · ' + bs(x.total) + '</option>'; }).join('') + '</select>' +
-            '<div class="buscar">' + ic('buscar') + '<input type="search" id="bHistF" placeholder="Buscar en esta fecha: nombre, ID, semana, factura o NIT" value="' + esc(H.buscarF) + '"></div>' +
+            '<div class="buscar">' + ic('buscar') + '<input type="search" id="bHistF" placeholder="Buscar en esta fecha: nombre, ID, celular, NIT, razón social, autorización, semana o factura" value="' + esc(H.buscarF) + '"></div>' +
             '<button class="btn sec chico" id="btnExpFecha">' + ic('descargar') + 'Excel de esta fecha</button>' +
             (X.esAdmin() && X.semanas && D.hist && D.hist.length ? '<button class="btn sec chico" id="btnCambiarFecha">' + ic('reloj') + 'Cambiar fecha de pago</button>' : '') + '</div>' +
           (nF ? '<p class="muted" style="margin:0 0 10px">Semanas: ' + esc(Object.keys(nF.semanas).map(semanaCorta).join(', ')) + ' · <b>' + entero(filasF.length) + ' pagos · ' + bs(totF) + '</b> · toca un pago para ver el informe del repartidor</p>' : '') +
           tablaHist(filasF, H.pagF, '<td colspan="5">Total</td><td class="monto">' + bs(totF) + '</td><td colspan="7"></td>');
       } else {
-        cuerpo = '<div class="herr"><div class="buscar">' + ic('buscar') + '<input type="search" id="bHist" placeholder="Buscar por nombre, ID, semana, N.º de factura o NIT" value="' + esc(H.buscar) + '"></div>' +
+        cuerpo = '<div class="herr"><div class="buscar">' + ic('buscar') + '<input type="search" id="bHist" placeholder="Buscar por nombre, ID, celular, NIT, razón social, autorización, semana o factura" value="' + esc(H.buscar) + '"></div>' +
             '<button class="btn sec chico" id="btnExpTodo">' + ic('descargar') + 'Excel (' + entero(todos.length) + ')</button></div>' +
           '<p class="muted" style="margin:0 0 10px"><b>' + entero(todos.length) + ' pagos · ' + bs(todos.reduce(function (s, h) { return s + h.importe; }, 0)) + '</b> · toca un pago para ver el informe del repartidor</p>' +
           tablaHist(todos, H.pagT);
@@ -568,7 +599,7 @@
     if (!x) return [];
     var b = sinFiltro ? '' : X.normal(H.buscarF);
     return x.filas.map(function (f) { return Object.assign({ fecha: x.iso || x.fecha, id: f.r.id, nombre: f.r.nombre }, f.h); })
-      .filter(function (h) { return !b || (X.normal(h.nombre) + ' ' + h.id + ' ' + h.semana + ' ' + h.factura + ' ' + h.nit).indexOf(b) >= 0; })
+      .filter(function (h) { return !b || (X.normal(h.nombre) + ' ' + h.id + ' ' + h.semana + ' ' + h.factura + ' ' + h.nit).indexOf(b) >= 0 || buscaRepartidor(h.id, b); })
       .sort(function (a, z) { return X.normal(a.nombre).localeCompare(X.normal(z.nombre)); });
   }
   function tablaHist(filas, pag, pie) {
@@ -586,14 +617,14 @@
       if (R.filtro === 'nohab' && r.habilitado !== false) return false;
       if (R.filtro === 'sinpoliza' && r.poliza) return false;
       if (R.filtro === 'contax' && !X.clienteDe(r)) return false;
-      if (b && (X.normal(r.nombre) + ' ' + r.id + ' ' + r.celular).indexOf(b) < 0) return false;
+      if (b && !buscaRepartidor(r.id, b)) return false;
       return true;
     }).sort(function (a, b2) { return X.normal(a.nombre).localeCompare(X.normal(b2.nombre)); });
   }
   X.pagina('repartidores', {
     t: 'Repartidores', i: 'repartidor', orden: 5, sec: 'Operación',
     render: function () {
-      var cab = X.titulo('Repartidores', 'Busca por nombre, ID o celular y toca a un repartidor para ver su informe (pagos, facturas, gráficos y PDF).', (X.puedeEditar() ? '<button class="btn sec" id="btnImpNit">' + ic('subir') + 'Importar NIT</button>' : '') + '<button class="btn sec" id="btnExpRep">' + ic('descargar') + 'Excel</button>');
+      var cab = X.titulo('Repartidores', 'Busca por nombre, ID, celular, NIT, razón social o autorización y toca a un repartidor para ver su informe (pagos, facturas, gráficos y PDF).', (X.puedeEditar() ? '<button class="btn sec" id="btnImpNit">' + ic('subir') + 'Importar NIT</button>' : '') + '<button class="btn sec" id="btnExpRep">' + ic('descargar') + 'Excel</button>');
       if (!S.portalUsuario) return cab + '<div class="card">' + sinPortal() + '</div>';
       if (!D.repartidores) return cab + X.esqueleto(3);
       var f = filtrarRep(), l = lista();
@@ -601,7 +632,7 @@
       return cab + '<div class="card"><div class="pestanas">' + [['todos', 'Todos'], ['pendientes', 'Con pendientes'], ['nohab', 'No habilitados'], ['sinpoliza', 'Sin póliza'], ['contax', 'Clientes CONTAX']].map(function (p) {
         return '<button aria-selected="' + (R.filtro === p[0]) + '" data-f="' + p[0] + '">' + p[1] + ' <em class="num">' + entero(n[p[0]]) + '</em></button>';
       }).join('') + '</div>' +
-        '<div class="herr"><div class="buscar">' + ic('buscar') + '<input type="search" id="bRep" placeholder="Buscar por nombre, ID o celular" value="' + esc(R.buscar) + '"></div></div>' +
+        '<div class="herr"><div class="buscar">' + ic('buscar') + '<input type="search" id="bRep" placeholder="Buscar por nombre, ID, celular, NIT, razón social o autorización" value="' + esc(R.buscar) + '"></div></div>' +
         (f.length ? X.tabla([
           { t: 'Repartidor', html: function (r) { return '<b>' + esc(r.nombre || 'Sin nombre') + '</b><span class="sub num">ID ' + esc(r.id) + '</span>' + (r.nombreSistema ? '<span class="sub">' + X.chip('neutro', 'Nombre colocado por el sistema') + '</span>' : ''); } },
           { t: 'Celular', html: function (r) { return '<span class="num">' + esc(X.telVisible(r.celular)) + '</span>'; } },
@@ -780,5 +811,5 @@
   }
 
   X.evaluar = evaluar; X.cubreGrupo = cubreGrupo; X.ordenSemana = ordenSemana; X.semanaCorta = semanaCorta; X.lista = lista;
-  X.detalleRepartidor = detalleRepartidor; X.accesosCliente = accesosCliente; X.debounce = debounce; X.setFoco = setFoco; X.corte = corte; X.ultimoCorte = ultimoCorte;
+  X.detalleRepartidor = detalleRepartidor; X.accesosCliente = accesosCliente; X.debounce = debounce; X.setFoco = setFoco; X.corte = corte; X.ultimoCorte = ultimoCorte; X.buscaRepartidor = buscaRepartidor; X.celularDe = celularDe;
 })();

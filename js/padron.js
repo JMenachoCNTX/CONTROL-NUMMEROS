@@ -100,7 +100,7 @@
         if (V.filtro === 'activos' && x.activo === false) return false;
         if (V.filtro === 'inactivos' && x.activo !== false) return false;
         if (V.filtro === 'connit' && !x.nit) return false;
-        return !b || (X.normal(x.nombre) + ' ' + x.id + ' ' + (x.ci || '') + ' ' + (x.nit || '') + ' ' + (x.telefono || '')).indexOf(b) >= 0;
+        return !b || (X.normal(x.nombre) + ' ' + x.id + ' ' + (x.ci || '') + ' ' + (x.nit || '') + ' ' + (x.telefono || '') + ' ' + X.normal(x.razon)).indexOf(b) >= 0 || X.buscaRepartidor(x.id, b);
       }).sort(function (a, z) { return X.normal(a.nombre).localeCompare(X.normal(z.nombre)); });
     }
     function pintar() {
@@ -111,7 +111,7 @@
         '<div class="pestanas">' + [['todos', 'Todos'], ['activos', 'En BDYango'], ['inactivos', 'Inactivos'], ['connit', 'Con NIT']].map(function (p) {
           return '<button aria-selected="' + (V.filtro === p[0]) + '" data-pd="' + p[0] + '">' + p[1] + ' <em class="num">' + entero(n[p[0]]) + '</em></button>';
         }).join('') + '</div>' +
-        '<div class="herr"><div class="buscar">' + ic('buscar') + '<input type="search" id="pdBus" placeholder="Buscar por nombre, ID, CI, NIT o teléfono" value="' + esc(V.buscar) + '"></div></div><div id="pdRes"></div>';
+        '<div class="herr"><div class="buscar">' + ic('buscar') + '<input type="search" id="pdBus" placeholder="Buscar por nombre, ID, CI, NIT, teléfono, razón social o autorización" value="' + esc(V.buscar) + '"></div></div><div id="pdRes"></div>';
       c.cuerpo.querySelectorAll('[data-pd]').forEach(function (b) { b.addEventListener('click', function () { V.filtro = b.getAttribute('data-pd'); V.pag = 0; pintar(); }); });
       var tm; c.cuerpo.querySelector('#pdBus').addEventListener('input', function () { var v = this.value; clearTimeout(tm); tm = setTimeout(function () { V.buscar = v; V.pag = 0; tabla(); }, 250); });
       c.cuerpo.querySelector('#pdExc').addEventListener('click', excel);

@@ -412,7 +412,7 @@
     var semanas = {}, resultados = {};
     c.filas.forEach(function (x) { if (x.semana) semanas[x.semana] = 1; resultados[x.r] = (resultados[x.r] || 0) + 1; });
     var filtros = document.createElement('div'); filtros.className = 'herr';
-    filtros.innerHTML = '<div class="buscar">' + ic('buscar') + '<input type="search" id="cnBus" placeholder="Buscar por nombre, ID, NIT, N.º o importe"></div>' +
+    filtros.innerHTML = '<div class="buscar">' + ic('buscar') + '<input type="search" id="cnBus" placeholder="Buscar por nombre, razón social, ID, celular, NIT, N.º, autorización o importe"></div>' +
       '<select id="cnRes" aria-label="Filtrar por resultado"><option value="">Todos los resultados</option>' + Object.keys(RES).filter(function (k) { return resultados[k]; }).map(function (k) { return '<option value="' + k + '">' + esc(RES[k][1]) + ' (' + entero(resultados[k]) + ')</option>'; }).join('') + '</select>' +
       '<select id="cnCont" aria-label="Filtrar por contador"><option value="">CONTAX y otros</option><option value="CONTAX">Clientes CONTAX</option><option value="Otro">Otro contador</option></select>' +
       '<select id="cnCarga" aria-label="Filtrar por carga de la factura"><option value="">Toda carga</option><option value="cargo">La cargó el repartidor</option><option value="tarde">Después del corte</option><option value="contax">Emitida por CONTAX</option><option value="migrada">Sistema anterior</option><option value="sin">No la cargó</option></select>' +
@@ -427,7 +427,7 @@
         if (E.sem && x.semana !== E.sem) return false;
         if (E.cont && contadorFila(x) !== E.cont) return false;
         if (E.carga) { var ck = cargaFila(x).k; if (E.carga === 'cargo' ? ck !== 'cargo' && ck !== 'tarde' : ck !== E.carga) return false; }
-        return !b || X.normal([x.nombre, x.nom, x.id, x.nit, x.cnit, x.num, x.fnum, formasImporte(x.imp), formasImporte(x.pago), formasImporte(x.fimp)].join(' ')).indexOf(b) >= 0;
+        return !b || X.normal([x.nombre, x.nom, x.id, x.nit, x.cnit, x.num, x.fnum, x.aut, X.celularDe(x.id), formasImporte(x.imp), formasImporte(x.pago), formasImporte(x.fimp)].join(' ')).indexOf(b) >= 0;
       }).sort(function (p, q) {
         var a = o.v(p), z = o.v(q);
         return E.dir * (o.n ? (Number(a) || 0) - (Number(z) || 0) : String(a || '').localeCompare(String(z || '')));
@@ -515,13 +515,13 @@
     var b = X.normal(O.buscar);
     return observadas().filter(function (f) {
       if (O.caso && casoDe(f) !== O.caso) return false;
-      return !b || X.normal([f.nombre, f.razonEmisor, f.id, f.nitEmisor, f.numero, f.motivo, formasImporte(f.importe)].join(' ')).indexOf(b) >= 0;
+      return !b || X.normal([f.nombre, f.razonEmisor, f.id, f.nitEmisor, f.numero, f.motivo, f.autorizacion, X.celularDe(f.id), formasImporte(f.importe)].join(' ')).indexOf(b) >= 0;
     });
   }
   function obsTabla() { var l = obsFiltradas(); return '<p class="muted mb">' + entero(l.length) + ' observaciones · ' + bs(X.redondear(l.reduce(function (s, f) { return s + (Number(f.importe) || 0); }, 0))) + '</p>' + (l.length ? X.tabla(COLS_OBS, l, { clic: true, tam: 100, pag: O.pag }) : X.vacio('No hay observaciones con estos filtros', '')); }
   function obsHTML() {
     var casos = {}; observadas().forEach(function (f) { var c = casoDe(f); casos[c] = (casos[c] || 0) + 1; });
-    return '<div class="herr"><div class="buscar">' + ic('buscar') + '<input type="search" id="obBus" placeholder="Buscar por nombre, ID, NIT, N.º o importe" value="' + esc(O.buscar) + '"></div>' +
+    return '<div class="herr"><div class="buscar">' + ic('buscar') + '<input type="search" id="obBus" placeholder="Buscar por nombre, razón social, ID, celular, NIT, N.º, autorización o importe" value="' + esc(O.buscar) + '"></div>' +
       '<select id="obCaso" aria-label="Filtrar por caso"><option value="">Todos los casos</option>' + Object.keys(casos).sort().map(function (k) { return '<option value="' + esc(k) + '"' + (O.caso === k ? ' selected' : '') + '>' + esc(k) + ' (' + entero(casos[k]) + ')</option>'; }).join('') + '</select>' +
       '<button class="btn sec" id="obExc">' + ic('descargar') + 'Excel</button></div><div id="obZona">' + obsTabla() + '</div>';
   }

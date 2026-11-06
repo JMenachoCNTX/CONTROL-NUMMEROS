@@ -31,7 +31,7 @@
   function buscar(texto) {
     var b = X.normal(texto); if (!b || b.length < 2) return [];
     var c = candidatos(), l = [];
-    Object.keys(c).forEach(function (id) { var x = c[id]; if ((X.normal(x.nombre) + ' ' + id).indexOf(b) >= 0) l.push(x); });
+    Object.keys(c).forEach(function (id) { var x = c[id]; if ((X.normal(x.nombre) + ' ' + id).indexOf(b) >= 0 || X.buscaRepartidor(id, b)) l.push(x); });
     return l.sort(function (a, z) { return (a.id === texto.trim() ? -1 : 0) - (z.id === texto.trim() ? -1 : 0) || X.normal(a.nombre).localeCompare(X.normal(z.nombre)); }).slice(0, 30);
   }
 
@@ -264,7 +264,7 @@
       var cab = X.titulo('Informe del repartidor', 'Pagos, facturas e impuestos. Con «Descargar PDF» sale el informe para enviárselo.', '<button class="btn sec" data-ir="repartidores">' + ic('repartidor') + 'Volver a Repartidores</button>');
       if (!D.repartidores) return cab + X.esqueleto(2);
       var res = buscar(IN.buscar);
-      var caja = '<div class="card mb"><div class="herr"><div class="buscar">' + ic('buscar') + '<input type="search" id="bInf" placeholder="Nombre o ID del repartidor" value="' + esc(IN.buscar) + '" autocomplete="off"></div>' +
+      var caja = '<div class="card mb"><div class="herr"><div class="buscar">' + ic('buscar') + '<input type="search" id="bInf" placeholder="Nombre, ID, celular, NIT, razón social o autorización" value="' + esc(IN.buscar) + '" autocomplete="off"></div>' +
         '</div>' +
         (IN.buscar && !IN.id ? (res.length ? '<div class="lista-res">' + res.map(function (x) {
           return '<button class="fila-res" data-inf="' + esc(x.id) + '"><b>' + esc(x.nombre || 'Sin nombre') + '</b><span class="num muted">ID ' + esc(x.id) + '</span></button>';

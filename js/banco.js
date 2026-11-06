@@ -533,7 +533,7 @@
         if (BY.filtro === 'activos' && !(/ACTIV/.test(X.normal(x.estadoYango)) && !/DESACTIV/.test(X.normal(x.estadoYango)))) return false;
         if (BY.filtro === 'sinbanco' && x.cuenta) return false;
         if (BY.filtro === 'sincodigo' && !(x.cuenta && x.desconocido)) return false;
-        return !bq || (X.normal(x.nombre) + ' ' + x.id + ' ' + (x.ci || '') + ' ' + (x.telefono || '') + ' ' + (x.cuenta || '') + ' ' + (x.nit || '')).indexOf(bq) >= 0;
+        return !bq || (X.normal(x.nombre) + ' ' + x.id + ' ' + (x.ci || '') + ' ' + (x.telefono || '') + ' ' + (x.cuenta || '') + ' ' + (x.nit || '')).indexOf(bq) >= 0 || X.buscaRepartidor(x.id, bq);
       }).sort(function (a, z) { return X.normal(a.nombre).localeCompare(X.normal(z.nombre)); });
       BY.lista = l;
       return cab + '<div class="rejilla r4 mb">' +
@@ -545,7 +545,7 @@
           return '<button role="tab" aria-selected="' + (BY.filtro === p[0]) + '" data-fby="' + p[0] + '">' + p[1] + ' <em class="num">' + entero(cuenta[p[0]]) + '</em></button>';
         }).join('') + '</div>' +
  (BY.filtro === 'sincodigo' ? '<div class="aviso-caja mb">' + ic('ayuda') + '<div><b>¿Qué es «banco no reconocido»?</b>El banco que figura en BDYango no está en el cuadro de códigos del Banco Ganadero (Pagos pendientes → «Códigos de banco»), o en esa columna escribieron otra cosa (por ejemplo un número). Sin código no se puede transferir: hay que pedir a Yango que lo corrija.</div></div>' : '') +
-        '<div class="herr"><div class="buscar">' + ic('buscar') + '<input type="search" id="bBy" placeholder="Buscar por nombre, ID, CI, NIT, teléfono o cuenta" value="' + esc(BY.buscar) + '"></div>' +
+        '<div class="herr"><div class="buscar">' + ic('buscar') + '<input type="search" id="bBy" placeholder="Buscar por nombre, ID, CI, NIT, teléfono, cuenta, razón social o autorización" value="' + esc(BY.buscar) + '"></div>' +
           '<select id="sByCiudad" aria-label="Ciudad"><option value="">Todas las ciudades</option>' + ['SCZ', 'CBBA', 'LPZ'].map(function (c) { return '<option value="' + c + '"' + (BY.ciudad === c ? ' selected' : '') + '>' + esc(X.semanas.CIUDADES[c]) + '</option>'; }).join('') + '</select></div>' +
         (l.length ? X.tabla([
           { t: 'Repartidor', html: function (x) { return '<b>' + esc(x.nombre || '—') + '</b><span class="sub num">ID ' + esc(x.id) + (x.ci ? ' · CI ' + esc(x.ci) : '') + '</span>'; } },

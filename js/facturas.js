@@ -61,7 +61,7 @@
       if (F.tab === 'aprobada' && f.estado !== 'aprobada') return false;
       if (F.tab === 'anulada' && f.estado !== 'anulada') return false;
       if (F.semana && (f.semanas || []).indexOf(F.semana) < 0) return false;
-      if (b && (X.normal(f.nombre) + ' ' + f.id + ' ' + X.normal(f.numero)).indexOf(b) < 0) return false;
+      if (b && X.normal([f.nombre, f.id, f.numero, f.razonEmisor, f.nitEmisor, f.autorizacion, X.celularDe(f.id)].join(' ')).indexOf(b) < 0) return false;
       return true;
     });
   }
@@ -115,7 +115,7 @@
       if (LF.vista === 'con' && !x.tiene) return false;
       if (LF.contador && x.contador !== LF.contador) return false;
       if (LF.tipo && x.tipo !== LF.tipo) return false;
-      if (b && (X.normal(x.nombre) + ' ' + x.id + ' ' + String(x.celular).replace(/\D/g, '') + ' ' + X.normal(x.semana)).indexOf(b) < 0) return false;
+      if (b && (X.normal(x.nombre) + ' ' + x.id + ' ' + String(x.celular).replace(/\D/g, '') + ' ' + X.normal(x.semana)).indexOf(b) < 0 && !X.buscaRepartidor(x.id, b)) return false;
       return true;
     });
   }
@@ -131,7 +131,7 @@
     var nf = function (x, k) { return x.f && x.f[k] ? esc(x.f[k]) : '<span class="muted">❌</span>'; };
     return '<div class="rejilla r3 mb">' + lfCuadro('General', todas) + lfCuadro('Externos (otro contador)', ext) + lfCuadro('CONTAX', ctx) + '</div>' +
       (D.panelClientes && D.panelClientes.error ? '<div class="aviso-caja mb">' + ic('ayuda') + '<div>' + esc(D.panelClientes.error) + ' Sin eso no se sabe quién es cliente CONTAX.</div></div>' : '') +
-      '<div class="herr"><div class="buscar">' + ic('buscar') + '<input type="search" id="bLf" placeholder="Buscar por nombre, ID, celular o semana" value="' + esc(LF.buscar) + '"></div>' +
+      '<div class="herr"><div class="buscar">' + ic('buscar') + '<input type="search" id="bLf" placeholder="Buscar por nombre, ID, celular, NIT, razón social, autorización o semana" value="' + esc(LF.buscar) + '"></div>' +
         '<select id="sLfVista"><option value="faltan"' + (LF.vista === 'faltan' ? ' selected' : '') + '>Sin factura</option><option value="con"' + (LF.vista === 'con' ? ' selected' : '') + '>Con factura</option><option value=""' + (!LF.vista ? ' selected' : '') + '>Todas</option></select>' +
         '<select id="sLfCont"><option value="">Todos los contadores</option><option value="OTRO"' + (LF.contador === 'OTRO' ? ' selected' : '') + '>Externos (otro)</option><option value="CONTAX"' + (LF.contador === 'CONTAX' ? ' selected' : '') + '>CONTAX</option></select>' +
         '<select id="sLfTipo"><option value="">Todos los tipos</option><option value="pendiente"' + (LF.tipo === 'pendiente' ? ' selected' : '') + '>Pendientes de pago</option><option value="retenido"' + (LF.tipo === 'retenido' ? ' selected' : '') + '>Pagados con retención</option><option value="hoja"' + (LF.tipo === 'hoja' ? ' selected' : '') + '>De la hoja CONTROL (sin pago registrado)</option></select>' +
@@ -200,7 +200,7 @@
           '<div class="sello"><img src="marca/graficos/ele-sello-de-aprobado.png" alt=""><div><b>Todavía no llegó ninguna factura por el portal</b><span class="muted">Desde ahora los repartidores las suben en «Mis facturas». Apenas suban la primera, aparece aquí sin recargar.</span></div></div>' +
           '<img class="pasos-img" src="marca/graficos/pas-pasos-' + (S.oscuro ? 'oscuro' : 'claro') + '.jpg" alt="Conocemos, diseñamos, probamos y acompañamos"></div>' :
         '<div class="card">' + pest +
-        '<div class="herr"><div class="buscar">' + ic('buscar') + '<input type="search" id="bFac" placeholder="Buscar por nombre, ID o N.º de factura" value="' + esc(F.buscar) + '"></div>' +
+        '<div class="herr"><div class="buscar">' + ic('buscar') + '<input type="search" id="bFac" placeholder="Buscar por nombre, ID, celular, NIT, razón social, N.º o autorización" value="' + esc(F.buscar) + '"></div>' +
           '<select id="sSemFac"><option value="">Todas las semanas</option>' + Object.keys(semanas).sort(function (a, b) { return X.ordenSemana(b) - X.ordenSemana(a); }).map(function (s) { return '<option' + (s === F.semana ? ' selected' : '') + '>' + esc(s) + '</option>'; }).join('') + '</select>' +
           (ed && F.tab === 'recibida' && cuadran.length ? '<button class="btn" id="btnAprCuadran">' + ic('check') + 'Aprobar las ' + cuadran.length + ' que cuadran</button>' : '') +
           (ed && sel.length ? '<button class="btn" id="btnAprSel">' + ic('check') + 'Aprobar ' + sel.length + ' marcadas</button>' : '') +
