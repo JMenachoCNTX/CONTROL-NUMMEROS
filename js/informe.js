@@ -76,14 +76,14 @@
     // Filas de la tabla: primero los pendientes (pago retenido), luego lo pagado (lo más nuevo arriba)
     var filas = pend.map(function (x) {
       var p = x.p, t = { lista: 'Listo para pagar', contax: 'Factura CONTAX', excepcion: 'Excepción', revision: 'Factura en revisión', observada: 'Factura observada', tarde: 'Después del corte', porEmitir: 'Por emitir (CONTAX)' }[x.estado] || 'Pago retenido';
-      return { pend: true, ok: !!x.ok, estado: t, semana: p.semana, rango: p.rango || '', nombre: d.nombre, importe: Number(p.importe) || 0, fecha: '', factura: '', fechaFactura: '', nit: '', autorizacion: '', mes: '' };
+      return { pend: true, ok: !!x.ok, sem: x, estado: t, semana: p.semana, rango: p.rango || '', nombre: d.nombre, importe: Number(p.importe) || 0, fecha: '', factura: '', fechaFactura: '', nit: '', autorizacion: '', mes: '' };
     }).concat(d.r ? (d.r.enPlanilla || []).map(function (p) {
       return { pend: true, ok: true, estado: 'Enviado a pagar', semana: p.semana, rango: p.rango || '', nombre: d.nombre, importe: Number(p.importe) || 0, fecha: '', factura: '', fechaFactura: '', nit: '', autorizacion: '', mes: '' };
     }) : []).concat(d.r ? (d.r.noHab || []).map(function (p) {
       // Semanas en Bs 0: no cumplió las horas (no se pagan, pero quedan a la vista por si reclama)
       return { pend: true, ok: true, nohab: true, estado: 'No habilitado (Bs 0)', semana: p.semana, rango: p.rango || '', nombre: d.nombre, importe: 0, fecha: '', factura: '', fechaFactura: '', nit: '', autorizacion: '', mes: '' };
     }) : []).concat(d.hist.slice().reverse().map(function (h) {
-      return { pend: false, ok: true, estado: 'Pagado', semana: h.semana, rango: h.rango, nombre: h.nombre, importe: h.importe, fecha: h.fecha, factura: h.factura, fechaFactura: h.fechaFactura, nit: h.nit, autorizacion: h.autorizacion, mes: mesFactura(h) };
+      return { pend: false, ok: true, id: h.id, estado: 'Pagado', semana: h.semana, rango: h.rango, nombre: h.nombre, importe: h.importe, fecha: h.fecha, factura: h.factura, fechaFactura: h.fechaFactura, nit: h.nit, autorizacion: h.autorizacion, mes: mesFactura(h) };
     }));
     return {
       tot: tot, totPend: totPend, pend: pend, filas: filas, ultimo: d.hist[d.hist.length - 1] || null,
@@ -197,6 +197,10 @@
     var c = cifras(d), dato = function (t, v) { return '<div class="dato"><small>' + t + '</small><b>' + v + '</b></div>'; };
     var ini = String(d.nombre || '?').split(' ').filter(Boolean).slice(0, 2).map(function (p) { return p.charAt(0); }).join('').toUpperCase();
     IN.filas = c.filas;
+    // Corregir cada pago aquí mismo: los pagados vuelven a pendiente o cambian de fecha; los pendientes se marcan pagados
+    var corregir = X.semanas && X.semanas.puedeCorregir() ? [{ t: 'Corregir', html: function (f) {
+      return f.sem ? X.semanas.botonPagado(f.sem) : f.pend ? '' : X.semanas.accionesPago({ fecha: f.fecha, semana: f.semana, id: f.id, importe: f.importe });
+    } }] : [];
     return '<div class="card mb inf-ficha"><div class="inf-ini">' + esc(ini || '?') + '</div><div class="inf-nom"><h2>' + esc(d.nombre || 'Sin nombre') + '</h2><span class="num muted">ID Yango ' + esc(d.id) + '</span>' +
         '<div class="fila-acc" style="margin-top:8px">' + (d.habilitado ? X.chip('ok', 'Habilitado en Yango') : X.chip('mal', 'No habilitado')) + ' ' + (d.retenido ? X.chip('mal', 'Pago retenido') : X.chip('ok', 'Sin retención')) + ' ' +
           (d.faltaFactura ? X.chip('pend', 'Falta factura') : X.chip('ok', 'Facturación en orden')) + ' ' + (d.poliza ? X.chip('ok', 'Con póliza') : X.chip('pend', 'Sin póliza')) + ' ' + (d.contador === 'CONTAX' ? X.chip('contax', 'Cliente CONTAX') : '') + '</div></div>' +
@@ -220,7 +224,7 @@
       '<div class="card mb"><div class="h2">Proyección impositiva <small>por mes de la factura</small></div><div class="grafico"><canvas id="gInfI"></canvas></div></div>' +
       observaciones(d) +
       '<div class="card"><div class="h2">Historial de pagos y facturación <small>' + entero(c.filas.length) + ' filas · ' + bs(c.tot) + ' pagado</small></div>' +
-        (c.filas.length ? '<div class="tabla-ancha">' + X.tabla([
+        (c.filas.length ? '<div class="tabla-ancha">' + X.tabla(corregir.concat([
           { t: 'Estado', html: function (f) { return f.nohab ? X.chip('neutro', f.estado) : f.pend ? X.chip(f.ok ? 'pend' : 'mal', f.estado) : X.chip('ok', 'Pagado'); } },
           { t: 'Semana', html: function (f) { return '<b class="num">' + esc(f.semana) + '</b>'; } },
           { t: 'Rango (días)', html: function (f) { return '<span style="white-space:nowrap">' + esc(f.rango) + '</span>'; } },
@@ -233,7 +237,7 @@
           { t: 'Mes declaración', html: function (f) { return esc(f.mes); } },
           { t: 'Débito fiscal 13%', clase: 'monto', html: function (f) { return bs(f.importe * 0.13); } },
           { t: 'IT 3%', clase: 'monto', html: function (f) { return bs(f.importe * 0.03); } }
-        ], c.filas, { tam: 50, pag: IN.pag || 0, pie: d.hist.length ? '<td colspan="3">Total pagado</td><td class="monto">' + bs(c.tot) + '</td><td colspan="6"></td><td class="monto">' + bs(c.tot * 0.13) + '</td><td class="monto">' + bs(c.tot * 0.03) + '</td>' : '' }) + '</div>' : X.vacio('Sin pagos registrados')) +
+        ]), c.filas, { tam: 50, pag: IN.pag || 0, pie: d.hist.length ? '<td colspan="' + (3 + corregir.length) + '">Total pagado</td><td class="monto">' + bs(c.tot) + '</td><td colspan="6"></td><td class="monto">' + bs(c.tot * 0.13) + '</td><td class="monto">' + bs(c.tot * 0.03) + '</td>' : '' }) + '</div>' : X.vacio('Sin pagos registrados')) +
       '</div>';
   }
   function graficos(el, d) {

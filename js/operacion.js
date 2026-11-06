@@ -494,7 +494,7 @@
   }
 
   /* ══════════ HISTORIAL DE PAGOS ══════════ */
-  var H = { buscar: '', pagT: 0, sub: 'graficos', fecha: '', buscarF: '', pagF: 0 };
+  var H = { buscar: '', pagT: 0, sub: 'fechas', fecha: '', buscarF: '', pagF: 0 };
   /* Todos los pagos con las columnas de HistPagosMTG (lo que puede pedir auditoría) */
   var COLS_HIST = [['Fecha de pago', function (h) { return X.fecha(h.fecha); }], ['Semana', 'semana'], ['Rango (Días)', 'rango'], ['ID del mensajero', 'id'], ['Nombre completo', 'nombre'],
     ['Importe total', 'importe'], ['Comentarios', 'comentario'], ['Nro Factura', 'factura'], ['Fecha Factura', 'fechaFactura'], ['NIT Factura', 'nit'],
