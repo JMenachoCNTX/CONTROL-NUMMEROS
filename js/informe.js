@@ -181,6 +181,18 @@
   }
 
   /* ══════════ VISTA EN PANTALLA (como el resto del sistema) ══════════ */
+  /* Lo observado en sus facturas, para responderle sin buscar en otro lado */
+  function observaciones(d) {
+    var l = X.conciliacion ? X.conciliacion.observacionesDe(d.id) : [];
+    if (!l.length) return '';
+    return '<div class="card mb"><div class="h2">Observaciones de facturas <small>' + entero(l.length) + '</small></div>' + X.tabla([
+      { t: 'Observada', html: function (f) { return X.fechaHora(f.revisado); } },
+      { t: 'Factura', html: function (f) { return '<b class="num">N.º ' + esc(f.numero || 's/n') + '</b><span class="sub">' + X.fecha(f.fechaEmision) + '</span>'; } },
+      { t: 'Importe', clase: 'monto', html: function (f) { return bs(f.importe); } },
+      { t: 'Caso', html: function (f) { return X.chip(f.estado === 'rechazada' ? 'mal' : 'pend', X.conciliacion.casoDe(f)); } },
+      { t: 'Motivo que ve el repartidor', html: function (f) { return esc(f.motivo || '—'); } }
+    ], l, { tam: 50 }) + '</div>';
+  }
   function vista(d) {
     var c = cifras(d), dato = function (t, v) { return '<div class="dato"><small>' + t + '</small><b>' + v + '</b></div>'; };
     var ini = String(d.nombre || '?').split(' ').filter(Boolean).slice(0, 2).map(function (p) { return p.charAt(0); }).join('').toUpperCase();
@@ -206,6 +218,7 @@
         '<div class="card"><div class="h2">Ingresos por mes <small>últimos 12 meses</small></div><div class="grafico"><canvas id="gInfM"></canvas></div></div>' +
       '</div>' +
       '<div class="card mb"><div class="h2">Proyección impositiva <small>por mes de la factura</small></div><div class="grafico"><canvas id="gInfI"></canvas></div></div>' +
+      observaciones(d) +
       '<div class="card"><div class="h2">Historial de pagos y facturación <small>' + entero(c.filas.length) + ' filas · ' + bs(c.tot) + ' pagado</small></div>' +
         (c.filas.length ? '<div class="tabla-ancha">' + X.tabla([
           { t: 'Estado', html: function (f) { return f.nohab ? X.chip('neutro', f.estado) : f.pend ? X.chip(f.ok ? 'pend' : 'mal', f.estado) : X.chip('ok', 'Pagado'); } },
