@@ -330,6 +330,19 @@
     });
     return ops;
   }
+  /* Duplicadas de CONTAX que todavía no están en el Panel. Sirve también en cruces guardados: se compara con las facturas de hoy */
+  function dupsPanel(c) {
+    var hay = {}; (D.facturas || []).forEach(function (f) { if (f.autorizacion) hay[claveAut(f.autorizacion)] = 1; if (f.numero) hay[limpiaNum(f.nitEmisor) + '|' + limpiaNum(f.numero)] = 1; });
+    return c.filas.filter(function (x) { return esDeContax(x) && x.id && !x.fid && !x.observada && !(x.aut && hay[claveAut(x.aut)]) && !hay[x.nit + '|' + x.num]; });
+  }
+  function mandarDups(l, listo) {
+    var col = X.dbP.collection('facturas'), ops = l.map(function (x) { return { tipo: 'set', ref: col.doc(), datos: nuevaFactura(x, 'porAnular', { uid: '', caso: 'duplicadaContax', semanas: [], detalle: x.det || '' }) }; });
+    X.clasicos(true, 'Arquímedes está mandando las duplicadas al Panel…');
+    X.semanas.escribir(ops).then(function () {
+      X.bitacora('Mandó duplicadas de la conciliación al Panel', ops.length + ' facturas');
+      X.clasicos(false); X.aviso(ops.length + ' facturas en el Panel para anular.'); listo();
+    }, function (e) { console.error(e); X.clasicos(false); X.aviso('No se pudo guardar. Revisa tu conexión o tus permisos.'); });
+  }
   function aplicar(c, ops, campo, texto, listo) {
     X.clasicos(true, 'Arquímedes está guardando ' + ops.length + ' facturas…');
     X.semanas.escribir(ops).then(function () {
@@ -413,6 +426,7 @@
     var E = { g: c.resumen.noCuadran ? 'mal' : '', pag: 0, buscar: '', res: '', sem: '', cont: '', carga: '', orden: 'nombre', dir: 1 }, r = c.resumen, zona = document.createElement('div');
     if (cu.parentNode) cu.parentNode.classList.add('completa');
     var verif = vivo ? opsVerificar(c) : [], obs = vivo ? opsObservar(c) : [];
+    var dups = dupsPanel(c);
     var aprobadasMal = c.filas.filter(function (x) { return x.fest === 'aprobada' && ['importe', 'suma', 'nitDistinto', 'fechaAntes', 'anulada', 'noEsta'].indexOf(x.r) >= 0; }).length;
     cu.innerHTML = '<div class="aviso-caja mb">' + ic('ayuda') + '<div><b>' + entero(r.filasExcel) + ' en el Excel · ' + entero(r.repartidores) + ' de repartidores · ' + entero(r.otros) + ' de otros · ' + entero(r.anuladas) + ' anuladas</b>' + (r.deMas ? entero(r.deMas) + ' facturas duplicadas o emitidas de más: el pago ya tiene otra factura. ' : '') + +
         'De ' + entero(r.pagos) + ' pagos que deben factura, quedan ' + entero(r.quedan) + ' por emitir o verificar.' + (vivo && verif.length ? ' <b>Las facturas todavía no cambiaron: toca «Registrar» antes de cerrar.</b>' : '') + '</div></div>' +
@@ -422,6 +436,8 @@
         '<button class="kpi' + (r.posibleFraude ? ' alerta' : '') + '" data-kc="noEsta"><small>Posible fraude</small><b class="num">' + entero(r.posibleFraude) + '</b><em>en el Portal, no en el Excel de sus fechas</em></button>' +
         '<button class="kpi" data-kc="portal"><small>Quedan por emitir</small><b class="num">' + entero(r.quedan) + '</b><em>' + entero(r.esperan) + ' facturas esperan el Excel de sus fechas</em></button>' +
       '</div>' +
+      (dups.length ? '<div class="aviso-caja mb" id="cnDupCaja">' + ic('ayuda') + '<div><b>' + entero(dups.length) + (dups.length === 1 ? ' factura duplicada' : ' facturas duplicadas') + ' de clientes CONTAX sin mandar al Panel · ' + bs(dups.reduce(function (s, x) { return s + x.imp; }, 0)) + '</b>Las anula nuestro equipo desde Facturación del Panel. Al repartidor no se le avisa.' +
+        '<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn sec" id="cnDupVer">' + ic('buscar') + 'Ver las duplicadas</button>' + (X.puedeEditar() ? '<button class="btn" id="cnDupPanel">' + ic('check') + 'Mandar ' + entero(dups.length) + ' al Panel</button>' : '') + '</div></div></div>' : '') +
       (r.contaxFaltan ? '<div class="aviso-caja mb">' + ic('ayuda') + '<div><b>' + entero(r.contaxFaltan) + ' marcadas como emitidas por CONTAX no están en este Excel</b>Puede faltar confirmarlas en Impuestos. No se cambian solas.</div></div>' : '') +
       (aprobadasMal ? '<div class="aviso-caja error mb">' + ic('excepcion') + '<div><b>' + aprobadasMal + ' facturas ya aprobadas tienen un problema</b>Revísalas una por una. No se cambian solas.</div></div>' : '') +
       '<div class="fila-acc mb">' +
@@ -506,6 +522,25 @@
         cu.querySelectorAll('[data-kc]').forEach(function (o) { o.classList.toggle('activo', o === b); });
         tabla(); zona.scrollIntoView({ block: 'start' });
       });
+    });
+    var dv = cu.querySelector('#cnDupVer'), dp = cu.querySelector('#cnDupPanel');
+    if (dv) dv.addEventListener('click', function () {
+      E.g = 'demas'; E.res = ''; E.cont = 'CONTAX'; E.pag = 0;
+      filtros.querySelector('#cnRes').value = ''; filtros.querySelector('#cnCont').value = 'CONTAX';
+      tabla(); zona.scrollIntoView({ block: 'start' });
+    });
+    if (dp) dp.addEventListener('click', function () {
+      var l = dupsPanel(c); if (!l.length) return;
+      X.confirmar('Mandar al Panel', 'Se mandan <b>' + entero(l.length) + '</b> facturas a Facturación del Panel para que el equipo las anule. <b>Al repartidor no se le avisa.</b>', function () {
+        mandarDups(l, function () {
+          l.forEach(function (x) { x.observada = true; });
+          marcar();
+          var caja = cu.querySelector('#cnDupCaja'); if (caja) caja.remove();
+          var bo = cu.querySelector('#cnObs'), n = vivo ? opsObservar(c).length : 0;
+          if (bo) { if (n) bo.textContent = 'Observar todas (' + entero(n) + ')'; else bo.remove(); }
+          tabla();
+        });
+      }, 'Mandar');
     });
     cu.querySelector('#cnExc').addEventListener('click', function () { exportar(c, visibles()); });
     var bv = cu.querySelector('#cnVer');
