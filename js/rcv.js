@@ -2,7 +2,8 @@
    CONTROL · NUMMEROS — RCV mensual
    El Registro de Compras COMPLETO del mes, para los auditores: el 100 %
    de las facturas, cada una con su clasificación y su fecha de pago.
-   No toca facturas ni pagos: solo lee. Se guarda en «cruces» con el
+   No toca pagos. Solo escribe en facturas cuando el equipo manda una
+   duplicada de cliente CONTAX al Panel para anularla. Se guarda en «cruces» con el
    documento rcv_AAAA-MM y sus partes rcv_AAAA-MM_p1…, sin campo «cuando»,
    así no aparece en Conciliaciones. La fecha de pago se calcula al abrir,
    y las correcciones a mano quedan aparte, en «ajustes».
@@ -108,12 +109,38 @@
     if (!V.filas) return [];
     var c = V.doc.cols, ix = indiceHist(), ab = {}, aj = ajustes();
     (D.semanas || []).forEach(function (s) { ab[s.id + '|' + X.ordenSemana(s.semana)] = s.estado; });
+    var fx = indiceFacturas();
     return V.filas.map(function (o, i) {
       var k = claveFila(o, c), a = aj[k], e = a ? Object.assign({}, o, { c: a.c || o.c, o: a.o != null ? a.o : o.o }) : o, p = fechaPago(e, ix, ab, c);
       var imp = X.numero(o.d[c.imp]) || 0, cf = c.cf >= 0 ? X.numero(o.d[c.cf]) || 0 : 0, nom = String(o.d[c.nom] || '');
       var g = e.c === RIDER ? (p.pagada ? 'pagada' : p.falta ? 'porPagar' : 'ident') : e.c === IDENT ? 'ident' : e.c === OTRAS ? 'otras' : 'notomar';
-      return { i: i, k: k, o: e, p: p, g: g, imp: imp, cf: cf, nom: nom, rubro: e.c === OTRAS ? ((a && a.rubro) || rubroDe(nom)) : '', manual: !!a };
+      return { i: i, k: k, o: e, p: p, g: g, imp: imp, cf: cf, nom: nom, rubro: e.c === OTRAS ? ((a && a.rubro) || rubroDe(nom)) : '', manual: !!a, dup: estadoDup(e, c, fx) };
     });
+  }
+  /* ── Duplicadas de clientes CONTAX: las anula nuestro equipo desde Facturación del Panel ── */
+  function indiceFacturas() {
+    var ix = {}; (D.facturas || []).forEach(function (f) { if (f.autorizacion) ix[clave(f.autorizacion)] = f; if (f.numero) ix[P_limpia(f.nitEmisor) + '|' + P_limpia(f.numero)] = f; });
+    return ix;
+  }
+  function estadoDup(e, c, fx) {
+    if (e.c !== DUP || !e.i || /repetida/i.test(e.o || '')) return ''; // una fila repetida en el Excel es una sola factura: no se anula
+    if ((e.k || X.conciliacion._puro.contadorVivo(e.i)) !== 'CONTAX') return '';
+    var f = fx[clave(e.d[c.aut])] || fx[P_limpia(e.d[c.nit]) + '|' + P_limpia(e.d[c.num])];
+    if (!f) return 'falta';
+    return f.estado === 'porAnular' ? 'panel' : f.estado === 'anulada' ? 'anulada' : 'revisar';
+  }
+  var DUP_TXT = { falta: ['mal', 'Falta mandar al Panel'], panel: ['pend', 'En el Panel por anular'], anulada: ['ok', 'Anulada: vuelve a subir el RCV'], revisar: ['pend', 'Revisar a mano'] };
+  function mandarPanel(l) {
+    var c = V.doc.cols, P = X.conciliacion._puro, col = X.dbP.collection('facturas');
+    var ops = l.map(function (x) {
+      var d = { id: x.o.i, nombre: x.o.n, semana: '', num: P.limpiaNum(x.o.d[c.num]), imp: x.imp, fecha: P.fechaRCV(x.o.d[c.fecha]), nit: P.limpiaNum(x.o.d[c.nit]), nom: x.nom, aut: String(x.o.d[c.aut] || '').trim() };
+      return { tipo: 'set', ref: col.doc(), datos: P.nuevaFactura(d, 'porAnular', { uid: '', caso: 'duplicadaContax', semanas: [], detalle: x.o.o || '' }) };
+    });
+    X.clasicos(true, 'Arquímedes está mandando las duplicadas al Panel…');
+    return X.semanas.escribir(ops).then(function () {
+      X.bitacora('Mandó duplicadas del RCV al Panel', nombreMes(V.mes) + ' · ' + ops.length + ' facturas');
+      X.clasicos(false); X.aviso(ops.length + ' facturas en el Panel para anular.'); X.refrescar();
+    }, function (e) { console.error(e); X.clasicos(false); X.aviso('No se pudo guardar. Revisa tu conexión o tus permisos.'); });
   }
   function suma(l) { return { n: l.length, t: X.redondear(l.reduce(function (s, x) { return s + x.imp; }, 0)), cf: X.redondear(l.reduce(function (s, x) { return s + x.cf; }, 0)) }; }
   function cargarLista() {
@@ -271,27 +298,38 @@
         return '<button class="kpi' + (V.filtro === g[0] ? ' activo' : '') + '" data-rf="' + g[0] + '"><small>' + esc(g[1]) + '</small><b class="num">' + entero(s.n) + '</b><em>' + bs(s.t) + ' · CF ' + bs(s.cf) + '</em></button>';
       }).join('') + '</div>';
       var c = V.doc.cols, lista = l.filter(function (x) {
-        if (V.filtro && x.g !== V.filtro) return false;
+        if (V.filtro === 'dupCx' ? !x.dup : V.filtro && x.g !== V.filtro) return false;
         return !b || (X.normal(x.nom + ' ' + x.o.n) + ' ' + x.o.i + ' ' + x.o.d[c.nit] + ' ' + x.o.d[c.num] + ' ' + clave(x.o.d[c.aut])).indexOf(b) >= 0;
       });
       V.vistaLista = lista;
+      var dups = l.filter(function (x) { return x.dup; }), faltan = dups.filter(function (x) { return x.dup === 'falta'; });
+      V.dupFaltan = faltan;
+      var cajaDup = '<div class="aviso-caja mb">' + ic('ayuda') + '<div><b>' + (dups.length ? entero(dups.length) + (dups.length === 1 ? ' factura duplicada' : ' facturas duplicadas') + ' de clientes CONTAX · ' + bs(suma(dups).t) : 'Sin facturas duplicadas de clientes CONTAX este mes') + '</b>' +
+        (dups.length ? 'Las anula nuestro equipo desde Facturación del Panel; al repartidor no se le avisa. Cuando estén anuladas, vuelve a subir el RCV y ya no aparecerán.' +
+          '<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn sec" id="rvDupVer">' + ic('buscar') + (V.filtro === 'dupCx' ? 'Ver todas las facturas' : 'Ver las duplicadas') + '</button>' +
+          (ed && faltan.length ? '<button class="btn" id="rvDupPanel">' + ic('check') + 'Mandar ' + entero(faltan.length) + ' al Panel</button>' : '') + '</div>' : '') + '</div></div>';
       var t = X.tabla([
         { t: 'Fecha', html: function (x) { return '<span class="num">' + esc(X.fecha(X.conciliacion._puro.fechaRCV(x.o.d[c.fecha]))) + '</span>'; } },
         { t: 'Factura', html: function (x) { return '<b class="num">N.º ' + esc(x.o.d[c.num]) + '</b><span class="sub num">NIT ' + esc(x.o.d[c.nit]) + '</span>'; } },
         { t: 'Proveedor', html: function (x) { return '<b>' + esc(x.nom) + '</b>' + (x.rubro ? '<span class="sub">' + esc(x.rubro) + '</span>' : ''); } },
         { t: 'Importe', clase: 'monto', html: function (x) { return bs(x.imp); } },
-        { t: 'Clasificación', html: function (x) { return chipClase(x.o.c) + (x.manual ? ' ' + X.chip('neutro', 'A mano') : '') + (x.o.o ? '<span class="sub">' + esc(x.o.o) + '</span>' : ''); } },
+        { t: 'Clasificación', html: function (x) { return chipClase(x.o.c) + (x.manual ? ' ' + X.chip('neutro', 'A mano') : '') + (x.dup ? ' ' + X.chip(DUP_TXT[x.dup][0], DUP_TXT[x.dup][1]) : '') + (x.o.o ? '<span class="sub">' + esc(x.o.o) + '</span>' : ''); } },
         { t: 'Fecha de pago', html: function (x) { return x.p.t ? esc(x.p.t) : '<span class="muted">—</span>'; } },
         { t: 'Repartidor', html: function (x) { return x.o.i ? esc(x.o.n) + '<span class="sub num">ID ' + esc(x.o.i) + (x.o.s ? ' · ' + esc(X.semanaCorta(x.o.s)) : '') + '</span>' : '<span class="muted">—</span>'; } }
       ], lista, { clic: ed, tam: 50, pag: V.pag });
       sel += '<div class="buscar">' + ic('buscar') + '<input type="search" id="rvBuscar" placeholder="Buscar por proveedor, repartidor, ID, NIT, N.º o autorización" value="' + esc(V.buscar) + '"></div></div>';
-      return cab + kpis + '<div class="card">' + sel + '<p class="muted" style="margin:0 0 10px"><b>' + entero(lista.length) + ' facturas · ' + bs(suma(lista).t) + '</b>' + (ed ? ' · toca una factura para corregir su clasificación' : '') + ' · archivo: ' + esc(V.doc.archivo) + '</p>' + t + '</div>';
+      return cab + kpis + cajaDup + '<div class="card">' + sel + '<p class="muted" style="margin:0 0 10px"><b>' + entero(lista.length) + ' facturas · ' + bs(suma(lista).t) + '</b>' + (ed ? ' · toca una factura para corregir su clasificación' : '') + ' · archivo: ' + esc(V.doc.archivo) + '</p>' + t + '</div>';
     },
     despues: function (el) {
       var on = function (s, f) { var b = el.querySelector(s); if (b) b.addEventListener('click', f); };
       on('#rvSubir', subir); on('#rvAct', actualizar);
       on('#rvExcel', function () { excel().catch(function (e) { console.error(e); X.aviso('No se pudo generar el Excel.'); }); });
       on('#rvPdf', function () { pdf().catch(function (e) { console.error(e); X.aviso(e.message || 'No se pudo generar el PDF.'); }); });
+      on('#rvDupVer', function () { V.filtro = V.filtro === 'dupCx' ? '' : 'dupCx'; V.pag = 0; X.refrescar(); });
+      on('#rvDupPanel', function () {
+        var l = V.dupFaltan || []; if (!l.length) return;
+        X.confirmar('Mandar al Panel', 'Se mandan ' + l.length + ' facturas a Facturación del Panel para que el equipo las anule. Al repartidor no se le avisa.', function () { mandarPanel(l); }, 'Mandar');
+      });
       var m = el.querySelector('#rvMes'); if (m) m.addEventListener('change', function () { abrirMes(m.value); });
       el.querySelectorAll('[data-rf]').forEach(function (b) { b.addEventListener('click', function () { V.filtro = b.getAttribute('data-rf'); V.pag = 0; X.refrescar(); }); });
       var bu = el.querySelector('#rvBuscar'); if (bu) bu.addEventListener('input', X.debounce(function () { V.buscar = bu.value; V.pag = 0; X.refrescar(); X.setFoco('#rvBuscar'); }, 300));

@@ -623,5 +623,5 @@
     }
   });
 
-  X.conciliacion = { conciliar: conciliar, observacionesDe: observacionesDe, casoDe: casoDe, _puro: { cruzar: cruzar, opsObservar: opsObservar, contexto: contexto, pintar: pintar, leerFilas: leerFilas, desdeCuando: desdeCuando, esSuma: esSuma, limpiaNum: limpiaNum, fechaRCV: fechaRCV } };
+  X.conciliacion = { conciliar: conciliar, observacionesDe: observacionesDe, casoDe: casoDe, _puro: { nuevaFactura: nuevaFactura, contadorVivo: contadorVivo, cruzar: cruzar, opsObservar: opsObservar, contexto: contexto, pintar: pintar, leerFilas: leerFilas, desdeCuando: desdeCuando, esSuma: esSuma, limpiaNum: limpiaNum, fechaRCV: fechaRCV } };
 })();
