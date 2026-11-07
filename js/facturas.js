@@ -210,7 +210,7 @@
         '</div>' +
         (f.length ? X.tabla((ed && F.tab === 'recibida' ? [
           { t: '<input type="checkbox" id="chkTodas" aria-label="Marcar todas">', html: function (x) { return '<input type="checkbox" data-sel="' + esc(x._id) + '"' + (F.sel[x._id] ? ' checked' : '') + ' aria-label="Marcar">'; } }] : []).concat([
-          { t: 'Subida', html: function (x) { return X.fechaHora(x.subidoF) + (x.fueraDeCorte ? '<span class="sub">' + X.chip('pend', 'Después del corte') + '</span>' : ''); } },
+          { t: 'Subida', html: function (x) { return X.fechaHora(x.subidoF) + (X.facturaTarde(x, true) ? '<span class="sub">' + X.chip('pend', 'Después del corte') + '</span>' : ''); } },
           { t: 'Repartidor', html: function (x) { var c = x.origen === 'contax' ? '' : ''; return '<b>' + esc(x.nombre) + '</b><span class="sub num">ID ' + esc(x.id) + '</span>' + c; } },
           { t: 'N.º', html: function (x) { return '<b class="num">' + esc(x.numero) + '</b>'; } },
           { t: 'Semanas', html: function (x) { return esc((x.semanas || []).map(X.semanaCorta).join(', ')); } },
@@ -243,7 +243,7 @@
       var be = el.querySelector('#btnExpFac');
       if (be) be.addEventListener('click', function () {
         X.excel([{ nombre: 'Facturas', filas: [['Subida', 'ID Yango', 'Nombre', 'N.º factura', 'Fecha emisión', 'Semanas', 'Importe (Bs)', 'Estado', 'Motivo', 'Revisó', 'Después del corte']].concat(f.map(function (x) {
-          return [X.fechaHora(x.subidoF), x.id, x.nombre, x.numero, x.fechaEmision, (x.semanas || []).join(', '), Number(x.importe) || 0, x.origen === 'contax' ? 'Emitida por CONTAX' : (ESTADOS[x.estado] || [0, x.estado])[1], x.motivo || '', x.revisadoPor || '', x.fueraDeCorte ? 'SÍ' : ''];
+          return [X.fechaHora(x.subidoF), x.id, x.nombre, x.numero, x.fechaEmision, (x.semanas || []).join(', '), Number(x.importe) || 0, x.origen === 'contax' ? 'Emitida por CONTAX' : (ESTADOS[x.estado] || [0, x.estado])[1], x.motivo || '', x.revisadoPor || '', X.facturaTarde(x, true) ? 'SÍ' : ''];
         })) }], 'Facturas-' + X.hoyISO());
       });
     }
@@ -295,7 +295,7 @@
         '<div class="dato"><small>Impuestos Nacionales</small><b>' + (f.verificacion ? X.chip('ok', 'Verificada') + '</b><span class="muted">' + X.fechaHora(f.verificacion.cuando) + ' · ' + esc(f.verificacion.archivo || '') + '</span>' : (f.origen === 'contax' ? X.chip('contax', 'Emitida por CONTAX') : X.chip('pend', 'Sin verificar')) + '</b>') + '</div>' +
         '<div class="dato"><small>Emisión</small><b>' + X.fecha(f.fechaEmision) + '</b></div>' +
         '<div class="dato"><small>Semanas</small><b>' + esc((f.semanas || []).join(', ')) + '</b></div>' +
-        '<div class="dato"><small>Subida</small><b>' + X.fechaHora(f.subidoF) + '</b>' + (f.fueraDeCorte ? X.chip('pend', 'Después del corte') : '') + '</div>' +
+        '<div class="dato"><small>Subida</small><b>' + X.fechaHora(f.subidoF) + '</b>' + (X.facturaTarde(f, true) ? X.chip('pend', 'Después del corte') : '') + '</div>' +
       '</div>' +
       (f.nota ? '<div class="nota-interna mb"><b>Comentario del repartidor:</b> ' + esc(f.nota) + '</div>' : '') +
       (cli ? '<div class="card mb"><div class="h2">Cliente CONTAX</div>' + X.accesosCliente(cli) + '</div>' : '') +

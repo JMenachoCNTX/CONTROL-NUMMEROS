@@ -372,7 +372,7 @@
     if (x.forig === 'contax') return { k: 'contax', t: 'Emitida por CONTAX' };
     if (x.forig === 'migracion') return { k: 'migrada', t: 'Sistema anterior' };
     var f = (D.facturas || []).filter(function (y) { return y._id === x.fid; })[0];
-    var tarde = !!f && contadorFila(x) !== 'CONTAX' && (!!f.fueraDeCorte || (!!f.subidoF && f.subidoF.getTime() > X.ultimoCorte()));
+    var tarde = !!f && contadorFila(x) !== 'CONTAX' && X.facturaTarde(f, true);
     return { k: tarde ? 'tarde' : 'cargo', t: 'La cargó el repartidor', cuando: f && f.subidoF ? X.fechaHora(f.subidoF) : '', tarde: tarde };
   }
   function textoCarga(x) { var c = cargaFila(x); return c.t + (c.cuando ? ' · ' + c.cuando : '') + (c.tarde ? ' · Después del corte' : ''); }

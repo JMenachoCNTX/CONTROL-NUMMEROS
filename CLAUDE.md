@@ -49,7 +49,7 @@ El permiso se elige en **Panel → Usuarios → columna CONTROL**. Las reglas de
 - Todavía **no hay archivo `CNAME`**. El dominio previsto es `controlnummeros.contaxbolivia.com` (pasos en `README.md`).
 - `firestore.rules` **no se publica solo**: hay que copiarlo y pegarlo en la consola de Firebase del proyecto `control--nummeros` → Firestore → Reglas → Publicar.
 - Aviso de nueva versión: `version-aviso.js` (copia del de `NUMMEROS_CRM`) muestra «Hay una nueva versión · Actualizar ahora» al publicar; no hay que tocar nada.
-- Versiones: `version` en `config.js` (hoy 2.4.42), el `?v=` de los scripts en `index.html` y el mensaje del commit dice la versión (ej. "... (v1.4)").
+- Versiones: `version` en `config.js` (hoy 2.4.43), el `?v=` de los scripts en `index.html` y el mensaje del commit dice la versión (ej. "... (v1.4)").
 
 ## Cuidados importantes
 - **El repositorio es PÚBLICO.** Nunca subir contraseñas, archivos `.json` de cuentas de servicio ni datos de clientes.
@@ -91,3 +91,5 @@ El permiso se elige en **Panel → Usuarios → columna CONTROL**. Las reglas de
 - **Excepción por grupo (2.4.18):** un doc en `excepciones` con `grupo` (`contax` o ciudad `LPZ`), `semana` (o `*`), `yAnteriores`; `idYango` vacío. `excepcionDe` da prioridad a la individual. Solo marca los pagos que libera (`ex` queda null si el pago ya está habilitado). Nunca libera facturas observadas o rechazadas; una individual sí. La ventana muestra pagos y Bs antes de crearla.
 - **Pagos solo con factura verificada (2.4.8):** `evaluar` exige `f.verificacion`, también en las de CONTAX y las migradas. Aprobada sin verificar = estado `preaprobada` («Falta verificar en Impuestos»), no entra a la planilla y retiene al repartidor (`reglaPago: 'todo'`). Las excepciones siguen pasando. Se ve «Pre-aprobada» en CONTROL y en el Portal 3.28.
 - **Nombres colocados por el sistema (2.4.14):** una planilla sin nombre se completa con BDYango al importar y guarda `nombreSistema: true` en `semanas`. `X.semanas.completarNombres` corre cada vez que se lee BDYango: busca `semanas` con `nombre == ''` y las completa, para los repartidores que llegan a BDYango después de la planilla. CONTROL muestra «Nombre colocado por el sistema» en Pagos, Repartidores y Planillas por semana. El Portal no lo muestra al repartidor: usa ese nombre si `repartidores` está en blanco (esa colección la escribe el robot).
+
+- **2.4.43 · Corte por fecha de emisión:** `X.facturaTarde(f, todas)` (operacion.js) es la única regla de «Después del corte» (Operación, Conciliaciones y Facturas). Una factura subida después del jueves 18:00 NO es tardía si se **emitió** antes de ese corte (`X.emitidaATiempo`: `fechaEmision` + `horaEmision` que lee la IA desde Portal 3.31; sin hora y emitida el mismo jueves se acepta por la fecha). Igual necesita estar verificada en el Excel de Impuestos para pagarse.

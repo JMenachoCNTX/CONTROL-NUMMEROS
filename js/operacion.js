@@ -106,7 +106,7 @@
       // Una excepción por grupo nunca libera una factura con problema: esas se deciden una por una
       if (ex && ex.grupo && f && (f.estado === 'observada' || f.estado === 'rechazada')) ex = null;
       // Corte: solo entran a la planilla las facturas subidas hasta el último jueves 18:00 (las de CONTAX no tienen corte)
-      var tarde = f && f.origen !== 'contax' && f.origen !== 'impuestos' && f.subidoF && f.subidoF.getTime() > ultimoCorte();
+      var tarde = facturaTarde(f);
       // Solo se paga con factura verificada en el Excel de Impuestos (también las de CONTAX). Aprobar a mano es una pre-aprobación.
       if (f && f.estado === 'aprobada' && f.verificacion && !tarde) e = f.origen === 'contax' ? 'contax' : 'lista';
       else if (ex) e = 'excepcion';
@@ -147,6 +147,28 @@
   }
   /* Último corte ya pasado (instante real): el próximo corte menos 7 días */
   function ultimoCorte() { return corte().fecha.getTime() + 4 * 3600e3 - 7 * 864e5; }
+  /* Corte (instante real) que quedó justo antes de un momento dado */
+  function corteAntesDe(ms) {
+    var b = new Date(ms - 4 * 3600e3), atras = (b.getUTCDay() - C.corte.dia + 7) % 7;
+    var c = new Date(Date.UTC(b.getUTCFullYear(), b.getUTCMonth(), b.getUTCDate() - atras, C.corte.hora, 0, 0));
+    if (c > b) c = new Date(c.getTime() - 7 * 864e5);
+    return c.getTime() + 4 * 3600e3;
+  }
+  /* ¿Se emitió antes del corte que perdió al subirla? Manda la fecha (y la hora, si la leyó la IA) de emisión, no la de subida:
+     si la emitió antes del corte, está en el Excel de Impuestos de ese corte y se paga aunque la haya subido tarde.
+     Sin hora y emitida el mismo día del corte, se acepta por la fecha (igual tiene que estar verificada en el Excel de Impuestos). */
+  function emitidaATiempo(f) {
+    if (!f || !/^\d{4}-\d{2}-\d{2}/.test(f.fechaEmision || '') || !f.subidoF) return false;
+    var c = new Date(corteAntesDe(f.subidoF.getTime()) - 4 * 3600e3), dia = c.toISOString().slice(0, 10), fe = String(f.fechaEmision).slice(0, 10);
+    if (fe !== dia) return fe < dia;
+    return !/^\d{2}:\d{2}$/.test(f.horaEmision || '') || f.horaEmision <= String(C.corte.hora).padStart(2, '0') + ':00';
+  }
+  /* Factura del repartidor que llegó después del corte (va a la próxima planilla). todas: también las de cortes anteriores (marca de la subida) */
+  function facturaTarde(f, todas) {
+    if (!f || f.origen === 'contax' || f.origen === 'impuestos' || f.origen === 'migracion' || !f.subidoF) return false;
+    var tarde = todas ? (!!f.fueraDeCorte || f.subidoF.getTime() > ultimoCorte()) : f.subidoF.getTime() > ultimoCorte();
+    return tarde && !emitidaATiempo(f);
+  }
   function tramiteAbierto(t) {
     var e = X.normal(t.estado + ' ' + t.resolucion);
     return !/RESUELT|APROBAD|VIGENTE|CERRAD|PAGAD|FINALIZ|RECHAZ|ATENDID|COMPLETAD/.test(e);
@@ -850,5 +872,5 @@
   }
 
   X.evaluar = evaluar; X.cubreGrupo = cubreGrupo; X.ordenSemana = ordenSemana; X.semanaCorta = semanaCorta; X.lista = lista;
-  X.detalleRepartidor = detalleRepartidor; X.accesosCliente = accesosCliente; X.debounce = debounce; X.setFoco = setFoco; X.corte = corte; X.ultimoCorte = ultimoCorte; X.buscaRepartidor = buscaRepartidor; X.celularDe = celularDe;
+  X.detalleRepartidor = detalleRepartidor; X.accesosCliente = accesosCliente; X.debounce = debounce; X.setFoco = setFoco; X.corte = corte; X.ultimoCorte = ultimoCorte; X.facturaTarde = facturaTarde; X.emitidaATiempo = emitidaATiempo; X.buscaRepartidor = buscaRepartidor; X.celularDe = celularDe;
 })();
