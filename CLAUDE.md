@@ -49,7 +49,7 @@ El permiso se elige en **Panel → Usuarios → columna CONTROL**. Las reglas de
 - Todavía **no hay archivo `CNAME`**. El dominio previsto es `controlnummeros.contaxbolivia.com` (pasos en `README.md`).
 - `firestore.rules` **no se publica solo**: hay que copiarlo y pegarlo en la consola de Firebase del proyecto `control--nummeros` → Firestore → Reglas → Publicar.
 - Aviso de nueva versión: `version-aviso.js` (copia del de `NUMMEROS_CRM`) muestra «Hay una nueva versión · Actualizar ahora» al publicar; no hay que tocar nada.
-- Versiones: `version` en `config.js` (hoy 2.4.49), el `?v=` de los scripts en `index.html` y el mensaje del commit dice la versión (ej. "... (v1.4)").
+- Versiones: `version` en `config.js` (hoy 2.4.50), el `?v=` de los scripts en `index.html` y el mensaje del commit dice la versión (ej. "... (v1.4)").
 
 ## Cuidados importantes
 - **El repositorio es PÚBLICO.** Nunca subir contraseñas, archivos `.json` de cuentas de servicio ni datos de clientes.
@@ -96,4 +96,4 @@ El permiso se elige en **Panel → Usuarios → columna CONTROL**. Las reglas de
 - **2.4.44 · Informe CONTAX (interno) y Eliminar todas las excepciones:** el informe del repartidor abre en la pestaña «Informe CONTAX (interno)»: sin gráficos ni KPIs, con «Datos generales» de la semana de pago en palabras claras (`estadoInterno` en js/informe.js: semana actual ISO, semana de pago = mayor `orden` de `semanas`/historial, última semana habilitada, Yango, Facturación, Póliza, CONTAX, Estado de pago, otras semanas pendientes) + historial. Botones «PDF interno» y «PDF para el repartidor» (el completo, sin cambios). Excepciones → «Eliminar todas» (lotes de 400, con confirmación y bitácora).
 - **2.4.46 · Informe CONTAX en 3 columnas** (`gruposInternos`): Datos personales · Pagos · Factura y póliza, en pantalla y en el PDF interno.
 - **2.4.48 · Infografía de pasos** en el Informe CONTAX y su PDF (`pasosHtml`, `PASOS_CSS`; `estadoInterno` da `caso` y `pasos`): Yango → Factura → Impuestos → Pago, estilo NUMMEROS (oscuro/claro según el tema; el PDF va claro). Casos: no habilitado, falta factura, CONTAX debe emitir, en revisión, observada, después del corte, excepción, listo, retenido por otra semana, enviado a pagar, pagado (con o sin retención), sin planilla.
-- **2.4.49:** si el repartidor no figura en la última planilla pero tiene semanas pendientes o enviadas a pagar, la infografía muestra la más reciente de esas (`semCaso`).
+- **2.4.50:** si el repartidor no figura en la última planilla pero tiene semanas pendientes o enviadas a pagar, la infografía muestra la más reciente de esas (`semCaso`).

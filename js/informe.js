@@ -83,6 +83,9 @@
     var de = function (l) { return (l || []).filter(function (p) { return (p._orden || 0) === ordPago; })[0]; };
     var pend = r && de(r.pendientes), env = r && de(r.enPlanilla), nh = r && de(r.noHab);
     var pag = d.hist.filter(function (h) { return ordenHist(h) === ordPago; }).pop();
+    // No figura en la última planilla pero debe semanas anteriores: se muestra la más reciente de esas
+    if (!pend && !env && !nh && !pag && r) { pend = (r.pendientes || [])[0]; if (!pend) env = (r.enPlanilla || [])[0]; }
+    res.semCaso = nSem((pend || env || {}).semana) || nPago;
     var t = function (tono, txt) { return { tono: tono, txt: txt }; };
     // Infografía de 4 pasos (Yango → Factura → Impuestos → Pago): tono ok / mal / pend / ex / gr
     var Y = ['ok', 'Habilitado por la App'], RET = ['gr', 'Pago retenido'];
@@ -140,7 +143,7 @@
   function pasosHtml(d, claro) {
     var e = estadoInterno(d), p = e.pasos, T = ['Yango', 'Factura', 'Impuestos', 'Pago'], ln = '';
     for (var i = 0; i < 3; i++) { var on = p[i][0] !== 'gr' && p[i][0] !== 'mal' && p[i + 1][0] !== 'gr'; ln += '<div class="b' + (on ? ' on' : '') + '" style="left:' + (12.5 + 25 * i) + '%;width:25%"></div>'; }
-    return '<div class="ipa' + (claro ? ' cl' : '') + '"><h3>' + (e.semPago ? 'Sem ' + e.semPago + ' · ' : '') + '<b>' + esc(e.caso) + '</b></h3><div class="ps">' + ln + p.map(function (x, i) {
+    return '<div class="ipa' + (claro ? ' cl' : '') + '"><h3>' + (e.semCaso ? 'Sem ' + e.semCaso + ' · ' : '') + '<b>' + esc(e.caso) + '</b></h3><div class="ps">' + ln + p.map(function (x, i) {
       return '<div class="p ' + x[0] + '"><div class="c">0' + (i + 1) + '</div><b>' + T[i] + '</b><span>' + esc(x[1]) + '</span></div>'; }).join('') + '</div></div>';
   }
   /* Cuadro interno en 3 columnas: datos personales · pagos · factura y póliza (pantalla y PDF interno) */
