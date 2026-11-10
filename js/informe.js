@@ -275,7 +275,7 @@
           (d.telefono ? '<a class="btn sec" href="' + X.wa(d.telefono, 'Hola ' + String(d.nombre || '').split(' ')[0] + ', te escribimos de CONTAX.') + '" target="_blank" rel="noopener">' + ic('whatsapp') + 'WhatsApp</a>' : '') +
           (d.r ? '<button class="btn sec" id="infFicha">' + ic('ojo') + 'Ficha completa</button>' + X.botonHabilitar(d.r.id) : '') + '</div></div>' +
       (cx ? '<div class="card mb"><div class="h2">Datos generales <small>semana de pago</small></div><table class="tabla inf-estado"><tbody>' +
-          filasInternas(d, function (x) { return X.chip(x.tono, x.txt); }).map(function (x) { return '<tr><th style="width:34%;text-align:left">' + x[0] + '</th><td>' + x[1] + '</td></tr>'; }).join('') +
+          filasInternas(d, function (x) { return x.txt === '—' ? '<span class="muted">—</span>' : X.chip(x.tono, x.txt); }).map(function (x) { return '<tr><th style="width:34%;text-align:left">' + x[0] + '</th><td>' + x[1] + '</td></tr>'; }).join('') +
           '<tr><th style="text-align:left">NIT · Teléfono</th><td><span class="num">' + esc(d.nit || '—') + ' · ' + esc(d.telefono || '—') + '</span></td></tr>' +
           '<tr><th style="text-align:left">Banco · cuenta</th><td><span class="num">' + esc((d.banco || '—') + (d.cuenta ? ' · ' + d.cuenta : '')) + '</span></td></tr>' +
         '</tbody></table></div>' : '<div class="rejilla r4 mb">' +
