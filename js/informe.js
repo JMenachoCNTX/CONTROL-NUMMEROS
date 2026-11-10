@@ -107,13 +107,14 @@
     res.contax = d.contador === 'CONTAX' ? t('contax', 'Cliente CONTAX: CONTAX emite su factura') : t('neutro', '—');
     return res;
   }
-  /* Filas del cuadro interno: [título, valor HTML] (las usan la pantalla y el PDF interno) */
-  function filasInternas(d, v) {
-    var e = estadoInterno(d);
+  /* Cuadro interno en 3 columnas: datos personales · pagos · factura y póliza (pantalla y PDF interno) */
+  function gruposInternos(d, v) {
+    var e = estadoInterno(d), t = function (x) { return esc(x || '—'); };
     return [
-      ['Semana actual', 'Sem ' + e.semActual], ['Semana de pago', e.semPago ? 'Sem ' + e.semPago + (e.importe != null ? ' · ' + bs(e.importe) : '') : '—'],
-      ['Última semana habilitada', e.ultHab ? 'Sem ' + e.ultHab : 'Ninguna'], ['Yango', v(e.yango)], ['Facturación', v(e.fact)],
-      ['Póliza de seguro', v(e.poliza)], ['CONTAX', v(e.contax)], ['Estado de pago', v(e.pago)], ['Otras semanas pendientes', v(e.otras)]
+      { titulo: 'Datos personales', filas: [['Nombre', t(d.nombre)], ['ID Yango', t(d.id)], ['Celular', t(d.telefono)], ['NIT', t(d.nit)], ['Razón social', t(d.razon)], ['Correo', t(d.correo)], ['Banco', t(d.banco)], ['N.º de cuenta', t(d.cuenta)]] },
+      { titulo: 'Pagos', filas: [['Semana actual', 'Sem ' + e.semActual], ['Semana de pago', e.semPago ? 'Sem ' + e.semPago + (e.importe != null ? ' · ' + bs(e.importe) : '') : '—'],
+        ['Última semana habilitada', e.ultHab ? 'Sem ' + e.ultHab : 'Ninguna'], ['Yango', v(e.yango)], ['Estado de pago', v(e.pago)], ['Otras semanas pendientes', v(e.otras)]] },
+      { titulo: 'Factura y póliza', filas: [['Facturación', v(e.fact)], ['Contador', v(e.contax)], ['Póliza de seguro', v(e.poliza)]] }
     ];
   }
   function mesFactura(h) {
@@ -197,7 +198,7 @@
     '.inf-tabla .n{text-align:right;white-space:nowrap}.inf-tabla .aut{max-width:150px;overflow-wrap:anywhere;font-size:8px}.inf-tabla tr.ret td{color:#B42318}' +
     '.inf-tabla tfoot td{font-weight:700;border-top:2px solid #235347;background:#DAF1DE}.inf-vacio{text-align:center;color:#557363;padding:18px}' +
     '.inf-pie{display:flex;justify-content:space-between;align-items:center;gap:10px;color:#557363;font-size:9px;margin-top:14px;border-top:1px solid #DAF1DE;padding-top:8px}.inf-pie img{height:16px}' +
-    '.inf-int{width:100%;border-collapse:collapse;margin-bottom:12px;font-size:12px}.inf-int th{width:34%;text-align:left;font:600 10px Akshar,sans-serif;letter-spacing:.1em;text-transform:uppercase;color:#557363;padding:6px 10px;border-bottom:1px solid #DAF1DE;background:#F4FAF5}.inf-int td{padding:6px 10px;border-bottom:1px solid #DAF1DE}.inf-pend{color:#9A6700;font-weight:700}.inf-neutro{color:#557363}.inf-contax{color:#1D4E89;font-weight:700}' +
+    '.inf-cols{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px}.inf-cols>div{border:1px solid #DAF1DE;border-radius:10px;padding:8px}.inf-int{width:100%;border-collapse:collapse;font-size:10.5px}.inf-int th{width:42%;text-align:left;vertical-align:top;font:600 9px Akshar,sans-serif;letter-spacing:.06em;text-transform:uppercase;color:#557363;padding:4px 6px;border-bottom:1px solid #DAF1DE;background:#F4FAF5}.inf-int td{padding:4px 6px;border-bottom:1px solid #DAF1DE;overflow-wrap:anywhere}.inf-pend{color:#9A6700;font-weight:700}.inf-neutro{color:#557363}.inf-contax{color:#1D4E89;font-weight:700}' +
     '@media print{@page{size:A4;margin:10mm}.inf{padding:0;max-width:none}.inf-tabla tr,.inf-graf>div{break-inside:avoid}}';
 
   function htmlPdf(d, base, interno) {
@@ -211,8 +212,8 @@
     return '<div class="inf">' +
       '<div class="inf-cab"><img src="' + base + 'marca/logos/nummeros-logotipo-horizontal-principal.svg" alt="NUMMEROS"><b>' + (interno ? 'INFORME INTERNO CONTAX' : 'INFORME GENERAL') + '</b><img class="ctx" src="' + base + 'marca/logos/contax-logo.png" alt="CONTAX"></div>' +
       '<div class="inf-banda"><div><h1>' + esc(d.nombre || 'Repartidor') + '</h1><p>Informe de pagos y facturación al ' + hoy + ' · MTG Delivery (MILTHAGOR S.R.L.)</p></div><div class="id"><small>ID YANGO</small>' + esc(d.id) + '</div></div>' +
-      (interno ? '<table class="inf-int">' + filasInternas(d, function (x) { return '<span class="inf-' + x.tono + '">' + esc(x.txt) + '</span>'; }).map(function (x) { return '<tr><th>' + x[0] + '</th><td>' + x[1] + '</td></tr>'; }).join('') + '</table>' +
-        '<div class="inf-gen"><div><b>NIT</b><span>' + esc(d.nit || '—') + '</span></div><div><b>Teléfono</b><span>' + esc(d.telefono || '—') + '</span></div><div><b>Banco · cuenta</b><span>' + esc((d.banco || '—') + (d.cuenta ? ' · ' + d.cuenta : '')) + '</span></div></div>' : '') +
+      (interno ? '<div class="inf-cols">' + gruposInternos(d, function (x) { return '<span class="inf-' + x.tono + '">' + esc(x.txt) + '</span>'; }).map(function (g) {
+        return '<div><p class="inf-ht">' + g.titulo + '</p><table class="inf-int">' + g.filas.map(function (x) { return '<tr><th>' + x[0] + '</th><td>' + x[1] + '</td></tr>'; }).join('') + '</table></div>'; }).join('') + '</div>' : '') +
       (interno ? '' : '<div class="inf-kpis"><div><small>Total cobrado</small><b>' + bs(c.tot) + '</b></div><div><small>Pagos recibidos</small><b>' + entero(d.hist.length) + '</b></div><div><small>Pendiente</small><b>' + bs(c.totPend) + '</b></div><div><small>Último pago</small><b>' + (c.ultimo ? X.fecha(c.ultimo.fecha) : '—') + '</b></div></div>' +
       '<div class="inf-gen">' +
         '<div><b>Razón social</b><span>' + esc(d.razon || '—') + '</span></div><div><b>NIT</b><span>' + esc(d.nit || '—') + '</span></div><div><b>Teléfono</b><span>' + esc(d.telefono || '—') + '</span></div>' +
@@ -274,11 +275,11 @@
         '<div class="fila-acc inf-acc">' + (cx ? '<button class="btn" id="infPdfI">' + ic('descargar') + 'PDF interno</button><button class="btn sec" id="infPdf">' + ic('descargar') + 'PDF para el repartidor</button>' : '<button class="btn" id="infPdf">' + ic('descargar') + 'Descargar PDF</button>') +
           (d.telefono ? '<a class="btn sec" href="' + X.wa(d.telefono, 'Hola ' + String(d.nombre || '').split(' ')[0] + ', te escribimos de CONTAX.') + '" target="_blank" rel="noopener">' + ic('whatsapp') + 'WhatsApp</a>' : '') +
           (d.r ? '<button class="btn sec" id="infFicha">' + ic('ojo') + 'Ficha completa</button>' + X.botonHabilitar(d.r.id) : '') + '</div></div>' +
-      (cx ? '<div class="card mb"><div class="h2">Datos generales <small>semana de pago</small></div><table class="tabla inf-estado"><tbody>' +
-          filasInternas(d, function (x) { return x.txt === '—' ? '<span class="muted">—</span>' : X.chip(x.tono, x.txt); }).map(function (x) { return '<tr><th style="width:34%;text-align:left">' + x[0] + '</th><td>' + x[1] + '</td></tr>'; }).join('') +
-          '<tr><th style="text-align:left">NIT · Teléfono</th><td><span class="num">' + esc(d.nit || '—') + ' · ' + esc(d.telefono || '—') + '</span></td></tr>' +
-          '<tr><th style="text-align:left">Banco · cuenta</th><td><span class="num">' + esc((d.banco || '—') + (d.cuenta ? ' · ' + d.cuenta : '')) + '</span></td></tr>' +
-        '</tbody></table></div>' : '<div class="rejilla r4 mb">' +
+      (cx ? '<div class="mb" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px">' +
+          gruposInternos(d, function (x) { return x.txt === '—' ? '<span class="muted">—</span>' : X.chip(x.tono, x.txt); }).map(function (g) {
+            return '<div class="card"><div class="h2">' + g.titulo + '</div><table class="tabla inf-estado"><tbody>' + g.filas.map(function (x) {
+              return '<tr><th style="width:42%;text-align:left;vertical-align:top">' + x[0] + '</th><td style="overflow-wrap:anywhere">' + x[1] + '</td></tr>'; }).join('') + '</tbody></table></div>'; }).join('') +
+        '</div>' : '<div class="rejilla r4 mb">' +
         '<div class="kpi"><small>Total cobrado</small><b class="num">' + bs(c.tot) + '</b><em>' + entero(d.hist.length) + ' pagos recibidos</em></div>' +
         '<div class="kpi' + (c.totPend ? ' alerta' : '') + '"><small>Pendiente</small><b class="num">' + bs(c.totPend) + '</b><em>' + entero(c.pend.length) + ' semanas' + (d.retenido ? ' · retenido' : '') + '</em></div>' +
         '<div class="kpi"><small>Último pago</small><b class="num">' + (c.ultimo ? bs(c.ultimo.importe) : '—') + '</b><em>' + (c.ultimo ? X.fecha(c.ultimo.fecha) + ' · ' + esc(c.ultimo.semana) : 'sin pagos') + '</em></div>' +
