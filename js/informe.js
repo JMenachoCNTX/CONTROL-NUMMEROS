@@ -10,7 +10,7 @@
   var X = window.CTRL, S = X.S, D = X.D;
   var esc = X.esc, bs = X.bs, ic = X.ic, entero = X.entero;
   var MESES = ['ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 'MAYO', 'JUNIO', 'JULIO', 'AGOSTO', 'SEPTIEMBRE', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE'];
-  var IN = { buscar: '', id: '', perfil: null, perfilDe: '' };
+  var IN = { buscar: '', id: '', perfil: null, perfilDe: '', vista: 'contax' };
   /* 1.234,56 (formato de Bolivia) */
   function fmt(v, dec) { return (Number(v) || 0).toLocaleString('es-BO', { minimumFractionDigits: dec, maximumFractionDigits: dec }); }
 
@@ -54,6 +54,67 @@
       retenido: ev ? !ev.listo : false, faltaFactura: falta,
       contador: cli ? 'CONTAX' : 'OTRO'
     };
+  }
+  /* ══════════ ESTADO INTERNO (informe CONTAX): la semana de pago en palabras claras ══════════ */
+  function nSem(s) { var w = (String(s || '').replace(/20\d\d/, '').match(/(\d{1,2})/) || [])[1]; return w ? Number(w) : 0; }
+  function semIso(f) { var d = new Date(Date.UTC(f.getFullYear(), f.getMonth(), f.getDate())), dia = d.getUTCDay() || 7; d.setUTCDate(d.getUTCDate() + 4 - dia); var a = new Date(Date.UTC(d.getUTCFullYear(), 0, 1)); return { anio: d.getUTCFullYear(), n: Math.ceil(((d - a) / 864e5 + 1) / 7) }; }
+  // Orden (año*100 + semana) de un pago del historial, a partir de su fecha de pago
+  function ordenHist(h) {
+    var n = nSem(h.semana), f = X.aFecha(h.fecha); if (!n) return 0;
+    if (!f) return n; var w = semIso(f); return (n > w.n + 5 ? w.anio - 1 : w.anio) * 100 + n;
+  }
+  var FACT_TXT = {
+    lista: ['ok', 'Factura verificada en Impuestos'], contax: ['ok', 'Factura emitida por CONTAX y verificada'],
+    excepcion: ['ok', 'Sin factura: habilitado por excepción'], preaprobada: ['pend', 'Factura recibida: falta verificar en Impuestos'],
+    revision: ['pend', 'Factura recibida: en revisión'], observada: ['mal', 'Factura observada: debe corregirla'],
+    porEmitir: ['pend', 'CONTAX debe emitir la factura'], tarde: ['pend', 'Factura enviada después del corte (entra a la próxima planilla)'],
+    falta: ['mal', 'No envió la factura']
+  };
+  function estadoInterno(d) {
+    var r = d.r, hoy = semIso(new Date()), ordPago = 0;
+    (D.semanas || []).forEach(function (s) { if ((s.orden || 0) > ordPago) ordPago = s.orden; });
+    (D.hist || []).forEach(function (h) { var o = ordenHist(h); if (o > ordPago && o <= hoy.anio * 100 + hoy.n) ordPago = o; });
+    var nPago = ordPago % 100, res = { semActual: hoy.n, semPago: nPago, ultHab: 0, importe: null };
+    // Última semana habilitada (con importe): pendientes, enviadas a pagar y pagadas
+    var ult = 0, mira = function (o) { if (o > ult) ult = o; };
+    if (r) (r.pendientes || []).concat(r.enPlanilla || []).forEach(function (p) { if ((Number(p.importe) || 0) > 0) mira(p._orden || 0); });
+    d.hist.forEach(function (h) { if (h.importe > 0) mira(ordenHist(h)); });
+    res.ultHab = ult % 100;
+    var de = function (l) { return (l || []).filter(function (p) { return (p._orden || 0) === ordPago; })[0]; };
+    var pend = r && de(r.pendientes), env = r && de(r.enPlanilla), nh = r && de(r.noHab);
+    var pag = d.hist.filter(function (h) { return ordenHist(h) === ordPago; }).pop();
+    var t = function (tono, txt) { return { tono: tono, txt: txt }; };
+    if (nh) {
+      res.yango = t('mal', 'No habilitado por la App'); res.fact = t('neutro', 'No corresponde que emita factura esta semana'); res.pago = t('mal', 'No habilitado por la App (Bs 0)'); res.importe = 0;
+    } else if (pend) {
+      var s = d.ev ? d.ev.semanas.filter(function (x) { return x.p === pend; })[0] : null, f = FACT_TXT[s ? s.estado : 'falta'];
+      res.yango = t('ok', 'Habilitado por la App'); res.fact = t(f[0], f[1]); res.importe = Number(pend.importe) || 0;
+      res.pago = d.ev && d.ev.listo ? t('ok', 'Habilitado para pago') : t('mal', 'Pago retenido' + (d.ev && d.ev.motivo ? ': ' + d.ev.motivo : ''));
+    } else if (env) {
+      res.yango = t('ok', 'Habilitado por la App'); res.fact = t('ok', 'Factura verificada en Impuestos'); res.pago = t('ok', 'Enviado a pagar (en planilla del banco)'); res.importe = Number(env.importe) || 0;
+    } else if (pag) {
+      var ret = /retenid/i.test(pag.factura || '');
+      res.yango = t('ok', 'Habilitado por la App'); res.importe = pag.importe;
+      res.fact = ret ? t('mal', 'Pago retenido: todavía debe la factura') : t('ok', pag.factura ? 'Factura N.º ' + pag.factura + (pag.fechaFactura ? ' del ' + pag.fechaFactura : '') : 'Pagado sin dato de factura');
+      res.pago = t('ok', 'Pagado el ' + X.fecha(pag.fecha));
+    } else {
+      res.yango = t('neutro', 'No figura en la planilla de Yango de esta semana'); res.fact = t('neutro', 'No corresponde que emita factura esta semana'); res.pago = t('neutro', 'Sin pago esta semana');
+    }
+    // Semanas anteriores que siguen pendientes (además de la semana de pago)
+    var otras = r ? (r.pendientes || []).filter(function (p) { return p !== pend; }) : [];
+    res.otras = otras.length ? t('mal', entero(otras.length) + ' semana' + (otras.length > 1 ? 's' : '') + ' pendiente' + (otras.length > 1 ? 's' : '') + ' (' + otras.map(function (p) { return 'Sem ' + nSem(p.semana); }).join(', ') + ') · ' + bs(otras.reduce(function (a, p) { return a + (Number(p.importe) || 0); }, 0))) : t('ok', 'Ninguna');
+    res.poliza = d.poliza ? t('ok', 'Enviada') : t('mal', 'No enviada');
+    res.contax = d.contador === 'CONTAX' ? t('contax', 'Cliente CONTAX: CONTAX emite su factura') : t('neutro', '—');
+    return res;
+  }
+  /* Filas del cuadro interno: [título, valor HTML] (las usan la pantalla y el PDF interno) */
+  function filasInternas(d, v) {
+    var e = estadoInterno(d);
+    return [
+      ['Semana actual', 'Sem ' + e.semActual], ['Semana de pago', e.semPago ? 'Sem ' + e.semPago + (e.importe != null ? ' · ' + bs(e.importe) : '') : '—'],
+      ['Última semana habilitada', e.ultHab ? 'Sem ' + e.ultHab : 'Ninguna'], ['Yango', v(e.yango)], ['Facturación', v(e.fact)],
+      ['Póliza de seguro', v(e.poliza)], ['CONTAX', v(e.contax)], ['Estado de pago', v(e.pago)], ['Otras semanas pendientes', v(e.otras)]
+    ];
   }
   function mesFactura(h) {
     var d = X.aFecha(h.fechaFactura);
@@ -136,9 +197,10 @@
     '.inf-tabla .n{text-align:right;white-space:nowrap}.inf-tabla .aut{max-width:150px;overflow-wrap:anywhere;font-size:8px}.inf-tabla tr.ret td{color:#B42318}' +
     '.inf-tabla tfoot td{font-weight:700;border-top:2px solid #235347;background:#DAF1DE}.inf-vacio{text-align:center;color:#557363;padding:18px}' +
     '.inf-pie{display:flex;justify-content:space-between;align-items:center;gap:10px;color:#557363;font-size:9px;margin-top:14px;border-top:1px solid #DAF1DE;padding-top:8px}.inf-pie img{height:16px}' +
+    '.inf-int{width:100%;border-collapse:collapse;margin-bottom:12px;font-size:12px}.inf-int th{width:34%;text-align:left;font:600 10px Akshar,sans-serif;letter-spacing:.1em;text-transform:uppercase;color:#557363;padding:6px 10px;border-bottom:1px solid #DAF1DE;background:#F4FAF5}.inf-int td{padding:6px 10px;border-bottom:1px solid #DAF1DE}.inf-pend{color:#9A6700;font-weight:700}.inf-neutro{color:#557363}.inf-contax{color:#1D4E89;font-weight:700}' +
     '@media print{@page{size:A4;margin:10mm}.inf{padding:0;max-width:none}.inf-tabla tr,.inf-graf>div{break-inside:avoid}}';
 
-  function htmlPdf(d, base) {
+  function htmlPdf(d, base, interno) {
     var c = cifras(d), hoy = X.fecha(new Date());
     var est = function (ok, si, no) { return '<span class="' + (ok ? 'inf-ok' : 'inf-mal') + '">' + (ok ? si + ' ✓' : no + ' ✗') + '</span>'; };
     var filas = c.filas.map(function (f) {
@@ -147,9 +209,11 @@
         '<td class="n">' + fmt(f.importe * 0.13, 2) + '</td><td class="n">' + fmt(f.importe * 0.03, 2) + '</td></tr>';
     }).join('');
     return '<div class="inf">' +
-      '<div class="inf-cab"><img src="' + base + 'marca/logos/nummeros-logotipo-horizontal-principal.svg" alt="NUMMEROS"><b>INFORME GENERAL</b><img class="ctx" src="' + base + 'marca/logos/contax-logo.png" alt="CONTAX"></div>' +
+      '<div class="inf-cab"><img src="' + base + 'marca/logos/nummeros-logotipo-horizontal-principal.svg" alt="NUMMEROS"><b>' + (interno ? 'INFORME INTERNO CONTAX' : 'INFORME GENERAL') + '</b><img class="ctx" src="' + base + 'marca/logos/contax-logo.png" alt="CONTAX"></div>' +
       '<div class="inf-banda"><div><h1>' + esc(d.nombre || 'Repartidor') + '</h1><p>Informe de pagos y facturación al ' + hoy + ' · MTG Delivery (MILTHAGOR S.R.L.)</p></div><div class="id"><small>ID YANGO</small>' + esc(d.id) + '</div></div>' +
-      '<div class="inf-kpis"><div><small>Total cobrado</small><b>' + bs(c.tot) + '</b></div><div><small>Pagos recibidos</small><b>' + entero(d.hist.length) + '</b></div><div><small>Pendiente</small><b>' + bs(c.totPend) + '</b></div><div><small>Último pago</small><b>' + (c.ultimo ? X.fecha(c.ultimo.fecha) : '—') + '</b></div></div>' +
+      (interno ? '<table class="inf-int">' + filasInternas(d, function (x) { return '<span class="inf-' + x.tono + '">' + esc(x.txt) + '</span>'; }).map(function (x) { return '<tr><th>' + x[0] + '</th><td>' + x[1] + '</td></tr>'; }).join('') + '</table>' +
+        '<div class="inf-gen"><div><b>NIT</b><span>' + esc(d.nit || '—') + '</span></div><div><b>Teléfono</b><span>' + esc(d.telefono || '—') + '</span></div><div><b>Banco · cuenta</b><span>' + esc((d.banco || '—') + (d.cuenta ? ' · ' + d.cuenta : '')) + '</span></div></div>' : '') +
+      (interno ? '' : '<div class="inf-kpis"><div><small>Total cobrado</small><b>' + bs(c.tot) + '</b></div><div><small>Pagos recibidos</small><b>' + entero(d.hist.length) + '</b></div><div><small>Pendiente</small><b>' + bs(c.totPend) + '</b></div><div><small>Último pago</small><b>' + (c.ultimo ? X.fecha(c.ultimo.fecha) : '—') + '</b></div></div>' +
       '<div class="inf-gen">' +
         '<div><b>Razón social</b><span>' + esc(d.razon || '—') + '</span></div><div><b>NIT</b><span>' + esc(d.nit || '—') + '</span></div><div><b>Teléfono</b><span>' + esc(d.telefono || '—') + '</span></div>' +
         '<div><b>Correo</b><span>' + esc(d.correo || '—') + '</span></div><div><b>Banco</b><span>' + esc(d.banco || '—') + '</span></div><div><b>N.º de cuenta</b><span>' + esc(d.cuenta || '—') + '</span></div>' +
@@ -160,7 +224,7 @@
         '<div><p class="inf-ht">Ingresos por fecha de pago</p>' + barrasSvg(c.fechas.etq, [{ nombre: 'Pagado', color: '#235347', v: c.fechas.v }], 400) + '</div>' +
         '<div><p class="inf-ht">Ingresos por mes</p>' + barrasSvg(c.meses.etq, [{ nombre: 'Total del mes', color: '#2F6F5A', v: c.meses.v }], 400) + '</div>' +
         '<div class="ancho"><p class="inf-ht">Proyección impositiva (por mes de la factura)</p>' + barrasSvg(c.imp.etq, [{ nombre: 'Débito Fiscal (13%)', color: '#235347', v: c.imp.df }, { nombre: 'IT (3%)', color: '#8EB69B', v: c.imp.it }]) + '</div>' +
-      '</div>' +
+      '</div>') +
       '<div class="inf-h">Historial de pagos y facturación</div>' +
       '<table class="inf-tabla"><thead><tr class="grupo"><th colspan="4">Detalle de pagos</th><th colspan="7">Detalle de facturación</th></tr>' +
         '<tr><th>Semana</th><th>Rango (días)</th><th class="n">Importe</th><th class="n">Fecha de pago</th><th class="n">N.º factura</th><th class="n">Fecha factura</th><th>NIT factura</th><th>N.º autorización</th><th>Mes declaración</th><th class="n">Débito fiscal 13%</th><th class="n">IT 3%</th></tr></thead>' +
@@ -171,12 +235,12 @@
   }
 
   /* PDF: se abre el informe solo en una ventana y se imprime («Guardar como PDF») */
-  function pdf(d) {
+  function pdf(d, interno) {
     var base = location.href.replace(/[#?].*$/, '').replace(/[^/]*$/, '');
     var w = window.open('', '_blank');
     if (!w) { X.aviso('El navegador bloqueó la ventana. Permite las ventanas emergentes para este sitio.'); return; }
-    w.document.write('<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Informe ' + esc(d.id) + ' ' + esc(d.nombre) + '</title><style>body{margin:0;background:#fff}' + INF_CSS.replace(/BASE/g, base) + '</style></head><body>' +
-      htmlPdf(d, base) + '<script>window.onload=function(){(document.fonts?document.fonts.ready:Promise.resolve()).then(function(){setTimeout(function(){window.print()},300)})}<\/script></body></html>');
+    w.document.write('<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Informe ' + (interno ? 'interno ' : '') + esc(d.id) + ' ' + esc(d.nombre) + '</title><style>body{margin:0;background:#fff}' + INF_CSS.replace(/BASE/g, base) + '</style></head><body>' +
+      htmlPdf(d, base, interno) + '<script>window.onload=function(){(document.fonts?document.fonts.ready:Promise.resolve()).then(function(){setTimeout(function(){window.print()},300)})}<\/script></body></html>');
     w.document.close();
   }
 
@@ -201,13 +265,20 @@
     var corregir = X.semanas && X.semanas.puedeCorregir() ? [{ t: 'Corregir', html: function (f) {
       return f.sem ? X.semanas.botonPagado(f.sem) : f.pend ? '' : X.semanas.accionesPago({ fecha: f.fecha, semana: f.semana, id: f.id, importe: f.importe });
     } }] : [];
-    return '<div class="card mb inf-ficha"><div class="inf-ini">' + esc(ini || '?') + '</div><div class="inf-nom"><h2>' + esc(d.nombre || 'Sin nombre') + '</h2><span class="num muted">ID Yango ' + esc(d.id) + '</span>' +
-        '<div class="fila-acc" style="margin-top:8px">' + (d.habilitado ? X.chip('ok', 'Habilitado en Yango') : X.chip('mal', 'No habilitado')) + ' ' + (d.retenido ? X.chip('mal', 'Pago retenido') : X.chip('ok', 'Sin retención')) + ' ' +
-          (d.faltaFactura ? X.chip('pend', 'Falta factura') : X.chip('ok', 'Facturación en orden')) + ' ' + (d.poliza ? X.chip('ok', 'Con póliza') : X.chip('pend', 'Sin póliza')) + ' ' + (d.contador === 'CONTAX' ? X.chip('contax', 'Cliente CONTAX') : '') + '</div></div>' +
-        '<div class="fila-acc inf-acc"><button class="btn" id="infPdf">' + ic('descargar') + 'Descargar PDF</button>' +
+    var cx = IN.vista === 'contax';
+    var pest = '<div class="pestanas mb" role="tablist">' + [['contax', 'Informe CONTAX (interno)'], ['completo', 'Informe completo (repartidor)']].map(function (p) {
+      return '<button role="tab" aria-selected="' + (IN.vista === p[0]) + '" data-infv="' + p[0] + '">' + p[1] + '</button>'; }).join('') + '</div>';
+    return pest + '<div class="card mb inf-ficha"><div class="inf-ini">' + esc(ini || '?') + '</div><div class="inf-nom"><h2>' + esc(d.nombre || 'Sin nombre') + '</h2><span class="num muted">ID Yango ' + esc(d.id) + '</span>' +
+        (cx ? '' : '<div class="fila-acc" style="margin-top:8px">' + (d.habilitado ? X.chip('ok', 'Habilitado en Yango') : X.chip('mal', 'No habilitado')) + ' ' + (d.retenido ? X.chip('mal', 'Pago retenido') : X.chip('ok', 'Sin retención')) + ' ' +
+          (d.faltaFactura ? X.chip('pend', 'Falta factura') : X.chip('ok', 'Facturación en orden')) + ' ' + (d.poliza ? X.chip('ok', 'Con póliza') : X.chip('pend', 'Sin póliza')) + ' ' + (d.contador === 'CONTAX' ? X.chip('contax', 'Cliente CONTAX') : '') + '</div>') + '</div>' +
+        '<div class="fila-acc inf-acc">' + (cx ? '<button class="btn" id="infPdfI">' + ic('descargar') + 'PDF interno</button><button class="btn sec" id="infPdf">' + ic('descargar') + 'PDF para el repartidor</button>' : '<button class="btn" id="infPdf">' + ic('descargar') + 'Descargar PDF</button>') +
           (d.telefono ? '<a class="btn sec" href="' + X.wa(d.telefono, 'Hola ' + String(d.nombre || '').split(' ')[0] + ', te escribimos de CONTAX.') + '" target="_blank" rel="noopener">' + ic('whatsapp') + 'WhatsApp</a>' : '') +
           (d.r ? '<button class="btn sec" id="infFicha">' + ic('ojo') + 'Ficha completa</button>' + X.botonHabilitar(d.r.id) : '') + '</div></div>' +
-      '<div class="rejilla r4 mb">' +
+      (cx ? '<div class="card mb"><div class="h2">Datos generales <small>semana de pago</small></div><table class="tabla inf-estado"><tbody>' +
+          filasInternas(d, function (x) { return X.chip(x.tono, x.txt); }).map(function (x) { return '<tr><th style="width:34%;text-align:left">' + x[0] + '</th><td>' + x[1] + '</td></tr>'; }).join('') +
+          '<tr><th style="text-align:left">NIT · Teléfono</th><td><span class="num">' + esc(d.nit || '—') + ' · ' + esc(d.telefono || '—') + '</span></td></tr>' +
+          '<tr><th style="text-align:left">Banco · cuenta</th><td><span class="num">' + esc((d.banco || '—') + (d.cuenta ? ' · ' + d.cuenta : '')) + '</span></td></tr>' +
+        '</tbody></table></div>' : '<div class="rejilla r4 mb">' +
         '<div class="kpi"><small>Total cobrado</small><b class="num">' + bs(c.tot) + '</b><em>' + entero(d.hist.length) + ' pagos recibidos</em></div>' +
         '<div class="kpi' + (c.totPend ? ' alerta' : '') + '"><small>Pendiente</small><b class="num">' + bs(c.totPend) + '</b><em>' + entero(c.pend.length) + ' semanas' + (d.retenido ? ' · retenido' : '') + '</em></div>' +
         '<div class="kpi"><small>Último pago</small><b class="num">' + (c.ultimo ? bs(c.ultimo.importe) : '—') + '</b><em>' + (c.ultimo ? X.fecha(c.ultimo.fecha) + ' · ' + esc(c.ultimo.semana) : 'sin pagos') + '</em></div>' +
@@ -221,7 +292,7 @@
         '<div class="card"><div class="h2">Ingresos por fecha de pago <small>últimas 12</small></div><div class="grafico"><canvas id="gInfF"></canvas></div></div>' +
         '<div class="card"><div class="h2">Ingresos por mes <small>últimos 12 meses</small></div><div class="grafico"><canvas id="gInfM"></canvas></div></div>' +
       '</div>' +
-      '<div class="card mb"><div class="h2">Proyección impositiva <small>por mes de la factura</small></div><div class="grafico"><canvas id="gInfI"></canvas></div></div>' +
+      '<div class="card mb"><div class="h2">Proyección impositiva <small>por mes de la factura</small></div><div class="grafico"><canvas id="gInfI"></canvas></div></div>') +
       observaciones(d) +
       '<div class="card"><div class="h2">Historial de pagos y facturación <small>' + entero(c.filas.length) + ' filas · ' + bs(c.tot) + ' pagado</small></div>' +
         (c.filas.length ? '<div class="tabla-ancha">' + X.tabla(corregir.concat([
@@ -282,6 +353,8 @@
       if (b) b.addEventListener('input', X.debounce(function () { IN.buscar = b.value; IN.id = ''; X.refrescar(); X.setFoco('#bInf'); }, 250));
       el.querySelectorAll('[data-inf]').forEach(function (x) { x.addEventListener('click', function () { abrir(x.getAttribute('data-inf')); }); });
       var p = el.querySelector('#infPdf'); if (p) p.addEventListener('click', function () { pdf(datos(IN.id)); });
+      var pi = el.querySelector('#infPdfI'); if (pi) pi.addEventListener('click', function () { pdf(datos(IN.id), true); });
+      el.querySelectorAll('[data-infv]').forEach(function (b) { b.addEventListener('click', function () { IN.vista = b.getAttribute('data-infv'); X.refrescar(); }); });
       if (!IN.id || !D.repartidores) return;
       var d = datos(IN.id); graficos(el, d);
       var fi = el.querySelector('#infFicha'); if (fi) fi.addEventListener('click', function () { X.detalleRepartidor(d.uid); });
@@ -294,5 +367,5 @@
     if (S.pagina === 'informe') X.refrescar(); else X.ir('informe');
   }
 
-  X.informe = { abrir: abrir, _puro: { buscar: buscar, datos: datos, htmlPdf: htmlPdf, cifras: cifras, css: function (b) { return INF_CSS.replace(/BASE/g, b); } } };
+  X.informe = { abrir: abrir, _puro: { buscar: buscar, datos: datos, htmlPdf: htmlPdf, cifras: cifras, estadoInterno: estadoInterno, css: function (b) { return INF_CSS.replace(/BASE/g, b); } } };
 })();

@@ -325,7 +325,7 @@
     t: 'Excepciones', i: 'excepcion', sec: 'CONTAX',
     render: function () {
       var cab = X.titulo('Excepciones de pago', 'Casos que se pagan aunque falte la factura (por ejemplo, la factura de un cliente CONTAX que no alcanzó a emitirse antes del corte).',
-        X.puedeEditar() ? '<button class="btn sec" id="nuevaGr">' + ic('excepcion') + 'Excepción por grupo</button><button class="btn" id="nuevaEx">' + ic('mas') + 'Nueva excepción</button>' : '');
+        X.puedeEditar() ? ((D.excepciones || []).length ? '<button class="btn sec peligro" id="borrarTodasEx">' + ic('borrar') + 'Eliminar todas</button>' : '') + '<button class="btn sec" id="nuevaGr">' + ic('excepcion') + 'Excepción por grupo</button><button class="btn" id="nuevaEx">' + ic('mas') + 'Nueva excepción</button>' : '');
       if (!D.excepciones) return cab + X.esqueleto(3);
       var hoy = X.hoyISO();
       // Las vencidas se apagan solas en pantalla
@@ -348,6 +348,18 @@
       var n = el.querySelector('#nuevaEx'); if (n) n.addEventListener('click', function () { nuevaExcepcion(); });
       var be = el.querySelector('#bEx'); if (be) be.addEventListener('input', X.debounce(function () { EX.buscar = be.value; X.refrescar(); X.setFoco('#bEx'); }, 300));
       var ng = el.querySelector('#nuevaGr'); if (ng) ng.addEventListener('click', function () { excepcionGrupo(); });
+      // Eliminar todas de una vez (lotes de 400 para Firestore)
+      var bt = el.querySelector('#borrarTodasEx');
+      if (bt) bt.addEventListener('click', function () {
+        var l = (D.excepciones || []).slice(); if (!l.length) return;
+        X.confirmar('Eliminar todas las excepciones', 'Se borrarán las <b>' + entero(l.length) + '</b> excepciones (individuales y por grupo). Los pagos que liberaban vuelven a necesitar su factura. <b>No se puede deshacer.</b>', function () {
+          var lotes = [];
+          for (var i = 0; i < l.length; i += 400) { var b = X.dbC.batch(); l.slice(i, i + 400).forEach(function (e) { b.delete(X.dbC.collection('excepciones').doc(e._id)); }); lotes.push(b.commit()); }
+          Promise.all(lotes).then(function () {
+            D.excepciones = []; X.bitacora('Borró todas las excepciones', entero(l.length) + ' excepciones'); X.aviso('Se eliminaron ' + entero(l.length) + ' excepciones.'); X.refrescar();
+          }, function () { X.aviso('No se pudieron borrar todas. Actualiza la página y revisa.'); });
+        }, 'Eliminar todas', true);
+      });
       el.querySelectorAll('[data-ed]').forEach(function (b) { b.addEventListener('click', function () { var e = D.excepciones.filter(function (x) { return x._id === b.getAttribute('data-ed'); })[0]; if (e.grupo) excepcionGrupo(e); else nuevaExcepcion(e); }); });
       el.querySelectorAll('[data-bo]').forEach(function (b) {
         b.addEventListener('click', function () {

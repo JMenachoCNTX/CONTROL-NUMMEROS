@@ -49,7 +49,7 @@ El permiso se elige en **Panel → Usuarios → columna CONTROL**. Las reglas de
 - Todavía **no hay archivo `CNAME`**. El dominio previsto es `controlnummeros.contaxbolivia.com` (pasos en `README.md`).
 - `firestore.rules` **no se publica solo**: hay que copiarlo y pegarlo en la consola de Firebase del proyecto `control--nummeros` → Firestore → Reglas → Publicar.
 - Aviso de nueva versión: `version-aviso.js` (copia del de `NUMMEROS_CRM`) muestra «Hay una nueva versión · Actualizar ahora» al publicar; no hay que tocar nada.
-- Versiones: `version` en `config.js` (hoy 2.4.43), el `?v=` de los scripts en `index.html` y el mensaje del commit dice la versión (ej. "... (v1.4)").
+- Versiones: `version` en `config.js` (hoy 2.4.44), el `?v=` de los scripts en `index.html` y el mensaje del commit dice la versión (ej. "... (v1.4)").
 
 ## Cuidados importantes
 - **El repositorio es PÚBLICO.** Nunca subir contraseñas, archivos `.json` de cuentas de servicio ni datos de clientes.
@@ -93,3 +93,4 @@ El permiso se elige en **Panel → Usuarios → columna CONTROL**. Las reglas de
 - **Nombres colocados por el sistema (2.4.14):** una planilla sin nombre se completa con BDYango al importar y guarda `nombreSistema: true` en `semanas`. `X.semanas.completarNombres` corre cada vez que se lee BDYango: busca `semanas` con `nombre == ''` y las completa, para los repartidores que llegan a BDYango después de la planilla. CONTROL muestra «Nombre colocado por el sistema» en Pagos, Repartidores y Planillas por semana. El Portal no lo muestra al repartidor: usa ese nombre si `repartidores` está en blanco (esa colección la escribe el robot).
 
 - **2.4.43 · Corte por fecha de emisión:** `X.facturaTarde(f, todas)` (operacion.js) es la única regla de «Después del corte» (Operación, Conciliaciones y Facturas). Una factura subida después del jueves 18:00 NO es tardía si se **emitió** antes de ese corte (`X.emitidaATiempo`: `fechaEmision` + `horaEmision` que lee la IA desde Portal 3.31; sin hora y emitida el mismo jueves se acepta por la fecha). Igual necesita estar verificada en el Excel de Impuestos para pagarse.
+- **2.4.44 · Informe CONTAX (interno) y Eliminar todas las excepciones:** el informe del repartidor abre en la pestaña «Informe CONTAX (interno)»: sin gráficos ni KPIs, con «Datos generales» de la semana de pago en palabras claras (`estadoInterno` en js/informe.js: semana actual ISO, semana de pago = mayor `orden` de `semanas`/historial, última semana habilitada, Yango, Facturación, Póliza, CONTAX, Estado de pago, otras semanas pendientes) + historial. Botones «PDF interno» y «PDF para el repartidor» (el completo, sin cambios). Excepciones → «Eliminar todas» (lotes de 400, con confirmación y bitácora).
