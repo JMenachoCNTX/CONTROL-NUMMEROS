@@ -84,21 +84,41 @@
     var pend = r && de(r.pendientes), env = r && de(r.enPlanilla), nh = r && de(r.noHab);
     var pag = d.hist.filter(function (h) { return ordenHist(h) === ordPago; }).pop();
     var t = function (tono, txt) { return { tono: tono, txt: txt }; };
+    // Infografía de 4 pasos (Yango → Factura → Impuestos → Pago): tono ok / mal / pend / ex / gr
+    var Y = ['ok', 'Habilitado por la App'], RET = ['gr', 'Pago retenido'];
+    var pasos = function (caso, b, c, e) { res.caso = caso; res.pasos = [res._y || Y, b, c, e]; };
     if (nh) {
+      res._y = ['mal', 'No habilitado por la App']; pasos('No habilitado por la App', ['gr', 'No corresponde factura'], ['gr', '—'], ['gr', 'Sin pago (Bs 0)']);
       res.yango = t('mal', 'No habilitado por la App'); res.fact = t('neutro', 'No corresponde que emita factura esta semana'); res.pago = t('mal', 'No habilitado por la App (Bs 0)'); res.importe = 0;
     } else if (pend) {
       var s = d.ev ? d.ev.semanas.filter(function (x) { return x.p === pend; })[0] : null, f = FACT_TXT[s ? s.estado : 'falta'];
       res.yango = t('ok', 'Habilitado por la App'); res.fact = t(f[0], f[1]); res.importe = Number(pend.importe) || 0;
       res.pago = d.ev && d.ev.listo ? t('ok', 'Habilitado para pago') : t('mal', 'Pago retenido' + (d.ev && d.ev.motivo ? ': ' + d.ev.motivo : ''));
+      var listo = d.ev && d.ev.listo, PG = listo ? ['ok', 'Habilitado para pago'] : ['mal', 'Retenido por otra semana'];
+      ({
+        falta: function () { pasos('Falta la factura', ['mal', 'No envió la factura'], ['gr', 'Esperando factura'], RET); },
+        porEmitir: function () { pasos('Cliente CONTAX', ['pend', 'CONTAX debe emitir'], ['gr', 'Esperando factura'], RET); },
+        revision: function () { pasos('Factura en revisión', ['pend', 'Factura recibida: en revisión'], ['gr', 'Esperando revisión'], RET); },
+        preaprobada: function () { pasos('Factura en revisión', ['ok', 'Factura recibida'], ['pend', 'Falta verificar en el RCV'], RET); },
+        observada: function () { pasos('Factura observada', ['mal', 'Observada: debe corregirla'], ['gr', '—'], RET); },
+        tarde: function () { pasos('Después del corte', ['pend', 'Enviada después del jueves 18:00'], ['gr', 'Se revisa la próxima semana'], ['gr', 'Pasa a la próxima planilla']); },
+        excepcion: function () { pasos('Habilitado por excepción', ['ex', 'Sin factura: excepción'], ['ex', 'No se verifica'], PG); },
+        lista: function () { pasos(listo ? 'Listo para pagar' : 'Retenido por otra semana', ['ok', 'Factura recibida'], ['ok', 'Verificada en el RCV'], PG); },
+        contax: function () { pasos(listo ? 'Listo para pagar' : 'Retenido por otra semana', ['ok', 'Emitida por CONTAX'], ['ok', 'Verificada en el RCV'], PG); }
+      }[s ? s.estado : 'falta'] || function () { pasos('Falta la factura', ['mal', 'No envió la factura'], ['gr', 'Esperando factura'], RET); })();
     } else if (env) {
       res.yango = t('ok', 'Habilitado por la App'); res.fact = t('ok', 'Factura verificada en Impuestos'); res.pago = t('ok', 'Enviado a pagar (en planilla del banco)'); res.importe = Number(env.importe) || 0;
+      pasos('Enviado a pagar', ['ok', 'Factura recibida'], ['ok', 'Verificada en el RCV'], ['pend', 'En la planilla del banco']);
     } else if (pag) {
       var ret = /retenid/i.test(pag.factura || '');
       res.yango = t('ok', 'Habilitado por la App'); res.importe = pag.importe;
       res.fact = ret ? t('mal', 'Pago retenido: todavía debe la factura') : t('ok', pag.factura ? 'Factura N.º ' + pag.factura + (pag.fechaFactura ? ' del ' + pag.fechaFactura : '') : 'Pagado sin dato de factura');
       res.pago = t('ok', 'Pagado el ' + X.fecha(pag.fecha));
+      if (ret) pasos('Pagado con retención', ['mal', 'Todavía debe la factura'], ['gr', 'Esperando factura'], ['ok', 'Pagado el ' + X.fecha(pag.fecha)]);
+      else pasos('Pagado', ['ok', pag.factura ? 'Factura N.º ' + pag.factura : 'Factura recibida'], ['ok', 'Verificada en el RCV'], ['ok', 'Pagado el ' + X.fecha(pag.fecha)]);
     } else {
       res.yango = t('neutro', 'No figura en la planilla de Yango de esta semana'); res.fact = t('neutro', 'No corresponde que emita factura esta semana'); res.pago = t('neutro', 'Sin pago esta semana');
+      res._y = ['gr', 'No figura en la planilla']; pasos('Sin planilla esta semana', ['gr', 'No corresponde factura'], ['gr', '—'], ['gr', 'Sin pago esta semana']);
     }
     // Semanas anteriores que siguen pendientes (además de la semana de pago)
     var otras = r ? (r.pendientes || []).filter(function (p) { return p !== pend; }) : [];
@@ -106,6 +126,22 @@
     res.poliza = d.poliza ? t('ok', 'Enviada') : t('mal', 'No enviada');
     res.contax = d.contador === 'CONTAX' ? t('contax', 'Cliente CONTAX: CONTAX emite su factura') : t('neutro', '—');
     return res;
+  }
+  /* Infografía de pasos con el estilo de la marca NUMMEROS (pantalla y PDF interno) */
+  var PASOS_CSS = '.ipa{border-radius:16px;padding:18px 14px 16px;background:#0B2B26;--t:#DAF1DE;--s:#8EB69B;--bar:#163832}.ipa.cl{background:#EEF7EF;border:1px solid #DAF1DE;--t:#0B2B26;--s:#557363;--bar:#C9DDCD}' +
+    '.ipa h3{font:700 15px Akshar,sans-serif;letter-spacing:.04em;color:var(--s);margin:0 0 14px 6px}.ipa h3 b{color:var(--t)}.ipa .ps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));position:relative}.ipa .p{text-align:center;position:relative;z-index:1}' +
+    '.ipa .c{width:64px;height:64px;border-radius:50%;margin:0 auto 8px;display:flex;align-items:center;justify-content:center;font:700 26px Akshar,sans-serif;box-shadow:0 8px 14px rgba(0,0,0,.28),inset 0 2px 0 rgba(255,255,255,.18)}' +
+    '.ipa .ok .c{background:radial-gradient(circle at 35% 30%,#2F6F5A,#163832);color:#DAF1DE;border:2px solid #8EB69B}.ipa .mal .c{background:radial-gradient(circle at 35% 30%,#C2463E,#7A1F1A);color:#FDE8E6;border:2px solid #F09595}' +
+    '.ipa .pend .c{background:radial-gradient(circle at 35% 30%,#D99A2B,#8A5A0B);color:#FFF4DC;border:2px solid #FAC775}.ipa .ex .c{background:radial-gradient(circle at 35% 30%,#3E6FA8,#1D3F66);color:#E6F1FB;border:2px solid #85B7EB}' +
+    '.ipa .gr .c{background:radial-gradient(circle at 35% 30%,#1E433B,#123029);color:#4F7466;border:2px solid #2A4D44;box-shadow:none}.ipa.cl .gr .c{background:#F6FBF6;color:#AFC5B6;border-color:#DAF1DE}' +
+    '.ipa .p b{display:block;font:700 15px Akshar,sans-serif;color:var(--t);letter-spacing:.02em}.ipa .p span{display:block;font:12px/1.35 Questrial,sans-serif;color:var(--s);padding:2px 4px 0}' +
+    '.ipa .mal span{color:#F09595}.ipa .pend span{color:#FAC775}.ipa .ex span{color:#85B7EB}.ipa.cl .mal span{color:#A32D2D}.ipa.cl .pend span{color:#854F0B}.ipa.cl .ex span{color:#185FA5}.ipa .gr b,.ipa .gr span{opacity:.55}' +
+    '.ipa .b{position:absolute;top:28px;height:8px;border-radius:4px;z-index:0;background:var(--bar)}.ipa .b.on{background:linear-gradient(90deg,#8EB69B,#235347)}';
+  function pasosHtml(d, claro) {
+    var e = estadoInterno(d), p = e.pasos, T = ['Yango', 'Factura', 'Impuestos', 'Pago'], ln = '';
+    for (var i = 0; i < 3; i++) { var on = p[i][0] !== 'gr' && p[i][0] !== 'mal' && p[i + 1][0] !== 'gr'; ln += '<div class="b' + (on ? ' on' : '') + '" style="left:' + (12.5 + 25 * i) + '%;width:25%"></div>'; }
+    return '<div class="ipa' + (claro ? ' cl' : '') + '"><h3>' + (e.semPago ? 'Sem ' + e.semPago + ' · ' : '') + '<b>' + esc(e.caso) + '</b></h3><div class="ps">' + ln + p.map(function (x, i) {
+      return '<div class="p ' + x[0] + '"><div class="c">0' + (i + 1) + '</div><b>' + T[i] + '</b><span>' + esc(x[1]) + '</span></div>'; }).join('') + '</div></div>';
   }
   /* Cuadro interno en 3 columnas: datos personales · pagos · factura y póliza (pantalla y PDF interno) */
   function gruposInternos(d, v) {
@@ -212,6 +248,7 @@
     return '<div class="inf">' +
       '<div class="inf-cab"><img src="' + base + 'marca/logos/nummeros-logotipo-horizontal-principal.svg" alt="NUMMEROS"><b>' + (interno ? 'INFORME INTERNO CONTAX' : 'INFORME GENERAL') + '</b><img class="ctx" src="' + base + 'marca/logos/contax-logo.png" alt="CONTAX"></div>' +
       '<div class="inf-banda"><div><h1>' + esc(d.nombre || 'Repartidor') + '</h1><p>Informe de pagos y facturación al ' + hoy + ' · MTG Delivery (MILTHAGOR S.R.L.)</p></div><div class="id"><small>ID YANGO</small>' + esc(d.id) + '</div></div>' +
+      (interno ? '<div style="margin-bottom:12px">' + pasosHtml(d, true) + '</div>' : '') +
       (interno ? '<div class="inf-cols">' + gruposInternos(d, function (x) { return '<span class="inf-' + x.tono + '">' + esc(x.txt) + '</span>'; }).map(function (g) {
         return '<div><p class="inf-ht">' + g.titulo + '</p><table class="inf-int">' + g.filas.map(function (x) { return '<tr><th>' + x[0] + '</th><td>' + x[1] + '</td></tr>'; }).join('') + '</table></div>'; }).join('') + '</div>' : '') +
       (interno ? '' : '<div class="inf-kpis"><div><small>Total cobrado</small><b>' + bs(c.tot) + '</b></div><div><small>Pagos recibidos</small><b>' + entero(d.hist.length) + '</b></div><div><small>Pendiente</small><b>' + bs(c.totPend) + '</b></div><div><small>Último pago</small><b>' + (c.ultimo ? X.fecha(c.ultimo.fecha) : '—') + '</b></div></div>' +
@@ -240,7 +277,7 @@
     var base = location.href.replace(/[#?].*$/, '').replace(/[^/]*$/, '');
     var w = window.open('', '_blank');
     if (!w) { X.aviso('El navegador bloqueó la ventana. Permite las ventanas emergentes para este sitio.'); return; }
-    w.document.write('<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Informe ' + (interno ? 'interno ' : '') + esc(d.id) + ' ' + esc(d.nombre) + '</title><style>body{margin:0;background:#fff}' + INF_CSS.replace(/BASE/g, base) + '</style></head><body>' +
+    w.document.write('<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Informe ' + (interno ? 'interno ' : '') + esc(d.id) + ' ' + esc(d.nombre) + '</title><style>body{margin:0;background:#fff}' + INF_CSS.replace(/BASE/g, base) + (interno ? PASOS_CSS : '') + '</style></head><body>' +
       htmlPdf(d, base, interno) + '<script>window.onload=function(){(document.fonts?document.fonts.ready:Promise.resolve()).then(function(){setTimeout(function(){window.print()},300)})}<\/script></body></html>');
     w.document.close();
   }
@@ -275,6 +312,7 @@
         '<div class="fila-acc inf-acc">' + (cx ? '<button class="btn" id="infPdfI">' + ic('descargar') + 'PDF interno</button><button class="btn sec" id="infPdf">' + ic('descargar') + 'PDF para el repartidor</button>' : '<button class="btn" id="infPdf">' + ic('descargar') + 'Descargar PDF</button>') +
           (d.telefono ? '<a class="btn sec" href="' + X.wa(d.telefono, 'Hola ' + String(d.nombre || '').split(' ')[0] + ', te escribimos de CONTAX.') + '" target="_blank" rel="noopener">' + ic('whatsapp') + 'WhatsApp</a>' : '') +
           (d.r ? '<button class="btn sec" id="infFicha">' + ic('ojo') + 'Ficha completa</button>' + X.botonHabilitar(d.r.id) : '') + '</div></div>' +
+      (cx ? '<style>' + PASOS_CSS + '</style><div class="mb">' + pasosHtml(d, !S.oscuro) + '</div>' : '') +
       (cx ? '<div class="mb" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px">' +
           gruposInternos(d, function (x) { return x.txt === '—' ? '<span class="muted">—</span>' : X.chip(x.tono, x.txt); }).map(function (g) {
             return '<div class="card" style="margin:0"><div class="h2">' + g.titulo + '</div><table class="tabla inf-estado"><tbody>' + g.filas.map(function (x) {
