@@ -277,7 +277,7 @@
           (d.r ? '<button class="btn sec" id="infFicha">' + ic('ojo') + 'Ficha completa</button>' + X.botonHabilitar(d.r.id) : '') + '</div></div>' +
       (cx ? '<div class="mb" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px">' +
           gruposInternos(d, function (x) { return x.txt === '—' ? '<span class="muted">—</span>' : X.chip(x.tono, x.txt); }).map(function (g) {
-            return '<div class="card"><div class="h2">' + g.titulo + '</div><table class="tabla inf-estado"><tbody>' + g.filas.map(function (x) {
+            return '<div class="card" style="margin:0"><div class="h2">' + g.titulo + '</div><table class="tabla inf-estado"><tbody>' + g.filas.map(function (x) {
               return '<tr><th style="width:42%;text-align:left;vertical-align:top">' + x[0] + '</th><td style="overflow-wrap:anywhere">' + x[1] + '</td></tr>'; }).join('') + '</tbody></table></div>'; }).join('') +
         '</div>' : '<div class="rejilla r4 mb">' +
         '<div class="kpi"><small>Total cobrado</small><b class="num">' + bs(c.tot) + '</b><em>' + entero(d.hist.length) + ' pagos recibidos</em></div>' +
