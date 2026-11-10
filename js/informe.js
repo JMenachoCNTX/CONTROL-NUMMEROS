@@ -151,7 +151,7 @@
     var e = estadoInterno(d), t = function (x) { return esc(x || '—'); };
     return [
       { titulo: 'Datos personales', filas: [['Nombre', t(d.nombre)], ['ID Yango', t(d.id)], ['Celular', t(d.telefono)], ['NIT', t(d.nit)], ['Razón social', t(d.razon)], ['Correo', t(d.correo)], ['Banco', t(d.banco)], ['N.º de cuenta', t(d.cuenta)]] },
-      { titulo: 'Pagos', filas: [['Semana actual', 'Sem ' + e.semActual], ['Semana de pago', e.semPago ? 'Sem ' + e.semPago + (e.importe != null ? ' · ' + bs(e.importe) : '') : '—'],
+      { titulo: 'Pagos', filas: [['Semana actual', 'Sem ' + e.semActual], ['Semana de pago', e.semPago ? 'Sem ' + e.semPago + (e.semCaso !== e.semPago ? ' · no figura en esta planilla' : e.importe != null ? ' · ' + bs(e.importe) : '') : '—'],
         ['Última semana habilitada', e.ultHab ? 'Sem ' + e.ultHab : 'Ninguna'], ['Yango', v(e.yango)], ['Estado de pago', v(e.pago)], ['Otras semanas pendientes', v(e.otras)]] },
       { titulo: 'Factura y póliza', filas: [['Facturación', v(e.fact)], ['Contador', v(e.contax)], ['Póliza de seguro', v(e.poliza)]] }
     ];
