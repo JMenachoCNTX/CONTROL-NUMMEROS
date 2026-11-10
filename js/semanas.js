@@ -161,6 +161,8 @@
       });
       D.hist = l; D.histPartes = partes; D.histDeuda = deuda;
       aplicarHistorial();
+      // Completa (una vez por carga) los pagos sin datos de factura cuando su factura ya está verificada
+      if (!S._completandoFac) { S._completandoFac = true; esperarFacturas().then(completarFacturasHist).then(function () { S._completandoFac = false; }, function () { S._completandoFac = false; }); }
     }, function (e) { console.warn('Historial:', e); D.hist = null; });
   }
   /* El historial de cada repartidor sale de «historialPagos» (ya no de la copia de la hoja) */
@@ -178,6 +180,50 @@
       r.resumen = r.resumen || {};
       r.resumen.pagados = { cantidad: l.length, total: X.redondear(l.reduce(function (t, x) { return t + x.importe; }, 0)) };
     });
+  }
+  /* ══════════ DATOS DE LA FACTURA EN EL HISTORIAL ══════════
+     Un pago confirmado en CONTROL guarda N.º, fecha, NIT, autorización, mes y gestión de su factura
+     (la verificada en el Excel de Impuestos). Si el pago salió antes (excepción) y la factura se verifica
+     después, «completarFacturasHist» la agrega al recargar: así no hace falta ir a Facturas. */
+  var MESES_H = ['ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 'MAYO', 'JUNIO', 'JULIO', 'AGOSTO', 'SEPTIEMBRE', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE'];
+  function facturaDelPago(uid, semana) {
+    return (D.facturas || []).filter(function (f) { return f.uid === uid && f.estado === 'aprobada' && f.verificacion && (f.semanas || []).indexOf(semana) >= 0; })
+      .sort(function (a, b) { return (b.subidoF || 0) - (a.subidoF || 0); })[0] || null;
+  }
+  function nroHist() { var m = 0; (D.hist || []).forEach(function (h) { var n = Number(h.nro); if (n > m) m = n; }); return m; }
+  /* Llena las columnas 6-12 de una fila del historial con la factura (devuelve true si cambió) */
+  function ponerFactura(fila, f, nro) {
+    if (!f || String(fila[6] || '').trim()) return false;
+    var iso = String(f.fechaEmision || '').slice(0, 10), m = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    fila[6] = String(f.numero || ''); fila[7] = m ? m[3] + '/' + m[2] + '/' + m[1] : String(f.fechaEmision || '');
+    fila[8] = String(f.nitEmisor || ''); fila[9] = String(f.autorizacion || '');
+    if (!fila[10]) fila[10] = String(nro); fila[11] = m ? MESES_H[Number(m[2]) - 1] : (fila[11] || ''); fila[12] = m ? m[1] : (fila[12] || '');
+    return true;
+  }
+  function esperarFacturas() {
+    return new Promise(function (ok) { var i = 0, t = setInterval(function () { if (D.facturas || ++i > 60) { clearInterval(t); ok(); } }, 1000); });
+  }
+  function completarFacturasHist() {
+    if (!X.puedeEditar() || !modoControl() || !D.hist || !D.facturas || !D.histPartes) return Promise.resolve(0);
+    var falta = D.hist.filter(function (h) { return !String(h.factura || '').trim() && facturaDelPago(X.idSeguro(h.id), h.semana); });
+    if (!falta.length) return Promise.resolve(0);
+    var fechas = {}; falta.forEach(function (h) { fechas[h.fecha] = 1; });
+    var docs = D.histPartes.filter(function (p) { return fechas[p.fecha] && p.origen !== 'hojaControl'; }), nro = nroHist(), n = 0;
+    return Promise.all(docs.map(function (p) { return colH().doc(p.id).get(); })).then(function (snaps) {
+      var ops = [];
+      snaps.forEach(function (d) {
+        if (!d.exists) return;
+        var filas = []; try { filas = JSON.parse(d.data().filas || '[]'); } catch (e) { return; }
+        var cambio = 0;
+        filas.forEach(function (f) { if (ponerFactura(f, facturaDelPago(X.idSeguro(String(f[2])), f[0]), nro + 1)) { nro++; cambio++; } });
+        if (cambio) { n += cambio; ops.push({ tipo: 'update', ref: d.ref, datos: { filas: JSON.stringify(filas), actualizado: X.servidor(), quien: S.usuario.email } }); }
+      });
+      return escribir(ops);
+    }).then(function () {
+      if (!n) return 0;
+      X.bitacora('Completó facturas del historial', n + ' pagos con su factura verificada');
+      return cargarHistorial().then(function () { if (X.refrescar) X.refrescar(); return n; });
+    }, function (e) { console.warn('Completar facturas del historial:', e); return 0; });
   }
   /* Agrega pagos confirmados en CONTROL a su fecha (documento «{fecha}_c») */
   function agregarAlHistorial(fecha, filas) {
@@ -764,13 +810,16 @@
           var f = v.querySelector('#cpFecha').value; if (!f) { X.aviso('Elige la fecha del pago.'); return; }
           ok.disabled = true; ok.innerHTML = X.anilloBoton() + 'Guardando';
           Promise.all(docs.map(function (k) { return col().doc(k).get(); })).then(function (snaps) {
-            var ops = [], uids = {}, raras = 0, hist = [];
+            var ops = [], uids = {}, raras = 0, hist = [], nro = nroHist();
             snaps.forEach(function (d) {
               if (!d.exists) return;
               var x = d.data();
               if (x.estado !== 'en_planilla' || x.planilla !== p._id) { raras++; return; }
               ops.push({ tipo: 'update', ref: d.ref, datos: { estado: 'pagado', fechaPago: f, rebote: null, actualizado: X.servidor(), quien: S.usuario.email } });
-              hist.push([String(x.semana || ''), x.rango || '', String(x.id), x.nombre || '', X.redondear(Number(x.importe) || 0), x.ciudad || '', x.factura || '', '', '', '', '']);
+              var fila = [String(x.semana || ''), x.rango || '', String(x.id), x.nombre || '', X.redondear(Number(x.importe) || 0), x.ciudad || '', '', '', '', '', '', '', ''];
+              // Con los datos de su factura verificada (N.º, fecha, NIT, autorización, mes y gestión)
+              if (ponerFactura(fila, facturaDelPago(x.uid || X.idSeguro(x.id), String(x.semana || '')), nro + 1)) nro++; else fila[6] = x.factura || '';
+              hist.push(fila);
               uids[x.uid] = 1;
             });
             return escribir(ops).then(function () { return agregarAlHistorial(f, hist); }).then(function () {
@@ -1174,6 +1223,7 @@
     }).catch(function (e) { console.warn('Nombres de semanas:', e); return 0; });
   }
   X.semanas = {
+    completarFacturasHist: completarFacturasHist,
     completarNombres: completarNombres,
     modoControl: modoControl, cargar: cargar, aplicar: aplicar, cargarHistorial: cargarHistorial, aplicarHistorial: aplicarHistorial, agregarAlHistorial: agregarAlHistorial, importar: importar, verImportaciones: verImportaciones, verPorSemana: verPorSemana, migrar: migrar,
     marcarEnPlanilla: marcarEnPlanilla, cambiarFecha: cambiarFecha, puedeCorregir: puedeCorregir, cambiarFactura: cambiarFactura, accionesPago: accionesPago, botonPagado: botonPagado, marcarFuera: marcarFuera, confirmarPago: confirmarPago, anularPlanilla: anularPlanilla, porConfirmar: porConfirmar, reporte: reporte,
