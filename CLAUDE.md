@@ -49,7 +49,7 @@ El permiso se elige en **Panel → Usuarios → columna CONTROL**. Las reglas de
 - Todavía **no hay archivo `CNAME`**. El dominio previsto es `controlnummeros.contaxbolivia.com` (pasos en `README.md`).
 - `firestore.rules` **no se publica solo**: hay que copiarlo y pegarlo en la consola de Firebase del proyecto `control--nummeros` → Firestore → Reglas → Publicar.
 - Aviso de nueva versión: `version-aviso.js` (copia del de `NUMMEROS_CRM`) muestra «Hay una nueva versión · Actualizar ahora» al publicar; no hay que tocar nada.
-- Versiones: `version` en `config.js` (hoy 2.4.53), el `?v=` de los scripts en `index.html` y el mensaje del commit dice la versión (ej. "... (v1.4)").
+- Versiones: `version` en `config.js` (hoy 2.4.54), el `?v=` de los scripts en `index.html` y el mensaje del commit dice la versión (ej. "... (v1.4)").
 
 ## Cuidados importantes
 - **El repositorio es PÚBLICO.** Nunca subir contraseñas, archivos `.json` de cuentas de servicio ni datos de clientes.
@@ -99,3 +99,4 @@ El permiso se elige en **Panel → Usuarios → columna CONTROL**. Las reglas de
 - **2.4.50:** si el repartidor no figura en la última planilla pero tiene semanas pendientes o enviadas a pagar, la infografía muestra la más reciente de esas (`semCaso`).
 - **2.4.52 · Factura en el historial:** al confirmar un pago, la fila de `historialPagos` guarda N.º, fecha (dd/mm/aaaa), NIT, autorización, nro correlativo, mes y gestión de su factura verificada (`facturaDelPago` + `ponerFactura` en js/semanas.js). `completarFacturasHist` corre sola cada vez que se carga el historial (rol que puede editar): completa los pagos sin factura cuya factura ya está aprobada y verificada en el RCV (por ejemplo, pagos por excepción), escribe solo las partes que cambian y anota en la bitácora.
 - **2.4.53 · Nombres que faltan:** si la ficha de `repartidores` (la escribe el robot) viene sin nombre, se completa en pantalla con la planilla (`semanas`), BDYango o la base propia (`nombresFaltantes` en js/semanas.js) o el historial, cada vez que se recargan los datos (antes se perdía al actualizar). Sale el aviso «Nombre colocado por el sistema». No escribe en `repartidores`.
+- **2.4.54 · Cliente CONTAX con el nombre de BDYango:** si el nombre de la ficha del robot está mal escrito (ej. «Ilcha Chavez Edwin» vs. «Edwin Ilicha Chavez» en el Panel y BDYango), `porRepartidor` y `porNombre` (js/gestion.js) también prueban con el nombre de BDYango de ese ID. Quien ya no está en BDYango toma el nombre de la base propia (`padron`, se lee sola si falta algún nombre).

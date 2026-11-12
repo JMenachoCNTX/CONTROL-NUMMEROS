@@ -110,7 +110,10 @@
   function nombresFaltantes() {
     if (!D.repartidores) return 0;
     var n = 0;
-    D.repartidores.forEach(function (r) { if (r.nombre) return; var x = nombreBDY(r.id); if (x) { r.nombre = x; r.nombreSistema = true; n++; } });
+    var faltan = 0;
+    D.repartidores.forEach(function (r) { if (r.nombre) return; var x = nombreBDY(r.id); if (x) { r.nombre = x; r.nombreSistema = true; n++; } else faltan++; });
+    // Quien ya no está en BDYango: la base propia guarda su nombre para siempre (se lee una vez)
+    if (faltan && X.padron && !D.padron && !S._leyendoPadron) { S._leyendoPadron = true; X.padron.cargar().then(function () { S._leyendoPadron = false; if (nombresFaltantes()) X.refrescar(); }); }
     return n;
   }
   function aplicar() {

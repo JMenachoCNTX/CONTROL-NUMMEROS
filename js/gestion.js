@@ -54,9 +54,13 @@
   function palabras(t) { return X.normal(t).split(/[^A-Z]+/).filter(function (w) { return w.length >= 3; }); }
   function porNombre(nombre) {
     if (!D.repartidores || !nombre) return null;
-    if (NOM.clave !== String(D.repartidores.size)) {
-      NOM.idx = {}; NOM.clave = String(D.repartidores.size);
-      D.repartidores.forEach(function (r) { var p = palabras(r.nombre); if (p.length >= 2) (NOM.idx[p[0]] = NOM.idx[p[0]] || []).push({ r: r, p: p }); });
+    var bl = (D.bdyango && D.bdyango.lista) || [], clave = D.repartidores.size + '|' + bl.length;
+    if (NOM.clave !== clave) {
+      NOM.idx = {}; NOM.clave = clave;
+      var porId = {}, poner = function (r, n) { var p = palabras(n); if (p.length >= 2) (NOM.idx[p[0]] = NOM.idx[p[0]] || []).push({ r: r, p: p }); };
+      D.repartidores.forEach(function (r) { porId[r.id] = r; poner(r, r.nombre); });
+      // También el nombre de BDYango: a veces la ficha del robot lo tiene mal escrito (ej. «Ilcha» / «Ilicha»)
+      bl.forEach(function (y) { if (y.nombre) poner(porId[y.id] || y, y.nombre); });
     }
     var mias = palabras(nombre), hay = {}, cands = [];
     mias.forEach(function (w) { hay[w] = 1; });
@@ -80,12 +84,17 @@
      Todas las palabras de su nombre (mín. 2) están en el nombre del cliente. Sirve cuando el repartidor tiene más de un ID. */
   function porRepartidor(r) {
     var m = porIdYango(), id = String(r.id || ''); if (m[id]) return m[id];
-    var p = palabras(r.nombre); if (p.length < 2) return null;
     if (id in MAPA.n) return MAPA.n[id];
-    var l = (MAPA.act || []).filter(function (c) { return p.every(function (w) { return c.pal.indexOf(w) >= 0; }); });
     var tam = function (c) { return Object.keys(c.pal.reduce(function (o, w) { o[w] = 1; return o; }, {})).length; };
-    if (l.length > 1) l = l.filter(function (c) { return tam(c) === p.length; });
-    return (MAPA.n[id] = l.length && l.every(function (c) { return tam(c) === tam(l[0]); }) ? l[0] : null);
+    var buscar = function (nombre) {
+      var p = palabras(nombre); if (p.length < 2) return null;
+      var l = (MAPA.act || []).filter(function (c) { return p.every(function (w) { return c.pal.indexOf(w) >= 0; }); });
+      if (l.length > 1) l = l.filter(function (c) { return tam(c) === p.length; });
+      return l.length && l.every(function (c) { return tam(c) === tam(l[0]); }) ? l[0] : null;
+    };
+    // Con el nombre de la ficha y, si no sale, con el de BDYango (puede estar escrito distinto)
+    var y = ((D.bdyango && D.bdyango.lista) || []).filter(function (b) { return b.id === id; })[0];
+    return (MAPA.n[id] = buscar(r.nombre) || (y && y.nombre && X.normal(y.nombre) !== X.normal(r.nombre) ? buscar(y.nombre) : null));
   }
   CTRL.clientesCONTAX = { cargar: cargarPanelClientes, porIdYango: porIdYango, porRepartidor: porRepartidor };
   function filtrarClientes(l) {
