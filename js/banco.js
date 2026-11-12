@@ -596,7 +596,7 @@
       var b = filasBDYango(r.hojas.map(function (h) { return { nombre: h.nombre, enc: h.filas[0] || [], filas: h.filas.slice(1) }; }));
       D.bdyango = { cuentas: b.cuentas, lista: Object.keys(b.todos).map(function (id) { return b.todos[id]; }), sinBanco: b.sinBanco, desconocidos: b.desconocidos, leido: r.leido };
       // Repartidores sin nombre (por ejemplo los que no están en la hoja BDYANGO del robot): se toma el de BDYango
-      if (D.repartidores) D.repartidores.forEach(function (x) { var t = b.todos[x.id]; if (!x.nombre && t && t.nombre) x.nombre = t.nombre; });
+      if (D.repartidores) D.repartidores.forEach(function (x) { var t = b.todos[x.id]; if (!x.nombre && t && t.nombre) { x.nombre = t.nombre; x.nombreSistema = true; } });
       // Base propia: guarda a todos (y marca inactivos a los que Yango sacó)
       if (X.padron) X.padron.actualizar(b.todos);
       if (X.semanas) X.semanas.completarNombres();

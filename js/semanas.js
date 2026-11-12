@@ -105,6 +105,14 @@
     if (BYN.lista !== l) { BYN = { lista: l, m: {} }; l.forEach(function (b) { if (b.nombre) BYN.m[b.id] = b.nombre; }); }
     return BYN.m[String(id)] || ((X.padron && X.padron.dato(id)) || {}).nombre || '';
   }
+  /* Repartidores sin nombre en «repartidores» (lo escribe el robot): BDYango, base propia o historial.
+     Se repite cada vez que se recargan los datos (antes se perdía al actualizar). Solo en pantalla: no escribe. */
+  function nombresFaltantes() {
+    if (!D.repartidores) return 0;
+    var n = 0;
+    D.repartidores.forEach(function (r) { if (r.nombre) return; var x = nombreBDY(r.id); if (x) { r.nombre = x; r.nombreSistema = true; n++; } });
+    return n;
+  }
   function aplicar() {
     if (!D.repartidores || !D.semanas) return;
     D.repartidores.forEach(function (r) {
@@ -119,6 +127,7 @@
         D.repartidores.set(uid, r);
       }
       if (s.nombreSistema) r.nombreSistema = true;
+      if (!r.nombre && s.nombre) { r.nombre = s.nombre; r.nombreSistema = true; }   // la ficha del robot vino sin nombre: el de la planilla
       var item = { semana: s.semana, rango: s.rango || '', importe: Number(s.importe) || 0, ciudad: s.ciudad || '', _doc: s._id, _orden: s.orden || 0, rebote: s.rebote || null };
       if (s.estado === 'pendiente') { item.estado = 'Pendiente'; r.pendientes.push(item); }
       else if (s.estado === 'en_planilla') { item.estado = 'En planilla'; item.planilla = s.planilla || ''; r.enPlanilla.push(item); }
@@ -135,6 +144,7 @@
       r.resumen = { pendientes: { cantidad: r.pendientes.length, total: suma(r.pendientes) }, pagados: { cantidad: r.historial.length, total: suma(r.historial) } };
     });
     aplicarHistorial();
+    nombresFaltantes();
   }
 
   /* ══════════ HISTORIAL DE PAGOS («historialPagos» del Portal) ══════════
@@ -176,7 +186,7 @@
         return { semana: h.semana, rango: h.rango, importe: h.importe, ciudad: h.ciudad, factura: h.factura, fechaPago: X.fecha(h.fecha), fechaISO: h.fecha, _o: d ? d.getTime() : 0 };
       }).sort(function (a, b) { return b._o - a._o; });
       r.historial = l;
-      if (!r.nombre && por[r.uid] && por[r.uid][0]) r.nombre = por[r.uid][0].nombre;
+      if (!r.nombre && por[r.uid]) { var hn = por[r.uid].filter(function (h) { return h.nombre; })[0]; if (hn) { r.nombre = hn.nombre; r.nombreSistema = true; } }
       r.resumen = r.resumen || {};
       r.resumen.pagados = { cantidad: l.length, total: X.redondear(l.reduce(function (t, x) { return t + x.importe; }, 0)) };
     });
@@ -1225,6 +1235,7 @@
   X.semanas = {
     completarFacturasHist: completarFacturasHist,
     completarNombres: completarNombres,
+    nombresFaltantes: nombresFaltantes,
     modoControl: modoControl, cargar: cargar, aplicar: aplicar, cargarHistorial: cargarHistorial, aplicarHistorial: aplicarHistorial, agregarAlHistorial: agregarAlHistorial, importar: importar, verImportaciones: verImportaciones, verPorSemana: verPorSemana, migrar: migrar,
     marcarEnPlanilla: marcarEnPlanilla, cambiarFecha: cambiarFecha, puedeCorregir: puedeCorregir, cambiarFactura: cambiarFactura, accionesPago: accionesPago, botonPagado: botonPagado, marcarFuera: marcarFuera, confirmarPago: confirmarPago, anularPlanilla: anularPlanilla, porConfirmar: porConfirmar, reporte: reporte,
     // piezas que usa js/banco.js
