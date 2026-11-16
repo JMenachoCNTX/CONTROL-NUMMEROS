@@ -276,7 +276,7 @@
     };
     return '<div class="aviso-caja mb">' + ic('ayuda') + '<div><b>Pagos que ya salieron en una planilla del banco y todavía no se confirmaron</b>' +
         'Lo normal es confirmarlos con «Conciliar extracto» (en «Planillas generadas»). Aquí puedes elegir algunos y ' +
-        '<b>volverlos a «Pendiente de pago»</b> (por ejemplo, si rebotaron o no salieron: entran en la próxima planilla) o <b>marcarlos como pagados</b> si ya se pagaron.' +
+        'volverlos a «Pendiente de pago» (por ejemplo, si rebotaron o no salieron: entran en la próxima planilla) o marcarlos como pagados si ya se pagaron.' +
         (puede ? '' : ' Solo un administrador puede cambiarlos.') + '</div></div>' +
       (puede && l.length ? '<div class="herr" style="flex-wrap:wrap;gap:8px;align-items:center"><span id="epResumen" class="muted"></span>' +
         '<span class="fila-acc" style="flex-wrap:wrap"><button class="btn sec chico" id="epTodos">Seleccionar todos (' + entero(l.length) + ')</button>' +
