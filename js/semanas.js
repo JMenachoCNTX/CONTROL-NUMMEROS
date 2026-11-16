@@ -1342,12 +1342,86 @@
       });
     }).catch(function (e) { console.warn('Nombres de semanas:', e); return 0; });
   }
+  /* ══════════ ENVIADO A PAGAR: volver a pendiente o marcar como pagado ══════════
+     Semanas «en planilla» de cualquier planilla. Sirve cuando un pago rebotó o no salió (vuelve a pendiente
+     para la próxima planilla) o cuando ya se pagó y no hay extracto para conciliar (pasa a pagado). */
+  function enviados() { return (D.semanas || []).filter(function (s) { return s.estado === 'en_planilla'; }); }
+  function leerEnviados(docs) {
+    return Promise.all(docs.map(function (k) { return col().doc(k).get(); })).then(function (snaps) {
+      return snaps.filter(function (d) { return d.exists && d.data().estado === 'en_planilla'; });
+    });
+  }
+  function enviadosAPendiente(docs, alTerminar) {
+    if (!puedeCorregir()) { X.aviso('Solo un administrador puede cambiar estos pagos.'); return; }
+    var l = enviados().filter(function (s) { return docs.indexOf(s._id) >= 0; });
+    if (!l.length) { X.aviso('Esos pagos ya no están «Enviado a pagar». Recarga la página.'); return; }
+    var tot = X.redondear(l.reduce(function (t, s) { return t + (Number(s.importe) || 0); }, 0));
+    X.ventana('Volver a «Pendiente de pago»', entero(l.length) + ' pagos · ' + bs(tot),
+      '<div class="fm"><div class="fila"><label for="vpMotivo">Motivo (lo ve el equipo en la bitácora)</label><input id="vpMotivo" maxlength="160" placeholder="Por ejemplo: rebotó en el banco, no salió en el extracto"></div></div>' +
+      '<div class="aviso-caja">' + ic('ayuda') + '<div><b>Qué pasa</b>Estos pagos salen de su planilla y vuelven a «Pendiente de pago». Si siguen listos, entran en la próxima planilla que generes. En su Portal el repartidor vuelve a verlos como pendientes. No se envía nada al banco.</div></div>',
+      '<button class="btn sec" data-cerrar>Cancelar</button><button class="btn" data-ok>' + ic('recargar') + 'Volver a pendiente</button>',
+      function (v, cerrar) {
+        var ok = v.querySelector('[data-ok]');
+        ok.addEventListener('click', function () {
+          var motivo = v.querySelector('#vpMotivo').value.trim();
+          ok.disabled = true; ok.innerHTML = X.anilloBoton() + 'Guardando';
+          leerEnviados(l.map(function (s) { return s._id; })).then(function (snaps) {
+            var ops = snaps.map(function (d) { return { tipo: 'update', ref: d.ref, datos: { estado: 'pendiente', planilla: null, fueraDePlanilla: null, actualizado: X.servidor(), quien: S.usuario.email } }; });
+            return escribir(ops).then(function () {
+              return X.bitacora('Enviado a pagar → pendiente', entero(ops.length) + ' pagos · ' + bs(tot) + (motivo ? ' · ' + motivo : '') + (ops.length < l.length ? ' · ' + (l.length - ops.length) + ' ya habían cambiado' : ''));
+            }).then(function () { return ops.length; });
+          }).then(function (n) {
+            cerrar(); X.aviso(entero(n) + ' pagos volvieron a pendiente.'); if (alTerminar) alTerminar(); X.recargarTodo();
+          }, function (e) { console.error(e); ok.disabled = false; ok.innerHTML = ic('recargar') + 'Reintentar'; X.aviso('No se pudo guardar. Reintenta: lo ya cambiado no se repite.'); });
+        });
+      });
+  }
+  function enviadosPagados(docs, alTerminar) {
+    if (!puedeCorregir()) { X.aviso('Solo un administrador puede cambiar estos pagos.'); return; }
+    var l = enviados().filter(function (s) { return docs.indexOf(s._id) >= 0; });
+    if (!l.length) { X.aviso('Esos pagos ya no están «Enviado a pagar». Recarga la página.'); return; }
+    var tot = X.redondear(l.reduce(function (t, s) { return t + (Number(s.importe) || 0); }, 0));
+    X.ventana('Marcar como pagados', entero(l.length) + ' pagos · ' + bs(tot),
+      '<div class="fm"><div class="fila"><label for="epFecha">Fecha del pago</label><input id="epFecha" type="date" value="' + X.hoyISO() + '"></div></div>' +
+      '<label class="interruptor"><input type="checkbox" id="epAvisar" checked>Avisar a los repartidores «Recibiste tu pago»</label>' +
+      '<div class="aviso-caja">' + ic('ayuda') + '<div><b>Qué pasa</b>Estos pagos pasan a «Pagado» con esta fecha, entran al historial (con su factura verificada si la tienen) y el repartidor los ve como pagados. Úsalo solo para pagos que ya salieron del banco. Si tienes el extracto, mejor usa «Conciliar extracto».</div></div>',
+      '<button class="btn sec" data-cerrar>Cancelar</button><button class="btn" data-ok>' + ic('check') + 'Marcar como pagados</button>',
+      function (v, cerrar) {
+        var ok = v.querySelector('[data-ok]');
+        ok.addEventListener('click', function () {
+          var f = v.querySelector('#epFecha').value, avisar = v.querySelector('#epAvisar').checked;
+          if (!f) { X.aviso('Elige la fecha del pago.'); return; }
+          ok.disabled = true; ok.innerHTML = X.anilloBoton() + 'Guardando';
+          var uids = {}, n = 0;
+          leerEnviados(l.map(function (s) { return s._id; })).then(function (snaps) {
+            var ops = [], hist = [], nro = nroHist();
+            snaps.forEach(function (d) {
+              var x = d.data();
+              ops.push({ tipo: 'update', ref: d.ref, datos: { estado: 'pagado', fechaPago: f, rebote: null, fueraDePlanilla: null, pagoManual: true, actualizado: X.servidor(), quien: S.usuario.email } });
+              var fila = [String(x.semana || ''), x.rango || '', String(x.id), x.nombre || '', X.redondear(Number(x.importe) || 0), x.ciudad || '', '', '', '', '', '', '', ''];
+              if (ponerFactura(fila, facturaDelPago(x.uid || X.idSeguro(x.id), String(x.semana || '')), nro + 1)) nro++; else fila[6] = x.factura || '';
+              hist.push(fila); uids[x.uid || X.idSeguro(x.id)] = 1;
+            });
+            n = ops.length;
+            return escribir(ops).then(function () { return agregarAlHistorial(f, hist); });
+          }).then(function () {
+            return Promise.all([
+              X.bitacora('Enviado a pagar → pagado', entero(n) + ' pagos · ' + bs(tot) + ' · ' + X.fecha(f)),
+              avisar ? encolarNotif('Recibiste tu pago', 'Miltagor realizó tu pago del ' + X.fecha(f) + '. Revisa el detalle en tu historial.', Object.keys(uids), 'historial') : null
+            ]);
+          }).then(function () {
+            cerrar(); X.aviso(entero(n) + ' pagos quedaron como pagados.'); if (alTerminar) alTerminar(); cargarHistorial(); X.recargarTodo();
+          }, function (e) { console.error(e); ok.disabled = false; ok.innerHTML = ic('check') + 'Reintentar'; X.aviso('No se pudo guardar. Reintenta: lo ya marcado no se repite.'); });
+        });
+      });
+  }
   X.semanas = {
     completarFacturasHist: completarFacturasHist,
     completarNombres: completarNombres,
     nombresFaltantes: nombresFaltantes,
     modoControl: modoControl, cargar: cargar, aplicar: aplicar, cargarHistorial: cargarHistorial, aplicarHistorial: aplicarHistorial, agregarAlHistorial: agregarAlHistorial, importar: importar, verImportaciones: verImportaciones, verPorSemana: verPorSemana, verReporteSemanas: verReporteSemanas, migrar: migrar,
     marcarEnPlanilla: marcarEnPlanilla, cambiarFecha: cambiarFecha, puedeCorregir: puedeCorregir, cambiarFactura: cambiarFactura, accionesPago: accionesPago, botonPagado: botonPagado, marcarFuera: marcarFuera, confirmarPago: confirmarPago, anularPlanilla: anularPlanilla, porConfirmar: porConfirmar, reporte: reporte,
+    enviados: enviados, enviadosAPendiente: enviadosAPendiente, enviadosPagados: enviadosPagados,
     // piezas que usa js/banco.js
     leerLibro: leerLibro, escribir: escribir, encolarNotif: encolarNotif, CIUDADES: CIUDADES, fechaISO: fechaISO,
     // lógica pura (para pruebas)

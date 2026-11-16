@@ -246,6 +246,77 @@
 
   /* ══════════ PAGOS ══════════ */
   var P = { filtro: 'todos', semana: '', ciudad: '', cliente: '', buscar: '', pag: 0 };
+  /* Pestaña «Enviado a pagar»: selección y fecha de cada planilla (se lee una vez) */
+  var EP = { sel: {}, fechas: null, cargando: false, lista: [] };
+  function fechasPlanillas() {
+    if (EP.fechas || EP.cargando) return; EP.cargando = true;
+    X.dbC.collection('pagos').orderBy('creado', 'desc').limit(80).get().then(function (q) {
+      EP.fechas = {}; q.forEach(function (d) { var x = d.data(); EP.fechas[d.id] = { fecha: x.fechaProgramada || x.fecha || '', archivo: x.archivo || '', estado: x.estado || '' }; });
+      EP.cargando = false; if (P.filtro === 'enviado') X.refrescar();
+    }, function (e) { console.warn(e); EP.fechas = {}; EP.cargando = false; });
+  }
+  function filtrarEnviados(envL) {
+    var b = X.normal(P.buscar || '');
+    return envL.filter(function (s) {
+      if (P.semana && s.semana !== P.semana) return false;
+      if (P.ciudad && (s.ciudad || 'sin') !== P.ciudad) return false;
+      if (P.cliente) { var r = D.repartidores && D.repartidores.get(s.uid || X.idSeguro(s.id)); if (!!(r && X.clienteDe(r)) !== (P.cliente === 'si')) return false; }
+      if (b && !buscaRepartidor(String(s.id), b)) return false;
+      return true;
+    }).sort(function (a, b2) { return X.normal(a.nombre).localeCompare(X.normal(b2.nombre)) || (b2.orden || 0) - (a.orden || 0); });
+  }
+  function tablaEnviados(envL) {
+    var SM = X.semanas, puede = SM.puedeCorregir(), l = filtrarEnviados(envL);
+    fechasPlanillas(); EP.lista = l;
+    var vivos = {}; envL.forEach(function (s) { vivos[s._id] = 1; }); Object.keys(EP.sel).forEach(function (k) { if (!vivos[k]) delete EP.sel[k]; });
+    var tot = X.redondear(l.reduce(function (t, s) { return t + (Number(s.importe) || 0); }, 0));
+    var planilla = function (s) {
+      var p = EP.fechas && EP.fechas[s.planilla];
+      return p ? '<span class="num">' + esc(X.fecha(p.fecha) || '—') + '</span><span class="sub">' + esc(p.archivo) + '</span>' : '<span class="muted">' + (EP.fechas ? '—' : 'Cargando…') + '</span>';
+    };
+    return '<div class="aviso-caja mb">' + ic('ayuda') + '<div><b>Pagos que ya salieron en una planilla del banco y todavía no se confirmaron</b>' +
+        'Lo normal es confirmarlos con «Conciliar extracto» (en «Planillas generadas»). Aquí puedes elegir algunos y ' +
+        '<b>volverlos a «Pendiente de pago»</b> (por ejemplo, si rebotaron o no salieron: entran en la próxima planilla) o <b>marcarlos como pagados</b> si ya se pagaron.' +
+        (puede ? '' : ' Solo un administrador puede cambiarlos.') + '</div></div>' +
+      (puede && l.length ? '<div class="herr" style="flex-wrap:wrap;gap:8px;align-items:center"><span id="epResumen" class="muted"></span>' +
+        '<span class="fila-acc" style="flex-wrap:wrap"><button class="btn sec chico" id="epTodos">Seleccionar todos (' + entero(l.length) + ')</button>' +
+        '<button class="btn sec chico" id="epNinguno">Quitar selección</button>' +
+        '<button class="btn sec" id="epPend">' + ic('recargar') + 'Volver a pendiente</button>' +
+        '<button class="btn" id="epPag">' + ic('check') + 'Marcar como pagados</button></span></div>' : '') +
+      (l.length ? X.tabla([
+        { t: puede ? '<input type="checkbox" id="epCab" aria-label="Seleccionar todos">' : '', html: function (s) { return puede ? '<input type="checkbox" data-epsel="' + esc(s._id) + '"' + (EP.sel[s._id] ? ' checked' : '') + ' aria-label="Seleccionar">' : ''; } },
+        { t: 'Repartidor', html: function (s) { var r = D.repartidores && D.repartidores.get(s.uid || X.idSeguro(s.id)), cli = r && X.clienteDe(r); return '<b>' + esc(s.nombre || (r && r.nombre) || 'Sin nombre') + '</b><span class="sub num">ID ' + esc(s.id) + '</span>' + (cli ? X.chip('contax', 'Cliente CONTAX') : ''); } },
+        { t: 'Semana', html: function (s) { return '<span class="num">' + esc(semanaCorta(s.semana)) + '</span> ' + X.chip('pend', 'Enviado a pagar') + (s.rebote ? ' ' + X.chip('mal', 'Rebotó en el banco') : ''); } },
+        { t: 'Planilla', html: planilla },
+        { t: 'Ciudad', html: function (s) { return esc((SM.CIUDADES || {})[s.ciudad] || s.ciudad || '—'); } },
+        { t: 'Importe', clase: 'monto', html: function (s) { return bs(Number(s.importe) || 0); } },
+        { t: '', html: function (s) { return puede ? '<div class="fila-acc" style="flex-wrap:nowrap"><button class="btn sec chico" data-epuno="pend" data-doc="' + esc(s._id) + '">' + ic('recargar') + 'A pendiente</button><button class="btn sec chico" data-epuno="pag" data-doc="' + esc(s._id) + '">' + ic('check') + 'Pagado</button></div>' : ''; } }
+      ], l, { pag: P.pag, pie: '<td colspan="5">Total (' + entero(l.length) + ' pagos)</td><td class="monto">' + bs(tot) + '</td><td></td>' })
+      : X.vacio('No hay pagos «Enviado a pagar»' + (envL.length ? ' con estos filtros' : ''), envL.length ? 'Prueba con otros filtros.' : 'Cuando generes una planilla del banco, sus pagos aparecen aquí hasta conciliar el extracto.', 'marca/graficos/ilu-crecimiento-reportes.png'));
+  }
+  function activarEnviados(el) {
+    var SM = X.semanas;
+    var resumen = function () {
+      var sel = EP.lista.filter(function (s) { return EP.sel[s._id]; }), t = X.redondear(sel.reduce(function (a, s) { return a + (Number(s.importe) || 0); }, 0));
+      var r = el.querySelector('#epResumen'); if (r) r.innerHTML = sel.length ? '<b>' + entero(sel.length) + ' seleccionados</b> · ' + bs(t) : 'Marca los pagos que quieras cambiar';
+      ['#epPend', '#epPag'].forEach(function (k) { var b = el.querySelector(k); if (b) b.disabled = !sel.length; });
+      var c = el.querySelector('#epCab'); if (c) { var v = el.querySelectorAll('[data-epsel]'), n = 0; v.forEach(function (x) { if (x.checked) n++; }); c.checked = v.length > 0 && n === v.length; c.indeterminate = n > 0 && n < v.length; }
+      return sel.map(function (s) { return s._id; });
+    };
+    var marcarTodos = function (v) { EP.lista.forEach(function (s) { if (v) EP.sel[s._id] = 1; else delete EP.sel[s._id]; }); el.querySelectorAll('[data-epsel]').forEach(function (x) { x.checked = v; }); resumen(); };
+    el.querySelectorAll('[data-epsel]').forEach(function (x) { x.addEventListener('change', function () { var k = x.getAttribute('data-epsel'); if (x.checked) EP.sel[k] = 1; else delete EP.sel[k]; resumen(); }); });
+    var c = el.querySelector('#epCab'); if (c) c.addEventListener('change', function () { var v = c.checked; el.querySelectorAll('[data-epsel]').forEach(function (x) { x.checked = v; var k = x.getAttribute('data-epsel'); if (v) EP.sel[k] = 1; else delete EP.sel[k]; }); resumen(); });
+    var bt = el.querySelector('#epTodos'); if (bt) bt.addEventListener('click', function () { marcarTodos(true); });
+    var bn = el.querySelector('#epNinguno'); if (bn) bn.addEventListener('click', function () { marcarTodos(false); });
+    var limpiar = function () { EP.sel = {}; };
+    var bp = el.querySelector('#epPend'); if (bp) bp.addEventListener('click', function () { var d = resumen(); if (d.length) SM.enviadosAPendiente(d, limpiar); });
+    var bg = el.querySelector('#epPag'); if (bg) bg.addEventListener('click', function () { var d = resumen(); if (d.length) SM.enviadosPagados(d, limpiar); });
+    el.querySelectorAll('[data-epuno]').forEach(function (b) { b.addEventListener('click', function (ev) {
+      ev.stopPropagation(); var d = [b.getAttribute('data-doc')];
+      (b.getAttribute('data-epuno') === 'pag' ? SM.enviadosPagados : SM.enviadosAPendiente)(d, function () { delete EP.sel[d[0]]; });
+    }); });
+    resumen();
+  }
   /* Cada pago cae en un solo grupo: así los cuadritos suman el total */
   function grupoPago(s) {
     var f = s.f, malo = f && (f.estado === 'observada' || f.estado === 'rechazada');
@@ -268,15 +339,17 @@
       if (!D.repartidores) return cab + X.esqueleto(3);
       var pc = mc ? SM.porConfirmar() : null;
       cab += (mc ? '' : '<div class="aviso-caja mb">' + ic('ayuda') + '<div><b>Los pagos todavía salen de Google Sheets</b>Lo que importes queda guardado en «semanas», pero esta página sigue mostrando las hojas hasta que se cambie <code>fuentePagos</code> a <code>\'control\'</code> en config.js.</div></div>') +
-        (pc && pc.semanas ? '<div class="aviso-caja mb">' + ic('ayuda') + '<div><b>' + entero(pc.semanas) + ' semanas en planillas sin confirmar · ' + bs(pc.total) + '</b>Cuando llegue el extracto del banco, ábrelo en «Planillas generadas» y toca «Conciliar extracto».</div></div>' : '');
+        (pc && pc.semanas ? '<div class="aviso-caja mb">' + ic('ayuda') + '<div><b>' + entero(pc.semanas) + ' semanas en planillas sin confirmar · ' + bs(pc.total) + '</b>Cuando llegue el extracto del banco, ábrelo en «Planillas generadas» y toca «Conciliar extracto». <button class="btn sec chico" data-filtro="enviado" type="button">Ver la lista</button></div></div>' : '');
       var ev = lista().map(evaluar).filter(function (e) { return e.semanas.length; });
+      var envL = mc ? SM.enviados() : [];
       var semanas = {}; ev.forEach(function (e) { e.semanas.forEach(function (s) { semanas[s.p.semana] = 1; }); });
+      if (P.filtro === 'enviado') { semanas = {}; envL.forEach(function (s) { semanas[s.semana] = 1; }); }
       var semLista = Object.keys(semanas).sort(function (a, b) { return ordenSemana(b) - ordenSemana(a); });
       var f = filtrarPagos(ev);
       var tot = function (l, k) { return X.redondear(l.reduce(function (s, e) { return s + e[k]; }, 0)); };
       var nSem = function (l) { return l.reduce(function (s, e) { return s + e.semanas.length; }, 0); };
       var listos = ev.filter(function (e) { return e.listo; }), ret = ev.filter(function (e) { return !e.listo; });
-      var cuenta = function (k) { return { todos: nSem(ev), listos: nSem(listos), retenidos: nSem(ret), contax: nSem(ev.filter(function (e) { return e.cliente; })), revision: ev.reduce(function (n, e) { return n + e.semanas.filter(function (s) { return s.estado === 'revision'; }).length; }, 0) }[k]; };
+      var cuenta = function (k) { return { todos: nSem(ev), listos: nSem(listos), retenidos: nSem(ret), contax: nSem(ev.filter(function (e) { return e.cliente; })), revision: ev.reduce(function (n, e) { return n + e.semanas.filter(function (s) { return s.estado === 'revision'; }).length; }, 0), enviado: envL.length }[k]; };
       // Cada pago necesita su factura: Pagos = Verificadas + Pre-aprobadas + Observadas + Faltan (+ excepciones). Solo cuenta como verificada la cruzada con Impuestos.
       var pg = { ver: 0, pre: 0, obs: 0, falta: 0, exc: 0 };
       ev.forEach(function (e) { e.semanas.forEach(function (s) { pg[grupoPago(s)]++; }); });
@@ -294,14 +367,14 @@
           '<button ' + kpiP('retenidos', ' alerta') + '><small>Retenidos</small><b class="num">' + bs(tot(ret, 'total')) + '</b><em>' + entero(nSem(ret)) + ' pagos · ' + entero(ret.length) + ' repartidores</em></button>' +
           '<div class="kpi"><small>Corte</small><b class="num">' + esc(corte().texto) + '</b><em>' + esc(corte().dia) + ' · 18:00</em></div>' +
         '</div>' +
-        '<div class="card"><div class="pestanas" role="tablist">' + [['todos', 'Todos'], ['listos', 'Listos'], ['retenidos', 'Retenidos'], ['revision', 'En revisión'], ['contax', 'Clientes CONTAX']].map(function (p) {
+        '<div class="card"><div class="pestanas" role="tablist">' + [['todos', 'Todos'], ['listos', 'Listos'], ['retenidos', 'Retenidos'], ['revision', 'En revisión'], ['contax', 'Clientes CONTAX']].concat(mc ? [['enviado', 'Enviado a pagar']] : []).map(function (p) {
           return '<button role="tab" aria-selected="' + (P.filtro === p[0]) + '" data-filtro="' + p[0] + '">' + p[1] + ' <em class="num">' + entero(cuenta(p[0])) + '</em></button>';
         }).join('') + '</div>' +
         '<div class="herr"><div class="buscar">' + ic('buscar') +  '<input type="search" id="bPagos" placeholder="Buscar por nombre, ID, celular, NIT, razón social o autorización" value="' + esc(P.buscar) + '"></div>' +
           '<select id="sSemana" aria-label="Semana"><option value="">Todas las semanas</option>' + semLista.map(function (s) { return '<option' + (s === P.semana ? ' selected' : '') + '>' + esc(s) + '</option>'; }).join('') + '</select>' +
           '<select id="sCiudad" aria-label="Ciudad"><option value="">Todas las ciudades</option>' + ['SCZ', 'CBBA', 'LPZ'].map(function (c) { return '<option value="' + c + '"' + (c === P.ciudad ? ' selected' : '') + '>' + esc(X.semanas.CIUDADES[c]) + '</option>'; }).join('') + '<option value="sin"' + (P.ciudad === 'sin' ? ' selected' : '') + '>Sin ciudad (inactivos)</option></select>' +
           '<select id="sCliente" aria-label="Clientes"><option value="">Clientes y no clientes</option><option value="si"' + (P.cliente === 'si' ? ' selected' : '') + '>Clientes CONTAX</option><option value="no"' + (P.cliente === 'no' ? ' selected' : '') + '>No clientes</option></select></div>' +
-        (f.length ? X.tabla([
+        (P.filtro === 'enviado' ? tablaEnviados(envL) : f.length ? X.tabla([
           { t: 'Repartidor', html: function (e) { return '<b>' + esc(e.r.nombre || 'Sin nombre') + '</b><span class="sub num">ID ' + esc(e.r.id) + (e.cliente ? ' · ' : '') + '</span>' + (e.cliente ? X.chip('contax', 'Cliente CONTAX') : '') + (e.r.nombreSistema ? '<span class="sub">' + X.chip('neutro', 'Nombre colocado por el sistema') + '</span>' : ''); } },
           { t: 'Semanas', html: function (e) { return e.semanas.map(function (s) { return '<div style="margin:2px 0"><span class="num">' + esc(semanaCorta(s.p.semana)) + '</span> ' + chipSemana(s.estado) + (s.p.rebote ? ' ' + X.chip('mal', 'Rebotó en el banco') : '') + '</div>'; }).join(''); } },
           { t: 'Estado', html: function (e) {
@@ -323,6 +396,7 @@
       var sl = el.querySelector('#sCliente'); if (sl) sl.addEventListener('change', function () { P.cliente = sl.value; P.pag = 0; X.refrescar(); });
       var sc = el.querySelector('#sCiudad'); if (sc) sc.addEventListener('change', function () { P.ciudad = sc.value; P.pag = 0; X.refrescar(); });
       el.querySelectorAll('[data-pag]').forEach(function (b) { b.addEventListener('click', function () { P.pag = Number(b.getAttribute('data-pag')); X.refrescar(); }); });
+      if (P.filtro === 'enviado') activarEnviados(el);
       el.querySelectorAll('tr[data-fila]').forEach(function (tr) {
         tr.addEventListener('click', function () {
           var filtrados = filtrarPagos(ev); var e = filtrados[Number(tr.getAttribute('data-fila'))]; if (e) detalleRepartidor(e.r.uid);
