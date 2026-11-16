@@ -475,6 +475,13 @@
 
   /* ══════════ CONCILIACIÓN CON EL EXTRACTO DEL BANCO ══════════ */
   var OK_BANCO = /ACEP|PROCES|PAGAD|ABONAD|EXITO/;
+  /* Fecha de una celda del extracto → AAAA-MM-DD. Excel guarda las fechas como número de días (desde 1900);
+     antes se leía como milisegundos y salía 31/12/1969. También acepta «15/11/26» o «15/11/2026». */
+  function fechaBanco(v) {
+    if (v === '' || v == null) return '';
+    if (typeof v === 'number') return v > 20000 && v < 80000 ? new Date(Math.round((v - 25569) * 864e5)).toISOString().slice(0, 10) : '';
+    var d = X.aFecha(v); return d && d.getFullYear() >= 2000 ? X.semanas.fechaISO(d) : '';
+  }
   function leerExtracto(hojas) {
     var r = { filas: [], cabecera: {} };
     hojas.forEach(function (h) {
@@ -490,24 +497,29 @@
       var k = { est: c(/^ESTADO$/), glosa: c(/^GLOSA$/), monto: c(/^MONTO/), fecha: c(/^FECHA DE PAGO/), banco: c(/^BANCO RECEPTOR/), nombre: c(/^NOMBRE$/) };
       todas.slice(i0 + 1).forEach(function (f) {
         var g = leerGlosa(f[k.glosa]); if (!g) return;
-        r.filas.push({ id: g.id, sem: g.sem, estado: X.normal(f[k.est]), monto: X.numero(f[k.monto]), fecha: k.fecha >= 0 ? f[k.fecha] : '', banco: k.banco >= 0 ? String(f[k.banco]) : '', nombre: k.nombre >= 0 ? String(f[k.nombre]) : '' });
+        r.filas.push({ id: g.id, sem: g.sem, estado: X.normal(f[k.est]), monto: X.numero(f[k.monto]), fecha: k.fecha >= 0 ? fechaBanco(f[k.fecha]) : '', banco: k.banco >= 0 ? String(f[k.banco]) : '', nombre: k.nombre >= 0 ? String(f[k.nombre]) : '' });
       });
     });
     return r;
   }
   function cruzar(lineas, ext) {
     var porClave = {}; ext.filas.forEach(function (f) { porClave[X.idSeguro(f.id) + '|' + f.sem] = f; });
-    var res = { pagados: [], rebotados: [], faltan: [], sobran: [], montoDistinto: 0, fecha: '' };
+    var res = { pagados: [], rebotados: [], faltan: [], sobran: [], montoDistinto: 0, fecha: '', fechas: {} };
     var usados = {};
     lineas.forEach(function (l) {
       var k = X.idSeguro(l.id) + '|' + l.sem, f = porClave[k];
       if (!f || !f.estado) { res.faltan.push(l); return; }
       usados[k] = 1;
       if (f.monto !== null && Math.abs(f.monto - l.importe) > 0.005) res.montoDistinto++;
-      if (OK_BANCO.test(f.estado)) { res.pagados.push({ l: l, f: f }); if (!res.fecha && f.fecha) res.fecha = X.semanas.fechaISO(f.fecha); }
+      if (OK_BANCO.test(f.estado)) { res.pagados.push({ l: l, f: f }); if (f.fecha) res.fechas[f.fecha] = (res.fechas[f.fecha] || 0) + 1; }
       else res.rebotados.push({ l: l, f: f });
     });
     ext.filas.forEach(function (f) { if (!usados[X.idSeguro(f.id) + '|' + f.sem]) res.sobran.push(f); });
+    // La fecha más repetida queda como fecha de la planilla; cada pago usa la de su fila
+    res.fecha = Object.keys(res.fechas).sort(function (a, b) { return res.fechas[b] - res.fechas[a] || b.localeCompare(a); })[0] || '';
+    // Pista para los que faltan: ¿su ID está en el extracto con otra semana?
+    var porId = {}; ext.filas.forEach(function (f) { (porId[X.idSeguro(f.id)] = porId[X.idSeguro(f.id)] || []).push(f); });
+    res.faltan.forEach(function (l) { var o = (porId[X.idSeguro(l.id)] || []).filter(function (f) { return f.sem !== l.sem; }); l._pista = o.length ? 'En el extracto figura con ' + o.map(function (f) { return f.sem + ' (' + f.estado + ')'; }).join(', ') : 'Su ID no aparece en el extracto'; });
     return res;
   }
   function conciliar(p, alTerminar) {
@@ -534,10 +546,22 @@
                 { t: 'Banco', html: function (x) { return esc(x.f.banco) + '<span class="sub">' + esc(x.f.estado) + '</span>'; } },
                 { t: 'Importe', clase: 'monto', html: function (x) { return bs(x.l.importe); } }
               ], cr.rebotados) + '</div>' : '') +
-              (cr.faltan.length ? '<div class="aviso-caja mb">' + ic('excepcion') + '<div><b>' + entero(cr.faltan.length) + ' líneas de la planilla no aparecen en el extracto</b>Se quedan «en planilla» hasta conciliar otro extracto o confirmarlas a mano.</div></div>' : '') +
-              (cr.sobran.length ? '<div class="aviso-caja mb">' + ic('ayuda') + '<div><b>' + entero(cr.sobran.length) + ' líneas del extracto no son de esta planilla</b>Se ignoran. Revisa que sea el extracto correcto.</div></div>' : '') +
+              (cr.faltan.length ? '<div class="aviso-caja mb">' + ic('excepcion') + '<div><b>' + entero(cr.faltan.length) + ' líneas de la planilla no aparecen en el extracto</b>Se quedan «Enviado a pagar» (el repartidor lo ve así en su Portal, sin aviso) hasta conciliar otro extracto o confirmarlas a mano.</div></div>' +
+                '<div class="card mb"><div class="h2">No están en el extracto</div>' + X.tabla([
+                  { t: 'Repartidor', html: function (l) { return '<b>' + esc(l.nombre || 'Sin nombre') + '</b><span class="sub num">ID ' + esc(l.id) + ' · ' + esc(l.sem) + '</span>'; } },
+                  { t: 'Importe', clase: 'monto', html: function (l) { return bs(l.importe); } },
+                  { t: 'Qué pasó', html: function (l) { return esc(l._pista || ''); } }
+                ], cr.faltan) + '</div>' : '') +
+              (cr.sobran.length ? '<div class="aviso-caja mb">' + ic('ayuda') + '<div><b>' + entero(cr.sobran.length) + ' líneas del extracto no son de esta planilla</b>Se ignoran. Revisa que sea el extracto correcto.</div></div>' +
+                '<div class="card mb"><div class="h2">Del extracto, sin línea en esta planilla</div>' + X.tabla([
+                  { t: 'En el extracto', html: function (f) { return '<b>' + esc(f.nombre || '—') + '</b><span class="sub num">ID ' + esc(f.id) + ' · ' + esc(f.sem) + '</span>'; } },
+                  { t: 'Monto', clase: 'monto', html: function (f) { return f.monto == null ? '—' : bs(f.monto); } },
+                  { t: 'Estado', html: function (f) { return esc(f.estado) + (f.fecha ? '<span class="sub num">' + esc(X.fecha(f.fecha)) + '</span>' : ''); } }
+                ], cr.sobran) + '</div>' : '') +
+              (Object.keys(cr.fechas).length ? '<div class="card mb"><div class="h2">Fechas de pago del extracto</div><p class="muted">Cada pago se guarda con la fecha de su fila (columna «Fecha de Pago»).</p>' +
+                Object.keys(cr.fechas).sort().map(function (k) { return '<div class="dato"><small>' + esc(X.fecha(k)) + '</small><b class="num">' + entero(cr.fechas[k]) + ' pagos</b></div>'; }).join('') + '</div>' : '') +
               (cr.montoDistinto ? '<div class="aviso-caja mb">' + ic('excepcion') + '<div><b>' + entero(cr.montoDistinto) + ' pagos con importe distinto al de la planilla</b>Revísalos en el banco.</div></div>' : '') +
-              '<div class="fila"><label for="exFecha">Fecha del pago</label><input id="exFecha" type="date" value="' + esc(cr.fecha || p.fechaProgramada || X.hoyISO()) + '"></div>';
+              '<div class="fila"><label for="exFecha">' + (cr.pagados.some(function (x) { return !x.f.fecha; }) ? 'Fecha para los pagos sin fecha en el extracto' : 'Fecha de la planilla (cada pago usa la de su fila)') + '</label><input id="exFecha" type="date" value="' + esc(cr.fecha || p.fechaProgramada || X.hoyISO()) + '"></div>';
             ok.disabled = !(cr.pagados.length || cr.rebotados.length);
           }).catch(function (ex) { console.error(ex); caja.innerHTML = '<p class="login-err">' + esc(ex.message || 'No se pudo leer el archivo.') + '</p>'; });
         });
@@ -556,29 +580,33 @@
     var lee = mc ? Promise.all(docs.map(function (k) { return col.doc(k).get(); })) : Promise.resolve([]);
     return lee.then(function (snaps) {
       var est = {}; snaps.forEach(function (d) { if (d.exists) est[d.id] = d.data(); });
-      var ops = [], pagadosUid = {}, rebotadosUid = {}, hist = [];
+      var ops = [], pagadosUid = {}, rebotadosUid = {}, hist = {};
       var vale = function (k) { return mc && k && est[k] && est[k].estado === 'en_planilla' && est[k].planilla === p._id; };
       cr.pagados.forEach(function (x) {
         if (!vale(x.l.doc)) return;
-        var s = est[x.l.doc];
-        ops.push({ tipo: 'update', ref: col.doc(x.l.doc), datos: { estado: 'pagado', fechaPago: fecha, rebote: null, actualizado: X.servidor(), quien: quien } });
-        hist.push([String(s.semana || ''), s.rango || '', String(s.id), s.nombre || '', X.redondear(Number(s.importe) || 0), s.ciudad || '', x.l.factura || '', '', '', '', '']);
-        pagadosUid[x.l.uid || X.idSeguro(x.l.id)] = 1;
+        var s = est[x.l.doc], fp = x.f.fecha || fecha;
+        ops.push({ tipo: 'update', ref: col.doc(x.l.doc), datos: { estado: 'pagado', fechaPago: fp, rebote: null, actualizado: X.servidor(), quien: quien } });
+        (hist[fp] = hist[fp] || []).push([String(s.semana || ''), s.rango || '', String(s.id), s.nombre || '', X.redondear(Number(s.importe) || 0), s.ciudad || '', x.l.factura || '', '', '', '', '']);
+        (pagadosUid[fp] = pagadosUid[fp] || {})[x.l.uid || X.idSeguro(x.l.id)] = 1;
       });
       cr.rebotados.forEach(function (x) {
-        if (vale(x.l.doc)) ops.push({ tipo: 'update', ref: col.doc(x.l.doc), datos: { estado: 'pendiente', planilla: null, rebote: { fecha: fecha, estadoBanco: x.f.estado, banco: x.f.banco, planilla: p._id }, actualizado: X.servidor(), quien: quien } });
+        if (vale(x.l.doc)) ops.push({ tipo: 'update', ref: col.doc(x.l.doc), datos: { estado: 'pendiente', planilla: null, rebote: { fecha: x.f.fecha || fecha, estadoBanco: x.f.estado, banco: x.f.banco, planilla: p._id }, actualizado: X.servidor(), quien: quien } });
         rebotadosUid[x.l.uid || X.idSeguro(x.l.id)] = 1;
       });
-      return X.semanas.escribir(ops).then(function () { return X.semanas.agregarAlHistorial(fecha, hist); }).then(function () {
+      var fechas = Object.keys(hist).sort();
+      return X.semanas.escribir(ops).then(function () {
+        // Una parte del historial por fecha de pago (en orden, porque cada una lee y reescribe su documento)
+        return fechas.reduce(function (pr, f) { return pr.then(function () { return X.semanas.agregarAlHistorial(f, hist[f]); }); }, Promise.resolve());
+      }).then(function () {
         var completa = !cr.faltan.length;
         return Promise.all([
           X.dbC.collection('pagos').doc(p._id).update({
             estado: completa ? 'pagada' : 'enviada', fechaPago: fecha, confirmadoPor: quien, confirmado: X.servidor(),
-            conciliacion: { cuando: X.servidor(), quien: quien, pagados: cr.pagados.length, rebotados: cr.rebotados.length, faltan: cr.faltan.length, planillaBanco: ext.cabecera['NUMERO DE PLANILLA'] || '' },
+            conciliacion: { cuando: X.servidor(), quien: quien, fechasPago: fechas, pagados: cr.pagados.length, rebotados: cr.rebotados.length, faltan: cr.faltan.length, planillaBanco: ext.cabecera['NUMERO DE PLANILLA'] || '' },
             rebotados: cr.rebotados.map(function (x) { return { id: x.l.id, nombre: x.l.nombre, sem: x.l.sem, importe: x.l.importe, estado: x.f.estado, banco: x.f.banco }; })
           }),
           X.bitacora('Concilió extracto del banco', (p.fecha || '') + ' · ' + cr.pagados.length + ' pagados · ' + cr.rebotados.length + ' rebotados · ' + cr.faltan.length + ' sin dato'),
-          X.semanas.encolarNotif('Recibiste tu pago', 'Milthagor realizó tu pago del ' + X.fecha(fecha) + '. Revisa el detalle en tu historial.', Object.keys(pagadosUid), 'historial'),
+          Promise.all(Object.keys(pagadosUid).map(function (f) { return X.semanas.encolarNotif('Recibiste tu pago', 'Milthagor realizó tu pago del ' + X.fecha(f) + '. Revisa el detalle en tu historial.', Object.keys(pagadosUid[f]), 'historial'); })),
           X.semanas.encolarNotif('Tu pago fue devuelto por el banco', 'El banco no pudo depositar tu pago. Revisa que tu número de cuenta esté bien y escríbenos para volver a enviarlo.', Object.keys(rebotadosUid), 'inicio')
         ]);
       });
