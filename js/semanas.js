@@ -167,6 +167,7 @@
         partes.push({ id: d.id, fecha: x.fecha, origen: x.origen || '' });
         // «hojaControl»: semanas que deben factura según la hoja CONTROL, sin pago registrado (no cuentan como pagos)
         var dest = x.origen === 'hojaControl' ? deuda : l;
+        if (facturaObjeto(filas, 0)) S._histObjeto = (S._histObjeto || {}), S._histObjeto[d.id] = 1;
         filas.forEach(function (f) {
           dest.push({ fecha: x.fecha, semana: f[0], rango: f[1], id: String(f[2]), nombre: X.limpiarTexto(f[3]), importe: Number(f[4]) || 0, comentario: f[5] || '', ciudad: f[5] || '',
             factura: f[6] || '', fechaFactura: f[7] || '', nit: f[8] || '', autorizacion: f[9] || '', nro: f[10] || '', mes: f[11] || '', gestion: f[12] || '' });
@@ -213,10 +214,45 @@
     if (!fila[10]) fila[10] = String(nro); fila[11] = m ? MESES_H[Number(m[2]) - 1] : (fila[11] || ''); fila[12] = m ? m[1] : (fila[12] || '');
     return true;
   }
+  /* Hasta la 2.4.60, al conciliar el extracto la columna «N.º factura» se guardaba como objeto ({numero, fecha, nit, autorizacion})
+     y se veía «[object Object]». Lo pasa a sus columnas (N.º, fecha, NIT, autorización, mes y gestión). Devuelve cuántas filas cambió. */
+  function facturaObjeto(filas, nro) {
+    var n = 0;
+    filas.forEach(function (f) {
+      var o = f[6]; if (!o || typeof o !== 'object') return;
+      f[6] = '';
+      ponerFactura(f, { numero: o.numero, fechaEmision: o.fecha, nitEmisor: o.nit, autorizacion: o.autorizacion }, nro ? ++nro : '');
+      n++;
+    });
+    return n;
+  }
+  function repararFacturasObjeto() {
+    var ids = Object.keys(S._histObjeto || {});
+    if (!ids.length || !X.puedeEditar() || !modoControl()) return Promise.resolve(0);
+    var nro = nroHist(), n = 0;
+    return Promise.all(ids.map(function (k) { return colH().doc(k).get(); })).then(function (snaps) {
+      var ops = [];
+      snaps.forEach(function (d) {
+        if (!d.exists) return;
+        var filas = []; try { filas = JSON.parse(d.data().filas || '[]'); } catch (e) { return; }
+        var c = facturaObjeto(filas, nro); if (!c) return;
+        nro += c; n += c;
+        ops.push({ tipo: 'update', ref: d.ref, datos: { filas: JSON.stringify(filas), actualizado: X.servidor(), quien: S.usuario.email } });
+      });
+      return escribir(ops);
+    }).then(function () {
+      S._histObjeto = {};
+      if (n) X.bitacora('Arregló N.º de factura del historial', n + ' pagos conciliados con el extracto mostraban «[object Object]»');
+      return n;
+    });
+  }
   function esperarFacturas() {
     return new Promise(function (ok) { var i = 0, t = setInterval(function () { if (D.facturas || ++i > 60) { clearInterval(t); ok(); } }, 1000); });
   }
   function completarFacturasHist() {
+    return repararFacturasObjeto().catch(function (e) { console.warn('Reparar facturas del historial:', e); }).then(completarFacturasHist2);
+  }
+  function completarFacturasHist2() {
     if (!X.puedeEditar() || !modoControl() || !D.hist || !D.facturas || !D.histPartes) return Promise.resolve(0);
     var falta = D.hist.filter(function (h) { return !String(h.factura || '').trim() && facturaDelPago(X.idSeguro(h.id), h.semana); });
     if (!falta.length) return Promise.resolve(0);
@@ -1416,7 +1452,7 @@
       });
   }
   X.semanas = {
-    completarFacturasHist: completarFacturasHist,
+    completarFacturasHist: completarFacturasHist, ponerFactura: ponerFactura, facturaDelPago: facturaDelPago, nroHist: nroHist,
     completarNombres: completarNombres,
     nombresFaltantes: nombresFaltantes,
     modoControl: modoControl, cargar: cargar, aplicar: aplicar, cargarHistorial: cargarHistorial, aplicarHistorial: aplicarHistorial, agregarAlHistorial: agregarAlHistorial, importar: importar, verImportaciones: verImportaciones, verPorSemana: verPorSemana, verReporteSemanas: verReporteSemanas, migrar: migrar,

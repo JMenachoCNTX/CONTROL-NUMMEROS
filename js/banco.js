@@ -590,13 +590,18 @@
     var lee = mc ? Promise.all(docs.map(function (k) { return col.doc(k).get(); })) : Promise.resolve([]);
     return lee.then(function (snaps) {
       var est = {}; snaps.forEach(function (d) { if (d.exists) est[d.id] = d.data(); });
-      var ops = [], pagadosUid = {}, rebotadosUid = {}, hist = {};
+      var ops = [], pagadosUid = {}, rebotadosUid = {}, hist = {}, nro = X.semanas.nroHist();
       var vale = function (k) { return mc && k && est[k] && est[k].estado === 'en_planilla' && est[k].planilla === p._id; };
       cr.pagados.forEach(function (x) {
         if (!vale(x.l.doc)) return;
         var s = est[x.l.doc], fp = x.f.fecha || fecha;
         ops.push({ tipo: 'update', ref: col.doc(x.l.doc), datos: { estado: 'pagado', fechaPago: fp, rebote: null, actualizado: X.servidor(), quien: quien } });
-        (hist[fp] = hist[fp] || []).push([String(s.semana || ''), s.rango || '', String(s.id), s.nombre || '', X.redondear(Number(s.importe) || 0), s.ciudad || '', x.l.factura || '', '', '', '', '']);
+        // Columnas de factura como en «Confirmar pago»: la verificada del Portal o, si no, la que llevó la línea de la planilla
+        var fila = [String(s.semana || ''), s.rango || '', String(s.id), s.nombre || '', X.redondear(Number(s.importe) || 0), s.ciudad || '', '', '', '', '', '', '', ''], lf = x.l.factura, SM = X.semanas;
+        var fv = SM.facturaDelPago(s.uid || X.idSeguro(s.id), String(s.semana || ''));
+        if (!fv && lf && typeof lf === 'object') fv = { numero: lf.numero, fechaEmision: lf.fecha, nitEmisor: lf.nit, autorizacion: lf.autorizacion };
+        if (SM.ponerFactura(fila, fv, nro + 1)) nro++; else if (lf && typeof lf !== 'object') fila[6] = String(lf);
+        (hist[fp] = hist[fp] || []).push(fila);
         (pagadosUid[fp] = pagadosUid[fp] || {})[x.l.uid || X.idSeguro(x.l.id)] = 1;
       });
       cr.rebotados.forEach(function (x) {
