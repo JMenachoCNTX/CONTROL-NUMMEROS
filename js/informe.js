@@ -113,11 +113,11 @@
       res.yango = t('ok', 'Habilitado por la App'); res.fact = t('ok', 'Factura verificada en Impuestos'); res.pago = t('ok', 'Enviado a pagar (en planilla del banco)'); res.importe = Number(env.importe) || 0;
       pasos('Enviado a pagar', ['ok', 'Factura recibida'], ['ok', 'Verificada en el RCV'], ['pend', 'En la planilla del banco']);
     } else if (pag) {
-      var ret = /retenid/i.test(pag.factura || '');
+      var ret = !!pag.sinFactura || /retenid/i.test(pag.factura || '');
       res.yango = t('ok', 'Habilitado por la App'); res.importe = pag.importe;
-      res.fact = ret ? t('mal', 'Pago retenido: todavía debe la factura') : t('ok', pag.factura ? 'Factura N.º ' + pag.factura + (pag.fechaFactura ? ' del ' + pag.fechaFactura : '') : 'Pagado sin dato de factura');
+      res.fact = ret ? t('mal', 'Falta factura: ya se pagó, todavía debe la factura') : t('ok', pag.factura ? 'Factura N.º ' + pag.factura + (pag.fechaFactura ? ' del ' + pag.fechaFactura : '') : 'Pagado sin dato de factura');
       res.pago = t('ok', 'Pagado el ' + X.fecha(pag.fecha));
-      if (ret) pasos('Pagado con retención', ['mal', 'Todavía debe la factura'], ['gr', 'Esperando factura'], ['ok', 'Pagado el ' + X.fecha(pag.fecha)]);
+      if (ret) pasos('Pagado sin factura', ['mal', 'Todavía debe la factura'], ['gr', 'Esperando factura'], ['ok', 'Pagado el ' + X.fecha(pag.fecha)]);
       else pasos('Pagado', ['ok', pag.factura ? 'Factura N.º ' + pag.factura : 'Factura recibida'], ['ok', 'Verificada en el RCV'], ['ok', 'Pagado el ' + X.fecha(pag.fecha)]);
     } else {
       res.yango = t('neutro', 'No figura en la planilla de Yango de esta semana'); res.fact = t('neutro', 'No corresponde que emita factura esta semana'); res.pago = t('neutro', 'Sin pago esta semana');

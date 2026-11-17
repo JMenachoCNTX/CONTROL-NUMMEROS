@@ -70,7 +70,7 @@
   /* ══════════ LISTA DE FACTURACIÓN (como la hoja «CONTROL») ══════════
      Una fila por repartidor y semana que necesita factura para MILTHAGOR:
      - las semanas pendientes de pago (colección «semanas»), y
-     - las semanas ya pagadas «con retención» (historial con factura «Pago Retenido»): igual deben traer factura.
+     - las semanas ya pagadas sin factura (historial vacío o con «Pago Retenido»): igual deben traer factura.
      Contador: CONTAX si es cliente activo del Panel (o de la lista propia); si no, «Otro». */
   var ESTADO_LF = {
     falta: ['mal', 'Falta ❌'], porEmitir: ['contax', 'CONTAX debe emitir'], subida: ['pend', 'Subida · por revisar'],
@@ -101,7 +101,7 @@
     };
     if (D.repartidores) D.repartidores.forEach(function (r) { (r.pendientes || []).forEach(function (p) { if ((Number(p.importe) || 0) > 0) agregar(r, r.id, r.nombre, p.semana, p.importe, 'pendiente', { rango: p.rango }); }); });
     (D.hist || []).forEach(function (h) {
-      if (!/RETENID/.test(X.normal(h.factura))) return;
+      if (!h.sinFactura) return;   // pagado sin factura (vacío o «Pago Retenido» de la hoja)
       agregar(repDe(h.id), h.id, h.nombre, h.semana, h.importe, 'retenido', { rango: h.rango, fechaPago: h.fecha });
     });
     (D.histDeuda || []).forEach(function (h) { agregar(repDe(h.id), h.id, h.nombre, h.semana, h.importe, 'hoja', { rango: h.rango }); });
@@ -135,14 +135,14 @@
       '<div class="herr"><div class="buscar">' + ic('buscar') + '<input type="search" id="bLf" placeholder="Buscar por nombre, ID, celular, NIT, razón social, autorización o semana" value="' + esc(LF.buscar) + '"></div>' +
         '<select id="sLfVista"><option value="faltan"' + (LF.vista === 'faltan' ? ' selected' : '') + '>Sin factura</option><option value="con"' + (LF.vista === 'con' ? ' selected' : '') + '>Con factura</option><option value=""' + (!LF.vista ? ' selected' : '') + '>Todas</option></select>' +
         '<select id="sLfCont"><option value="">Todos los contadores</option><option value="OTRO"' + (LF.contador === 'OTRO' ? ' selected' : '') + '>Externos (otro)</option><option value="CONTAX"' + (LF.contador === 'CONTAX' ? ' selected' : '') + '>CONTAX</option></select>' +
-        '<select id="sLfTipo"><option value="">Todos los tipos</option><option value="pendiente"' + (LF.tipo === 'pendiente' ? ' selected' : '') + '>Pendientes de pago</option><option value="retenido"' + (LF.tipo === 'retenido' ? ' selected' : '') + '>Pagados con retención</option><option value="hoja"' + (LF.tipo === 'hoja' ? ' selected' : '') + '>De la hoja CONTROL (sin pago registrado)</option></select>' +
+        '<select id="sLfTipo"><option value="">Todos los tipos</option><option value="pendiente"' + (LF.tipo === 'pendiente' ? ' selected' : '') + '>Pendientes de pago</option><option value="retenido"' + (LF.tipo === 'retenido' ? ' selected' : '') + '>Pagados sin factura</option><option value="hoja"' + (LF.tipo === 'hoja' ? ' selected' : '') + '>De la hoja CONTROL (sin pago registrado)</option></select>' +
         '<button class="btn sec" id="btnExpLf">' + ic('descargar') + 'Excel</button>' +
       '</div>' +
       '<p class="muted mb">' + entero(f.length) + ' filas · ' + bs(X.redondear(f.reduce(function (s, x) { return s + x.importe; }, 0))) + '</p>' +
       (f.length ? X.tabla([
         { t: 'Celular', html: function (x) { return '<span class="num">' + esc(X.telVisible(x.celular) || '—') + '</span>'; } },
         { t: 'ID', html: function (x) { return '<span class="num">' + esc(x.id) + '</span>'; } },
-        { t: 'Nombre', html: function (x) { return '<b>' + esc(x.nombre) + '</b>' + (x.tipo === 'retenido' ? '<span class="sub">' + X.chip('neutro', 'Pagado con retención ' + X.fecha(x.fechaPago)) + '</span>' : x.tipo === 'hoja' ? '<span class="sub">' + X.chip('neutro', 'De la hoja CONTROL · sin pago registrado') + '</span>' : ''); } },
+        { t: 'Nombre', html: function (x) { return '<b>' + esc(x.nombre) + '</b>' + (x.tipo === 'retenido' ? '<span class="sub">' + X.chip('neutro', 'Pagado sin factura ' + X.fecha(x.fechaPago)) + '</span>' : x.tipo === 'hoja' ? '<span class="sub">' + X.chip('neutro', 'De la hoja CONTROL · sin pago registrado') + '</span>' : ''); } },
         { t: 'Importe', clase: 'monto', html: function (x) { return '<b>' + bs(x.importe) + '</b>'; } },
         { t: 'Contador', html: function (x) { return x.cliente ? X.chip('contax', 'CONTAX') : '<span class="muted">Otro</span>'; } },
         { t: 'Semana', html: function (x) { return esc(X.semanaCorta(x.semana)); } },
@@ -171,7 +171,7 @@
     if (be) be.addEventListener('click', function () {
       X.excel([{ nombre: 'Lista de facturación', filas: [['Celular', 'ID', 'Nombre', 'Importe total', 'Contador', 'Semana', 'Rango', 'Tipo', '¿Emitida?', 'Emisor', 'N.º factura', 'Fecha', 'NIT', 'Autorización', 'Estado']].concat(f.map(function (x) {
         var k = x.f || {};
-        return [X.telVisible(x.celular), x.id, x.nombre, x.importe, x.contador, x.semana, x.rango || '', x.tipo === 'retenido' ? 'Pagado con retención' : x.tipo === 'hoja' ? 'De la hoja CONTROL (sin pago registrado)' : 'Pendiente de pago', ESTADO_LF[x.estado][1],
+        return [X.telVisible(x.celular), x.id, x.nombre, x.importe, x.contador, x.semana, x.rango || '', x.tipo === 'retenido' ? 'Pagado sin factura' : x.tipo === 'hoja' ? 'De la hoja CONTROL (sin pago registrado)' : 'Pendiente de pago', ESTADO_LF[x.estado][1],
           k.razonEmisor || '', k.numero || '', k.fechaEmision || '', k.nitEmisor || '', k.autorizacion || '', x.f ? (x.f.origen === 'contax' ? 'Emitida por CONTAX' : (ESTADOS[x.f.estado] || [0, x.f.estado])[1]) : ''];
       })) }], 'Lista-facturacion-' + X.hoyISO());
     });
@@ -183,7 +183,7 @@
     cuenta: function () { return (D.facturas || []).filter(function (f) { return f.estado === 'recibida'; }).length; },
     render: function () {
       var ed = X.puedeEditar();
-      var cab = X.titulo('Facturas', F.tab === 'lista' ? 'Lista de facturación: cada semana que necesita factura para MILTHAGOR (pendientes de pago y pagadas con retención), como la hoja «CONTROL».' : 'Las que suben los repartidores en «Mis facturas» del portal. Llegan al instante; corte: jueves 18:00.',
+      var cab = X.titulo('Facturas', F.tab === 'lista' ? 'Lista de facturación: cada semana que necesita factura para MILTHAGOR (pendientes de pago y pagadas sin factura), como la hoja «CONTROL».' : 'Las que suben los repartidores en «Mis facturas» del portal. Llegan al instante; corte: jueves 18:00.',
         (ed ? '<button class="btn sec" id="btnCruce">' + ic('cruzar') + 'Cruzar con Impuestos</button><button class="btn sec" id="btnContax">' + ic('cliente') + 'Registrar emitida por CONTAX</button>' : '') +
         (F.tab !== 'lista' ? '<button class="btn sec" id="btnExpFac">' + ic('descargar') + 'Excel</button>' : ''));
       if (!S.portalUsuario) return cab + '<div class="card">' + X.vacio('Conecta el Portal para ver las facturas', 'Usa el botón «Conectar» de arriba.') + '</div>';

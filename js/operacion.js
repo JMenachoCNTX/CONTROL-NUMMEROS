@@ -592,7 +592,51 @@
   }
 
   /* ══════════ HISTORIAL DE PAGOS ══════════ */
-  var H = { buscar: '', pagT: 0, sub: 'fechas', fecha: '', buscarF: '', pagF: 0 };
+  var H = { buscar: '', pagT: 0, sub: 'fechas', fecha: '', buscarF: '', pagF: 0, buscarS: '', pagS: 0, contS: '', estS: '' };
+  /* ── Pagos sin factura: pagados (vacío o «Pago Retenido») cruzados con la lista de facturación ── */
+  var EST_LF = { falta: ['mal', 'Falta factura'], porEmitir: ['contax', 'CONTAX debe emitir'], subida: ['pend', 'Subida · por revisar'], observada: ['mal', 'Observada'], aprobada: ['ok', 'Emitida ✅'], contax: ['contax', 'Emitida por CONTAX ✅'], fuera: ['mal', 'No está en la lista'] };
+  function pagosSinFactura() {
+    var lf = {}; (X.listaFacturacionDatos ? X.listaFacturacionDatos() : []).forEach(function (x) { lf[x.id + '|' + x.semana] = x; });
+    completarNombres();
+    return (D.hist || []).filter(function (h) { return h.sinFactura; }).map(function (h) {
+      var x = lf[String(h.id) + '|' + h.semana];
+      return { h: h, id: String(h.id), nombre: h.nombre, semana: h.semana, importe: h.importe, fecha: h.fecha, lf: x || null, estado: x ? x.estado : 'fuera', contador: x ? x.contador : '' };
+    });
+  }
+  function filtrarSinFac(l) {
+    var b = X.normal(H.buscarS);
+    return l.filter(function (x) {
+      if (H.contS && x.contador !== H.contS) return false;
+      if (H.estS === 'falta' && !(x.estado === 'falta' || x.estado === 'porEmitir' || x.estado === 'observada' || x.estado === 'fuera')) return false;
+      if (H.estS === 'con' && !(x.estado === 'subida' || x.estado === 'aprobada' || x.estado === 'contax')) return false;
+      if (H.estS === 'fuera' && x.estado !== 'fuera') return false;
+      if (b && (X.normal(x.nombre) + ' ' + x.id + ' ' + X.normal(x.semana)).indexOf(b) < 0 && !buscaRepartidor(x.id, b)) return false;
+      return true;
+    }).sort(function (a, z) { return X.normal(a.nombre).localeCompare(X.normal(z.nombre)) || (ordenSemana(a.semana) - ordenSemana(z.semana)); });
+  }
+  function htmlSinFac() {
+    var todas = pagosSinFactura(), l = filtrarSinFac(todas); H.listaS = l;
+    var cnt = function (fn) { var x = todas.filter(fn); return { n: x.length, t: X.redondear(x.reduce(function (s, y) { return s + (Number(y.importe) || 0); }, 0)) }; };
+    var tot = cnt(function () { return true; }), fal = cnt(function (x) { return ['falta', 'porEmitir', 'observada', 'fuera'].indexOf(x.estado) >= 0; }),
+      con = cnt(function (x) { return ['subida', 'aprobada', 'contax'].indexOf(x.estado) >= 0; }), fue = cnt(function (x) { return x.estado === 'fuera'; }),
+      ctx = cnt(function (x) { return x.contador === 'CONTAX' && ['falta', 'porEmitir', 'observada'].indexOf(x.estado) >= 0; });
+    var kp = function (k, t, c, em, cl) { return '<button class="kpi' + (cl || '') + (H.estS === k ? ' activo' : '') + '" data-ests="' + k + '"><small>' + t + '</small><b class="num">' + entero(c.n) + '</b><em>' + bs(c.t) + (em ? ' · ' + em : '') + '</em></button>'; };
+    var tl = X.redondear(l.reduce(function (s, x) { return s + (Number(x.importe) || 0); }, 0));
+    return '<div class="aviso-caja mb">' + ic('ayuda') + '<div><b>Pagos ya realizados que todavía no tienen factura</b>En el historial dicen «Falta factura» (antes la hoja ponía «Pago Retenido» o lo dejaba vacío). Cada uno debe estar en Facturas → Lista de facturación; aquí ves en qué quedó.</div></div>' +
+      '<div class="rejilla r4 mb">' + kp('', 'Pagados sin factura', tot, '') + kp('falta', 'Todavía falta la factura', fal, entero(ctx.n) + ' CONTAX debe emitir', ' alerta') + kp('con', 'Ya llegó la factura', con, 'subida o emitida') + kp('fuera', 'No están en la lista', fue, fue.n ? 'revisar' : 'todo cruzado', fue.n ? ' alerta' : '') + '</div>' +
+      '<div class="herr"><div class="buscar">' + ic('buscar') + '<input type="search" id="bHistS" placeholder="Buscar por nombre, ID, celular o semana" value="' + esc(H.buscarS) + '"></div>' +
+        '<select id="sContS" aria-label="Contador"><option value="">Clientes y no clientes</option><option value="CONTAX"' + (H.contS === 'CONTAX' ? ' selected' : '') + '>Clientes CONTAX</option><option value="OTRO"' + (H.contS === 'OTRO' ? ' selected' : '') + '>No clientes (otro contador)</option></select>' +
+        '<button class="btn sec chico" id="btnExpSinFac">' + ic('descargar') + 'Excel (' + entero(l.length) + ')</button></div>' +
+      '<p class="muted" style="margin:0 0 10px"><b>' + entero(l.length) + ' pagos · ' + bs(tl) + '</b> · toca un pago para ver el informe del repartidor</p>' +
+      '<div class="tabla-ancha">' + X.tabla([
+        { t: 'Repartidor', html: function (x) { return '<b>' + esc(x.nombre || 'Sin nombre') + '</b><span class="sub num">ID ' + esc(x.id) + '</span>'; } },
+        { t: 'Semana', html: function (x) { return '<span class="num">' + esc(semanaCorta(x.semana)) + '</span><span class="sub">' + esc(x.h.rango || '') + '</span>'; } },
+        { t: 'Importe', clase: 'monto', html: function (x) { return bs(x.importe); } },
+        { t: 'Fecha de pago', html: function (x) { return '<span class="num">' + esc(X.fecha(x.fecha)) + '</span>'; } },
+        { t: 'Contador', html: function (x) { return x.contador === 'CONTAX' ? X.chip('contax', 'CONTAX') : x.contador ? 'Otro' : '<span class="muted">—</span>'; } },
+        { t: 'En la lista de facturación', html: function (x) { var e = EST_LF[x.estado] || ['neutro', x.estado]; return X.chip(e[0], e[1]) + (x.lf && x.lf.f && x.lf.f.numero ? '<span class="sub num">Factura N.º ' + esc(x.lf.f.numero) + '</span>' : ''); } }
+      ], l, { clic: true, tam: 50, pag: H.pagS, pie: '<td colspan="2">Total (' + entero(l.length) + ' pagos)</td><td class="monto">' + bs(tl) + '</td><td colspan="3"></td>' }) + '</div>';
+  }
   /* Todos los pagos con las columnas de HistPagosMTG (lo que puede pedir auditoría) */
   var COLS_HIST = [['Fecha de pago', function (h) { return X.fecha(h.fecha); }], ['Semana', 'semana'], ['Rango (Días)', 'rango'], ['ID del mensajero', 'id'], ['Nombre completo', 'nombre'],
     ['Importe total', 'importe'], ['Comentarios', 'comentario'], ['Nro Factura', 'factura'], ['Fecha Factura', 'fechaFactura'], ['NIT Factura', 'nit'],
@@ -661,9 +705,11 @@
       var sub = '<div class="subpestanas" role="tablist">' +
         '<button role="tab" data-sub="graficos" aria-selected="' + (H.sub === 'graficos') + '">' + ic('grafico') + 'Gráficos</button>' +
         '<button role="tab" data-sub="fechas" aria-selected="' + (H.sub === 'fechas') + '">' + ic('reloj') + 'Fechas de pago <em class="num">' + entero(l.length) + '</em></button>' +
-        '<button role="tab" data-sub="todos" aria-selected="' + (H.sub === 'todos') + '">' + ic('historial') + 'Todos los pagos <em class="num">' + entero(nPagos) + '</em></button></div>';
+        '<button role="tab" data-sub="todos" aria-selected="' + (H.sub === 'todos') + '">' + ic('historial') + 'Todos los pagos <em class="num">' + entero(nPagos) + '</em></button>' +
+        '<button role="tab" data-sub="sinfac" aria-selected="' + (H.sub === 'sinfac') + '">' + ic('factura') + 'Pagos sin factura <em class="num">' + entero((D.hist || []).filter(function (h) { return h.sinFactura; }).length) + '</em></button></div>';
       var cuerpo;
       if (H.sub === 'graficos') cuerpo = graficos;
+      else if (H.sub === 'sinfac') cuerpo = htmlSinFac();
       else if (H.sub === 'fechas') {
         var filasF = filasFecha(nF); H.listaF = filasF;
         var totF = filasF.reduce(function (s, h) { return s + (Number(h.importe) || 0); }, 0);
@@ -704,11 +750,19 @@
       if (ct) X.grafico(ct, { type: 'bar', data: { labels: top.map(function (x) { var n = String(x.n).split(' '); return (n[0] + ' ' + (n[1] || '')).trim().toUpperCase(); }), datasets: [{ label: 'Cobrado', data: top.map(function (x) { return X.redondear(x.t); }), backgroundColor: top.map(function (x, i) { return i % 2 ? col.medio : col.fuerte; }), maxBarThickness: 22 }] },
         options: { indexAxis: 'y', maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: tipBs }, scales: { x: { ticks: { callback: function (v) { return 'Bs ' + entero(v); } } } } } });
       el.querySelectorAll('[data-sub]').forEach(function (b) { b.addEventListener('click', function () { H.sub = b.getAttribute('data-sub'); X.refrescar(); }); });
-      var lst = H.sub === 'fechas' ? H.listaF : H.lista;
+      var lst = H.sub === 'fechas' ? H.listaF : H.sub === 'sinfac' ? H.listaS : H.lista;
       el.querySelectorAll('.tabla-ancha tr[data-fila]').forEach(function (tr) {
         tr.addEventListener('click', function () { var h = (lst || [])[Number(tr.getAttribute('data-fila'))]; if (h && X.informe) X.informe.abrir(h.id); });
       });
-      el.querySelectorAll('.tabla-ancha [data-pag]').forEach(function (b) { b.addEventListener('click', function (ev) { ev.stopPropagation(); if (H.sub === 'fechas') H.pagF = Number(b.getAttribute('data-pag')); else H.pagT = Number(b.getAttribute('data-pag')); X.refrescar(); }); });
+      el.querySelectorAll('.tabla-ancha [data-pag]').forEach(function (b) { b.addEventListener('click', function (ev) { ev.stopPropagation(); var n = Number(b.getAttribute('data-pag')); if (H.sub === 'fechas') H.pagF = n; else if (H.sub === 'sinfac') H.pagS = n; else H.pagT = n; X.refrescar(); }); });
+      el.querySelectorAll('[data-ests]').forEach(function (b) { b.addEventListener('click', function () { H.estS = b.getAttribute('data-ests'); H.pagS = 0; X.refrescar(); }); });
+      var bs2 = el.querySelector('#bHistS'); if (bs2) bs2.addEventListener('input', debounce(function () { H.buscarS = bs2.value; H.pagS = 0; X.refrescar(); setFoco('#bHistS'); }, 300));
+      var sc2 = el.querySelector('#sContS'); if (sc2) sc2.addEventListener('change', function () { H.contS = sc2.value; H.pagS = 0; X.refrescar(); });
+      var bxs = el.querySelector('#btnExpSinFac'); if (bxs) bxs.addEventListener('click', function () {
+        X.excel([{ nombre: 'Pagos sin factura', filas: [['ID Yango', 'Nombre', 'Semana', 'Rango', 'Importe (Bs)', 'Fecha de pago', 'Contador', 'En la lista de facturación', 'N.º factura']].concat((H.listaS || []).map(function (x) {
+          return [x.id, x.nombre, x.semana, x.h.rango || '', x.importe, X.fecha(x.fecha), x.contador === 'CONTAX' ? 'CONTAX' : x.contador ? 'Otro' : '', (EST_LF[x.estado] || ['', x.estado])[1], (x.lf && x.lf.f && x.lf.f.numero) || ''];
+        })) }], 'Pagos-sin-factura-' + X.hoyISO());
+      });
       var sf = el.querySelector('#sFecha'); if (sf) sf.addEventListener('change', function () { H.fecha = sf.value; H.pagF = 0; X.refrescar(); });
       var bf = el.querySelector('#bHistF'); if (bf) bf.addEventListener('input', debounce(function () { H.buscarF = bf.value; H.pagF = 0; X.refrescar(); setFoco('#bHistF'); }, 300));
       var bh = el.querySelector('#bHist'); if (bh) bh.addEventListener('input', debounce(function () { H.buscar = bh.value; H.pagT = 0; X.refrescar(); setFoco('#bHist'); }, 350));

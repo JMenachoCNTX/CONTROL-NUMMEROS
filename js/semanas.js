@@ -169,8 +169,14 @@
         var dest = x.origen === 'hojaControl' ? deuda : l;
         if (facturaObjeto(filas, 0)) S._histObjeto = (S._histObjeto || {}), S._histObjeto[d.id] = 1;
         filas.forEach(function (f) {
-          dest.push({ fecha: x.fecha, semana: f[0], rango: f[1], id: String(f[2]), nombre: X.limpiarTexto(f[3]), importe: Number(f[4]) || 0, comentario: f[5] || '', ciudad: f[5] || '',
-            factura: f[6] || '', fechaFactura: f[7] || '', nit: f[8] || '', autorizacion: f[9] || '', nro: f[10] || '', mes: f[11] || '', gestion: f[12] || '' });
+          var h = { fecha: x.fecha, semana: f[0], rango: f[1], id: String(f[2]), nombre: X.limpiarTexto(f[3]), importe: Number(f[4]) || 0, comentario: f[5] || '', ciudad: f[5] || '',
+            factura: f[6] || '', fechaFactura: f[7] || '', nit: f[8] || '', autorizacion: f[9] || '', nro: f[10] || '', mes: f[11] || '', gestion: f[12] || '' };
+          // Pagado sin factura: vacío o «Pago Retenido» (así lo ponía la hoja de Google). Se muestra «Falta factura» y entra a la lista de facturación.
+          if (dest === l && sinFacturaTxt(h.factura)) {
+            h.sinFactura = true;
+            ['factura', 'fechaFactura', 'nit', 'autorizacion'].forEach(function (k) { if (!String(h[k]).trim() || /RETEN/i.test(String(h[k]))) h[k] = k === 'factura' || /RETEN/i.test(String(h[k])) ? 'Falta factura' : ''; });
+          }
+          dest.push(h);
         });
       });
       D.hist = l; D.histPartes = partes; D.histDeuda = deuda;
@@ -204,10 +210,11 @@
     return (D.facturas || []).filter(function (f) { return f.uid === uid && f.estado === 'aprobada' && f.verificacion && (f.semanas || []).indexOf(semana) >= 0; })
       .sort(function (a, b) { return (b.subidoF || 0) - (a.subidoF || 0); })[0] || null;
   }
+  function sinFacturaTxt(v) { var t = String(v == null ? '' : v).trim(); return !t || /RETEN|FALTA/i.test(t); }
   function nroHist() { var m = 0; (D.hist || []).forEach(function (h) { var n = Number(h.nro); if (n > m) m = n; }); return m; }
   /* Llena las columnas 6-12 de una fila del historial con la factura (devuelve true si cambió) */
   function ponerFactura(fila, f, nro) {
-    if (!f || String(fila[6] || '').trim()) return false;
+    if (!f || !sinFacturaTxt(fila[6])) return false;
     var iso = String(f.fechaEmision || '').slice(0, 10), m = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
     fila[6] = String(f.numero || ''); fila[7] = m ? m[3] + '/' + m[2] + '/' + m[1] : String(f.fechaEmision || '');
     fila[8] = String(f.nitEmisor || ''); fila[9] = String(f.autorizacion || '');
@@ -254,7 +261,7 @@
   }
   function completarFacturasHist2() {
     if (!X.puedeEditar() || !modoControl() || !D.hist || !D.facturas || !D.histPartes) return Promise.resolve(0);
-    var falta = D.hist.filter(function (h) { return !String(h.factura || '').trim() && facturaDelPago(X.idSeguro(h.id), h.semana); });
+    var falta = D.hist.filter(function (h) { return h.sinFactura && facturaDelPago(X.idSeguro(h.id), h.semana); });
     if (!falta.length) return Promise.resolve(0);
     var fechas = {}; falta.forEach(function (h) { fechas[h.fecha] = 1; });
     var docs = D.histPartes.filter(function (p) { return fechas[p.fecha] && p.origen !== 'hojaControl'; }), nro = nroHist(), n = 0;
@@ -712,7 +719,7 @@
       var o = ordenHist(h); if (!(o % 100)) return;
       var x = fila(o), imp = Number(h.importe) || 0; if (!(imp > 0)) return;
       x.hab++; sumar(x.pag, imp); sumar(x.ciu[ciudad(h.ciudad, h.id)], imp);
-      if (h.factura && !/RETEN/i.test(String(h.factura))) { x.conF++; x.verif++; } else { x.falta++; x.retenido++; }
+      if (!h.sinFactura) { x.conF++; x.verif++; } else { x.falta++; x.retenido++; }
     });
     // Semanas abiertas: enviado a pagar, pendiente y no habilitado
     (D.semanas || []).forEach(function (sm) {
@@ -774,19 +781,19 @@
           { t: 'Emitieron factura', clase: 'monto', html: function (x) { return n(x.conF, 'ok') + '<span class="sub num">' + pct(x.conF, x.hab) + '</span>'; } },
           { t: 'Verificadas (RCV)', clase: 'monto', html: function (x) { return n(x.verif); } },
           { t: 'Por verificar u observadas', clase: 'monto', html: function (x) { return n(x.porVer); } },
-          { t: 'Falta emitir factura', clase: 'monto', html: function (x) { return n(x.falta, 'mal') + (x.contax ? '<span class="sub num">' + entero(x.contax) + ' CONTAX debe emitir</span>' : '') + (x.retenido ? '<span class="sub num">' + entero(x.retenido) + ' pagados con retención</span>' : ''); } },
+          { t: 'Falta emitir factura', clase: 'monto', html: function (x) { return n(x.falta, 'mal') + (x.contax ? '<span class="sub num">' + entero(x.contax) + ' CONTAX debe emitir</span>' : '') + (x.retenido ? '<span class="sub num">' + entero(x.retenido) + ' pagados sin factura</span>' : ''); } },
           { t: 'Por excepción (sin factura)', clase: 'monto', html: function (x) { return n(x.excep); } }
         ]);
         tot.total_ = true;
         c.cuerpo.innerHTML = '<div class="herr"><select id="rsGes" aria-label="Gestión">' + gest.map(function (g) { return '<option' + (g === RS.gestion ? ' selected' : '') + '>' + g + '</option>'; }).join('') + '</select>' +
           '<button class="btn sec" id="rsExcel"' + (l.length ? '' : ' disabled') + '>' + ic('descargar') + 'Excel</button></div>' +
-          '<p class="muted mb">Planilla total = Pagado + Enviado a pagar + Pendiente (solo habilitados con importe). «Falta emitir factura» incluye los pagados con retención (sin factura). Los pagos migrados de Sheets toman la ciudad de BDYango.</p>' +
+          '<p class="muted mb">Planilla total = Pagado + Enviado a pagar + Pendiente (solo habilitados con importe). «Falta emitir factura» incluye los pagados sin factura (sin factura). Los pagos migrados de Sheets toman la ciudad de BDYango.</p>' +
           (l.length ? '<div class="tabla-ancha">' + X.tabla(cols, l.concat([tot]), { tam: 200 }) + '</div>' : X.vacio('No hay semanas en esta gestión', ''));
         c.cuerpo.querySelector('#rsGes').addEventListener('change', function () { RS.gestion = this.value; armar(); });
         c.cuerpo.querySelector('#rsExcel').addEventListener('click', function () {
           var cab = ['Semana', 'Gestión', 'Habilitados', 'No habilitados (Bs 0)', 'Planilla total (Bs)', 'Pagado (Bs)', 'Pagados', '% pagado', 'Enviado a pagar (Bs)', 'Enviados', 'Pendiente (Bs)', 'Pendientes',
             'Santa Cruz (Bs)', 'Santa Cruz rep.', 'Cochabamba (Bs)', 'Cochabamba rep.', 'La Paz (Bs)', 'La Paz rep.', 'Sin ciudad (Bs)', 'Sin ciudad rep.',
-            'Emitieron factura', 'Verificadas (RCV)', 'Por verificar u observadas', 'Falta emitir factura', 'CONTAX debe emitir', 'Pagados con retención', 'Por excepción (sin factura)'];
+            'Emitieron factura', 'Verificadas (RCV)', 'Por verificar u observadas', 'Falta emitir factura', 'CONTAX debe emitir', 'Pagados sin factura', 'Por excepción (sin factura)'];
           var row = function (x) { return [x.total_ ? 'TOTAL' : 'SEM ' + (x.orden % 100), x.total_ ? RS.gestion : Math.floor(x.orden / 100), x.hab, x.nohab, X.redondear(x.total), X.redondear(x.pag.t), x.pag.n, x.total ? Math.round(x.pag.t * 100 / x.total) / 100 : 0,
             X.redondear(x.env.t), x.env.n, X.redondear(x.pen.t), x.pen.n, X.redondear(x.ciu.SCZ.t), x.ciu.SCZ.n, X.redondear(x.ciu.CBBA.t), x.ciu.CBBA.n, X.redondear(x.ciu.LPZ.t), x.ciu.LPZ.n, X.redondear(x.ciu[''].t), x.ciu[''].n,
             x.conF, x.verif, x.porVer, x.falta, x.contax, x.retenido, x.excep]; };

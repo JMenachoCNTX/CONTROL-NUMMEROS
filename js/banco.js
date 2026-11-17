@@ -385,7 +385,7 @@
       (D.hist || []).forEach(function (h) {
         if (vistos[String(h.id)] || !(h.importe > 0) || semBanco(h.semana) !== principal) return;
         vistos[String(h.id)] = 1;
-        docs.push({ _id: '', id: h.id, nombre: h.nombre, importe: h.importe, ciudad: h.ciudad, rango: h.rango, _linea: { excepcion: false, factura: h.factura ? { numero: String(h.factura), fecha: h.fechaFactura, nit: String(h.nit || ''), autorizacion: String(h.autorizacion || '') } : null } });
+        docs.push({ _id: '', id: h.id, nombre: h.nombre, importe: h.importe, ciudad: h.ciudad, rango: h.rango, _linea: { excepcion: false, factura: h.factura && !h.sinFactura ? { numero: String(h.factura), fecha: h.fechaFactura, nit: String(h.nit || ''), autorizacion: String(h.autorizacion || '') } : null } });
       });
       docs.sort(function (a, b) { return (Number(a.importe) || 0) - (Number(b.importe) || 0); });
       var pl = { docs: docs, linea: function (s) { return s._linea || enPlanilla[s._id] || (s.estado === 'pagado' || s.estado === 'en_planilla' ? { excepcion: false, factura: null } : null); },
