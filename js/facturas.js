@@ -99,7 +99,11 @@
       filas.push(Object.assign({ r: r, id: String(id), nombre: nombre || (r && r.nombre) || '', celular: (r && r.celular) || '', semana: semana, importe: Number(importe) || 0,
         tipo: tipo, cliente: cli, contador: cli ? 'CONTAX' : 'OTRO', f: f, estado: e, tiene: e === 'aprobada' || e === 'contax' || e === 'subida' }, extra || {}));
     };
-    if (D.repartidores) D.repartidores.forEach(function (r) { (r.pendientes || []).forEach(function (p) { if ((Number(p.importe) || 0) > 0) agregar(r, r.id, r.nombre, p.semana, p.importe, 'pendiente', { rango: p.rango }); }); });
+    if (D.repartidores) D.repartidores.forEach(function (r) {
+      (r.pendientes || []).forEach(function (p) { if ((Number(p.importe) || 0) > 0) agregar(r, r.id, r.nombre, p.semana, p.importe, 'pendiente', { rango: p.rango }); });
+      // Enviados a pagar (en una planilla del banco sin confirmar): también necesitan su factura, por ejemplo los habilitados por excepción
+      (r.enPlanilla || []).forEach(function (p) { if ((Number(p.importe) || 0) > 0) agregar(r, r.id, r.nombre, p.semana, p.importe, 'enviado', { rango: p.rango }); });
+    });
     (D.hist || []).forEach(function (h) {
       if (!h.sinFactura) return;   // pagado sin factura (vacío o «Pago Retenido» de la hoja)
       agregar(repDe(h.id), h.id, h.nombre, h.semana, h.importe, 'retenido', { rango: h.rango, fechaPago: h.fecha });
@@ -129,20 +133,20 @@
     var todas = listaFacturacion(), f = lfFiltradas(todas);
     var ext = todas.filter(function (x) { return x.contador === 'OTRO'; }), ctx = todas.filter(function (x) { return x.contador === 'CONTAX'; });
     var corto = function (v) { v = String(v || ''); return v.length > 14 ? v.slice(0, 6) + '…' + v.slice(-6) : v; };
-    var nf = function (x, k) { return x.f && x.f[k] ? esc(x.f[k]) : '<span class="muted">❌</span>'; };
+    var nf = function (x, k) { return x.f && x.f[k] ? esc(x.f[k]) : x.f && x.f.origen === 'contax' && k === 'numero' ? '<span class="muted" title="Marcada como emitida en el Panel sin anotar el N.º: se completa al cruzar con Impuestos">Sin N.º</span>' : '<span class="muted">❌</span>'; };
     return '<div class="rejilla r3 mb">' + lfCuadro('General', todas, '') + lfCuadro('Externos (otro contador)', ext, 'OTRO') + lfCuadro('CONTAX', ctx, 'CONTAX') + '</div>' +
       (D.panelClientes && D.panelClientes.error ? '<div class="aviso-caja mb">' + ic('ayuda') + '<div>' + esc(D.panelClientes.error) + ' Sin eso no se sabe quién es cliente CONTAX.</div></div>' : '') +
       '<div class="herr"><div class="buscar">' + ic('buscar') + '<input type="search" id="bLf" placeholder="Buscar por nombre, ID, celular, NIT, razón social, autorización o semana" value="' + esc(LF.buscar) + '"></div>' +
         '<select id="sLfVista"><option value="faltan"' + (LF.vista === 'faltan' ? ' selected' : '') + '>Sin factura</option><option value="con"' + (LF.vista === 'con' ? ' selected' : '') + '>Con factura</option><option value=""' + (!LF.vista ? ' selected' : '') + '>Todas</option></select>' +
         '<select id="sLfCont"><option value="">Todos los contadores</option><option value="OTRO"' + (LF.contador === 'OTRO' ? ' selected' : '') + '>Externos (otro)</option><option value="CONTAX"' + (LF.contador === 'CONTAX' ? ' selected' : '') + '>CONTAX</option></select>' +
-        '<select id="sLfTipo"><option value="">Todos los tipos</option><option value="pendiente"' + (LF.tipo === 'pendiente' ? ' selected' : '') + '>Pendientes de pago</option><option value="retenido"' + (LF.tipo === 'retenido' ? ' selected' : '') + '>Pagados sin factura</option><option value="hoja"' + (LF.tipo === 'hoja' ? ' selected' : '') + '>Sistema anterior (2025 y sin pago registrado)</option></select>' +
+        '<select id="sLfTipo"><option value="">Todos los tipos</option><option value="pendiente"' + (LF.tipo === 'pendiente' ? ' selected' : '') + '>Pendientes de pago</option><option value="enviado"' + (LF.tipo === 'enviado' ? ' selected' : '') + '>Enviados a pagar</option><option value="retenido"' + (LF.tipo === 'retenido' ? ' selected' : '') + '>Pagados sin factura</option><option value="hoja"' + (LF.tipo === 'hoja' ? ' selected' : '') + '>Sistema anterior (2025 y sin pago registrado)</option></select>' +
         '<button class="btn sec" id="btnExpLf">' + ic('descargar') + 'Excel</button>' +
       '</div>' +
       '<p class="muted mb">' + entero(f.length) + ' filas · ' + bs(X.redondear(f.reduce(function (s, x) { return s + x.importe; }, 0))) + '</p>' +
       (f.length ? X.tabla([
         { t: 'Celular', html: function (x) { return '<span class="num">' + esc(X.telVisible(x.celular) || '—') + '</span>'; } },
         { t: 'ID', html: function (x) { return '<span class="num">' + esc(x.id) + '</span>'; } },
-        { t: 'Nombre', html: function (x) { return '<b>' + esc(x.nombre) + '</b>' + (x.tipo === 'retenido' ? '<span class="sub">' + X.chip('neutro', 'Pagado sin factura ' + X.fecha(x.fechaPago)) + '</span>' : x.tipo === 'hoja' ? '<span class="sub">' + X.chip('neutro', /G?2025$/.test(String(x.semana)) ? 'Gestión 2025 · pago no cargado en CONTROL' : 'Sistema anterior · sin pago registrado') + '</span>' : ''); } },
+        { t: 'Nombre', html: function (x) { return '<b>' + esc(x.nombre) + '</b>' + (x.tipo === 'retenido' ? '<span class="sub">' + X.chip('neutro', 'Pagado sin factura ' + X.fecha(x.fechaPago)) + '</span>' : x.tipo === 'enviado' ? '<span class="sub">' + X.chip('pend', 'Enviado a pagar') + '</span>' : x.tipo === 'hoja' ? '<span class="sub">' + X.chip('neutro', /G?2025$/.test(String(x.semana)) ? 'Gestión 2025 · pago no cargado en CONTROL' : 'Sistema anterior · sin pago registrado') + '</span>' : ''); } },
         { t: 'Importe', clase: 'monto', html: function (x) { return '<b>' + bs(x.importe) + '</b>'; } },
         { t: 'Contador', html: function (x) { return x.cliente ? X.chip('contax', 'CONTAX') : '<span class="muted">Otro</span>'; } },
         { t: 'Semana', html: function (x) { return esc(X.semanaCorta(x.semana)); } },
@@ -171,7 +175,7 @@
     if (be) be.addEventListener('click', function () {
       X.excel([{ nombre: 'Lista de facturación', filas: [['Celular', 'ID', 'Nombre', 'Importe total', 'Contador', 'Semana', 'Rango', 'Tipo', '¿Emitida?', 'Emisor', 'N.º factura', 'Fecha', 'NIT', 'Autorización', 'Estado']].concat(f.map(function (x) {
         var k = x.f || {};
-        return [X.telVisible(x.celular), x.id, x.nombre, x.importe, x.contador, x.semana, x.rango || '', x.tipo === 'retenido' ? 'Pagado sin factura' : x.tipo === 'hoja' ? (/G?2025$/.test(String(x.semana)) ? 'Gestión 2025 (pago no cargado en CONTROL)' : 'Sistema anterior (sin pago registrado)') : 'Pendiente de pago', ESTADO_LF[x.estado][1],
+        return [X.telVisible(x.celular), x.id, x.nombre, x.importe, x.contador, x.semana, x.rango || '', x.tipo === 'retenido' ? 'Pagado sin factura' : x.tipo === 'enviado' ? 'Enviado a pagar' : x.tipo === 'hoja' ? (/G?2025$/.test(String(x.semana)) ? 'Gestión 2025 (pago no cargado en CONTROL)' : 'Sistema anterior (sin pago registrado)') : 'Pendiente de pago', ESTADO_LF[x.estado][1],
           k.razonEmisor || '', k.numero || '', k.fechaEmision || '', k.nitEmisor || '', k.autorizacion || '', x.f ? (x.f.origen === 'contax' ? 'Emitida por CONTAX' : (ESTADOS[x.f.estado] || [0, x.f.estado])[1]) : ''];
       })) }], 'Lista-facturacion-' + X.hoyISO());
     });
