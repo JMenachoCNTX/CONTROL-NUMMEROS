@@ -91,7 +91,7 @@
     // Con copia local: solo se leen las que cambiaron (las que pasaron a «pagado» salen de la lista)
     return X.leerConCopia('semanas', { completa: col().where('estado', 'in', ABIERTOS), cambios: col(), forzar: forzar,
       vale: function (x) { return ABIERTOS.indexOf(x.estado) >= 0; } }).then(function (res) {
-      D.semanas = Object.keys(res.docs).map(function (k) { var x = res.docs[k]; x._id = k; return x; });
+      D.semanas = Object.keys(res.docs).map(function (k) { var x = res.docs[k]; x._id = k; if (x.nombre) x.nombre = X.limpiarTexto(x.nombre); return x; });
       aplicar();
     }, function (e) {
       console.error('Semanas:', e); D.semanas = [];
@@ -168,7 +168,7 @@
         // «hojaControl»: semanas que deben factura según la hoja CONTROL, sin pago registrado (no cuentan como pagos)
         var dest = x.origen === 'hojaControl' ? deuda : l;
         filas.forEach(function (f) {
-          dest.push({ fecha: x.fecha, semana: f[0], rango: f[1], id: String(f[2]), nombre: f[3], importe: Number(f[4]) || 0, comentario: f[5] || '', ciudad: f[5] || '',
+          dest.push({ fecha: x.fecha, semana: f[0], rango: f[1], id: String(f[2]), nombre: X.limpiarTexto(f[3]), importe: Number(f[4]) || 0, comentario: f[5] || '', ciudad: f[5] || '',
             factura: f[6] || '', fechaFactura: f[7] || '', nit: f[8] || '', autorizacion: f[9] || '', nro: f[10] || '', mes: f[11] || '', gestion: f[12] || '' });
         });
       });
@@ -344,7 +344,7 @@
       if (r) { r.importe = X.redondear(r.importe + imp); r.ganancias = X.redondear(r.ganancias + gan); r.importeAnterior = X.redondear(r.importeAnterior + antP); r.repetido = (r.repetido || 1) + 1; return; }
       porDoc[k] = r = {
         doc: k, id: id, uid: uid, n: n, anio: anio, orden: anio * 100 + n, importe: X.redondear(imp), ganancias: gan, importeAnterior: antP,
-        nombre: o.mapa.nombre >= 0 ? String(f[o.mapa.nombre]).trim() : '', celular: o.mapa.celular >= 0 ? String(f[o.mapa.celular]).replace(/\D/g, '') : '',
+        nombre: o.mapa.nombre >= 0 ? X.limpiarTexto(f[o.mapa.nombre]) : '', celular: o.mapa.celular >= 0 ? String(f[o.mapa.celular]).replace(/\D/g, '') : '',
         rango: o.mapa.rango >= 0 && String(f[o.mapa.rango]).trim() ? String(f[o.mapa.rango]).trim() : o.rangoFijo
       };
     });

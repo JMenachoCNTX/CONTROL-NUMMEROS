@@ -72,7 +72,7 @@
   var MAPA = { clave: '', m: {}, n: {}, act: [] };
   function porIdYango() {
     var P = D.panelClientes; if (!P || !P.lista) return {};
-    var clave = (P.leido ? P.leido.getTime() : 0) + '|' + ((D.bdyango && D.bdyango.lista) || []).length + '|' + (D.repartidores ? D.repartidores.size : 0);
+    var clave = (P.leido ? P.leido.getTime() : 0) + '|' + ((D.bdyango && D.bdyango.lista) || []).length + '|' + (D.repartidores ? D.repartidores.size : 0) + '|' + (D.padron ? 1 : 0);
     if (MAPA.clave !== clave) {
       MAPA.m = {}; MAPA.n = {}; MAPA.act = activosPanel();
       MAPA.act.forEach(function (c) { if (c.idYango) MAPA.m[c.idYango] = c; c.pal = palabras(c.nombre); });
@@ -94,9 +94,36 @@
     };
     // Con el nombre de la ficha y, si no sale, con el de BDYango (puede estar escrito distinto)
     var y = ((D.bdyango && D.bdyango.lista) || []).filter(function (b) { return b.id === id; })[0];
-    return (MAPA.n[id] = buscar(r.nombre) || (y && y.nombre && X.normal(y.nombre) !== X.normal(r.nombre) ? buscar(y.nombre) : null));
+    return (MAPA.n[id] = buscar(r.nombre) || (y && y.nombre && X.normal(y.nombre) !== X.normal(r.nombre) ? buscar(y.nombre) : null) || porOtroId(id, m));
   }
-  CTRL.clientesCONTAX = { cargar: cargarPanelClientes, porIdYango: porIdYango, porRepartidor: porRepartidor };
+  /* Un mismo repartidor puede tener 2 ID (uno por ciudad). Si otro ID con su mismo CI o NIT (BDYango o base propia)
+     es cliente CONTAX, este también lo es: así se le emiten las facturas de ambos ID. */
+  var HER = { clave: '', idx: {} };
+  function otrosIds(id) {
+    var bl = (D.bdyango && D.bdyango.lista) || [], pm = D.padron || {}, clave = bl.length + '|' + (D.padron ? 1 : 0);
+    if (HER.clave !== clave) {
+      HER.clave = clave; HER.idx = {}; HER.de = {};
+      var pon = function (x) {
+        if (!x || !x.id) return;
+        var ci = String(x.ci || '').replace(/\D/g, ''), nit = String(x.nit || '').replace(/\D/g, ''), k = [];
+        if (ci.length >= 5) k.push('C' + ci);
+        if (nit.length >= 5) k.push('N' + nit);
+        k.forEach(function (c) { var l = HER.idx[c] || (HER.idx[c] = []); if (l.indexOf(String(x.id)) < 0) l.push(String(x.id)); });
+        HER.de[String(x.id)] = (HER.de[String(x.id)] || []).concat(k);
+      };
+      Object.keys(pm).forEach(function (k) { pon(pm[k]); });
+      bl.forEach(pon);
+    }
+    var otros = {};
+    (HER.de[id] || []).forEach(function (c) { (HER.idx[c] || []).forEach(function (o) { if (o !== id) otros[o] = 1; }); });
+    return Object.keys(otros);
+  }
+  function porOtroId(id, m) {
+    var l = otrosIds(id);
+    for (var i = 0; i < l.length; i++) if (m[l[i]]) return m[l[i]];
+    return null;
+  }
+  CTRL.clientesCONTAX = { cargar: cargarPanelClientes, porIdYango: porIdYango, porRepartidor: porRepartidor, otrosIds: otrosIds };
   function filtrarClientes(l) {
     var b = X.normal(CL.buscar);
     return l.filter(function (c) {

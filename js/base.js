@@ -87,7 +87,16 @@
     return fechaHora(d);
   }
   function hoyISO() { return new Date(Date.now() - 4 * 3600e3).toISOString().slice(0, 10); }
-  function normal(t) { return String(t || '').toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim(); }
+  /* Las planillas de Yango (hechas en Rusia) a veces traen letras rusas o griegas que se ven iguales a las nuestras
+     (ej. «Еrland» con la Е rusa) y caracteres invisibles. Se cambian por las letras normales para que se pueda buscar y cruzar. */
+  var HOMO = { 'А': 'A', 'В': 'B', 'Е': 'E', 'Ё': 'E', 'З': '3', 'К': 'K', 'М': 'M', 'Н': 'H', 'О': 'O', 'Р': 'P', 'С': 'C', 'Т': 'T', 'У': 'Y', 'Х': 'X', 'І': 'I', 'Ј': 'J', 'Ѕ': 'S',
+    'а': 'a', 'е': 'e', 'ё': 'e', 'о': 'o', 'р': 'p', 'с': 'c', 'у': 'y', 'х': 'x', 'і': 'i', 'ј': 'j', 'ѕ': 's', 'һ': 'h', 'ԁ': 'd', 'ԛ': 'q', 'ԝ': 'w',
+    'Α': 'A', 'Β': 'B', 'Ε': 'E', 'Ζ': 'Z', 'Η': 'H', 'Ι': 'I', 'Κ': 'K', 'Μ': 'M', 'Ν': 'N', 'Ο': 'O', 'Ρ': 'P', 'Τ': 'T', 'Υ': 'Y', 'Χ': 'X', 'ο': 'o', 'ν': 'v' };
+  function limpiarTexto(t) {
+    return String(t == null ? '' : t).replace(/[\u200B-\u200F\u202A-\u202E\u2060-\u2064\uFEFF\u00AD]/g, '').replace(/[\u00A0\u2000-\u200A\u202F\u205F\u3000]/g, ' ')
+      .replace(/[\u0370-\u03FF\u0400-\u052F]/g, function (c) { return HOMO[c] || c; }).replace(/\s+/g, ' ').trim();
+  }
+  function normal(t) { return limpiarTexto(t).toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim(); }
   function idSeguro(id) { return String(id == null ? '' : id).trim().replace(/[^a-zA-Z0-9._-]/g, '_'); }
   function nuevoId() {
     var a = new Uint8Array(6); (window.crypto || window.msCrypto).getRandomValues(a);
@@ -803,7 +812,7 @@
     var col = dbP.collection('repartidores');
     return leerConCopia('repartidores', { completa: col, cambios: col, forzar: forzar }).then(function (res) {
       var m = new Map();
-      Object.keys(res.docs).forEach(function (id) { var x = res.docs[id]; x.uid = id; m.set(id, x); });
+      Object.keys(res.docs).forEach(function (id) { var x = res.docs[id]; x.uid = id; if (x.nombre) x.nombre = limpiarTexto(x.nombre); m.set(id, x); });
       D.repartidores = m; D.cargadoEn = new Date();
       // Con fuentePagos 'control', los pendientes salen de «semanas»; el historial, de «historialPagos» (js/semanas.js)
       return CTRL.semanas ? Promise.all([CTRL.semanas.cargar(forzar), CTRL.semanas.cargarHistorial()]) : null;
@@ -914,7 +923,7 @@
     iniciar: iniciar, pagina: pagina, ir: ir, refrescar: refrescar, pintarMenu: pintarMenu, recargarTodo: recargarTodo, leerConCopia: leerConCopia, olvidarCopia: olvidarCopia,
     cargarRepartidores: cargarRepartidores, cargarContenido: cargarContenido, cargarControl: cargarControl,
     esc: esc, bs: bs, entero: entero, numero: numero, redondear: redondear, fecha: fecha, fechaHora: fechaHora, hace: hace, aFecha: aFecha,
-    hoyISO: hoyISO, normal: normal, idSeguro: idSeguro, nuevoId: nuevoId, telVisible: telVisible, wa: wa, aviso: aviso, copiar: copiar,
+    hoyISO: hoyISO, normal: normal, limpiarTexto: limpiarTexto, idSeguro: idSeguro, nuevoId: nuevoId, telVisible: telVisible, wa: wa, aviso: aviso, copiar: copiar,
     servidor: servidor, puedeEditar: puedeEditar, esAdmin: esAdmin, esDueno: esDueno, ic: ic,
     cargaN: cargaN, cargaCifras: cargaCifras, cargaBarra: cargaBarra, anillo: anillo, anilloBoton: anilloBoton, esqueleto: esqueleto, clasicos: clasicos, textoClasicos: textoClasicos,
     verTabla: verTabla, cajon: cajon, ventana: ventana, confirmar: confirmar, formulario: formulario, activarComunes: activarComunes,

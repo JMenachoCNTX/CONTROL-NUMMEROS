@@ -164,7 +164,7 @@
     return { forma: 3, entidad: 0, desconocido: true };
   }
   function filasBDYango(hojas) {
-    var porId = {}, sinBanco = 0, desconocidos = {}, yolo = 0, hojasUsadas = [];
+    var porId = {}, sinBanco = 0, desconocidos = {}, yolo = 0, hojasUsadas = [], noActivas = 0;
     hojas.forEach(function (h) {
       var enc = h.enc.map(X.normal), c = function (re) { for (var i = 0; i < enc.length; i++) if (re.test(enc[i])) return i; return -1; };
       var k = { id: c(/^ID\b/), nom: c(/^NOMBRE \(COMPLETO\)|^NOMBRE$/), ape: c(/^APELLIDO/), ci: c(/^CI$/), nit: c(/^NIT$/), tel: c(/^TELEFONO/),
@@ -176,11 +176,21 @@
       var ciudad = /SCZ/i.test(h.nombre) ? 'SCZ' : /CBBA/i.test(h.nombre) ? 'CBBA' : /LPZ/i.test(h.nombre) ? 'LPZ' : '';
       h.filas.forEach(function (f) {
         var id = String(f[k.id] == null ? '' : f[k.id]).trim().replace(/\.0+$/, ''); if (!/^\d{4,}$/.test(id)) return;
+        // Solo cuentan las filas «Activado». Las de «Visita», «Solicitante» o «Candidato» no son datos del repartidor;
+        // «Desactivado» y «Limitado» solo cambian su estado si ya estaba activado.
+        if (k.est >= 0) {
+          var est = X.normal(f[k.est]);
+          if (!/^ACTIVAD/.test(est)) {
+            if (porId[id] && /^(DESACTIVAD|LIMITAD)/.test(est)) porId[id].estadoYango = String(f[k.est]).trim();
+            else noActivas++;
+            return;
+          }
+        }
         var x = porId[id] || (porId[id] = { id: id, registros: 0 });
         var pon = function (campo, v) { v = String(v == null ? '' : v).trim(); if (v) x[campo] = v; };
         x.registros++; x.ciudad = ciudad;
         [['fecha', 'fecha'], ['correo', 'correo'], ['esp', 'especialista'], ['mat', 'matricula'], ['roe', 'roe'], ['seg', 'seguroVence']].forEach(function (p) { if (k[p[0]] >= 0) pon(p[1], f[k[p[0]]]); });
-        pon('nombre', [k.nom >= 0 ? f[k.nom] : '', k.ape >= 0 ? f[k.ape] : ''].join(' ').replace(/\s+/g, ' ').trim());
+        pon('nombre', X.limpiarTexto([k.nom >= 0 ? f[k.nom] : '', k.ape >= 0 ? f[k.ape] : ''].join(' ')));
         if (k.ci >= 0) pon('ci', String(f[k.ci]).replace(/\.0+$/, ''));
         if (k.nit >= 0) pon('nit', String(f[k.nit]).replace(/\D/g, ''));
         if (k.tel >= 0) pon('telefono', String(f[k.tel]).replace(/\D/g, ''));
@@ -201,7 +211,7 @@
       cuentas[X.idSeguro(id)] = { id: id, nombre: x.nombre || '', ci: x.ci || '', cuenta: x.cuenta, forma: b.forma, moneda: b.forma === 1 ? 0 : 1, entidad: b.entidad,
         sucursal: b.forma === 1 ? 0 : 'SCZ', banco: x.bancoTexto, telefono: x.telefono || '', telegram: x.telegram || '', estadoYango: x.estadoYango || '', nit: x.nit || '' };
     });
-    return { cuentas: cuentas, todos: porId, total: Object.keys(porId).length, sinBanco: sinBanco, desconocidos: desconocidos, yolo: yolo, hojas: hojasUsadas };
+    return { cuentas: cuentas, todos: porId, noActivas: noActivas, total: Object.keys(porId).length, sinBanco: sinBanco, desconocidos: desconocidos, yolo: yolo, hojas: hojasUsadas };
   }
   function importarBDYango(alTerminar) {
     X.ventana('Importar desde BDYango', 'Sube el Excel de «BOL Registro Activación» (Archivo → Descargar → Microsoft Excel). Se actualizan los datos bancarios de cada repartidor.',
@@ -637,7 +647,7 @@
     t: 'DBYango', i: 'base', orden: 5, sec: 'Operación',
     render: function () {
       var B = D.bdyango;
-      var cab = X.titulo('DBYango', 'Datos de «BOL Registro Activación» (Yango), leídos en vivo' + (B && B.leido ? ' · ' + X.hace(B.leido) : '') + '. Una fila por repartidor (su último registro). Sus cuentas son las que usa la planilla del banco.',
+      var cab = X.titulo('DBYango', 'Datos de «BOL Registro Activación» (Yango), leídos en vivo. Solo cuentan las filas «Activado» (las de «Visita», «Solicitante» o «Candidato» no se toman)' + (B && B.leido ? ' · ' + X.hace(B.leido) : '') + '. Una fila por repartidor (su último registro). Sus cuentas son las que usa la planilla del banco.',
         (X.puedeEditar() ? '<button class="btn" id="byAvisar">' + ic('campana') + 'Avisar semana</button>' : '') +
         '<button class="btn sec" id="byPadron">' + ic('cliente') + 'Base propia</button><button class="btn sec" id="byExc">' + ic('descargar') + 'Excel de esta lista</button><button class="btn sec" id="byRec">' + ic('recargar') + 'Leer de nuevo</button>');
       if (!B) return cab + '<div class="card">' + X.cargaBarra('BDYango', 'Leyendo la hoja de Yango…') + '</div>';
