@@ -94,7 +94,7 @@
     };
     // Con el nombre de la ficha y, si no sale, con el de BDYango (puede estar escrito distinto)
     var y = ((D.bdyango && D.bdyango.lista) || []).filter(function (b) { return b.id === id; })[0];
-    return (MAPA.n[id] = buscar(r.nombre) || (y && y.nombre && X.normal(y.nombre) !== X.normal(r.nombre) ? buscar(y.nombre) : null) || porOtroId(id, m));
+    return (MAPA.n[id] = buscar(r.nombre) || (y && y.nombre && X.normal(y.nombre) !== X.normal(r.nombre) ? buscar(y.nombre) : null) || porOtroId(id, m, [r.nombre, y && y.nombre]));
   }
   /* Un mismo repartidor puede tener 2 ID (uno por ciudad). Si otro ID con su mismo CI o NIT (BDYango o base propia)
      es cliente CONTAX, este también lo es: así se le emiten las facturas de ambos ID. */
@@ -118,9 +118,15 @@
     (HER.de[id] || []).forEach(function (c) { (HER.idx[c] || []).forEach(function (o) { if (o !== id) otros[o] = 1; }); });
     return Object.keys(otros);
   }
-  function porOtroId(id, m) {
+  /* Además del CI o NIT, deben coincidir al menos 2 palabras del nombre (hay CI/NIT repetidos entre personas distintas) */
+  function porOtroId(id, m, nombres) {
+    var mias = {}; (nombres || []).forEach(function (n) { palabras(n).forEach(function (w) { mias[w] = 1; }); });
     var l = otrosIds(id);
-    for (var i = 0; i < l.length; i++) if (m[l[i]]) return m[l[i]];
+    for (var i = 0; i < l.length; i++) {
+      var c = m[l[i]]; if (!c) continue;
+      var comunes = (c.pal || palabras(c.nombre)).filter(function (w, k, a) { return mias[w] && a.indexOf(w) === k; }).length;
+      if (comunes >= 2) return c;
+    }
     return null;
   }
   CTRL.clientesCONTAX = { cargar: cargarPanelClientes, porIdYango: porIdYango, porRepartidor: porRepartidor, otrosIds: otrosIds };
