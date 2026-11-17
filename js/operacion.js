@@ -14,7 +14,11 @@
     var t = String(s || ''), y = (t.match(/(20\d\d)/) || [])[1], w = (t.replace(/20\d\d/, '').match(/(\d{1,2})/) || [])[1];
     return (Number(y) || 0) * 100 + (Number(w) || 0);
   }
-  function semanaCorta(s) { var w = (String(s || '').replace(/20\d\d/, '').match(/(\d{1,2})/) || [])[1]; return w ? 'Sem ' + w : String(s || '—'); }
+  /* «SEM13G2025» → «Sem 13 · 2025»: la gestión solo se muestra si no es la actual */
+  function semanaCorta(s) {
+    var t = String(s || ''), a = (t.match(/20\d\d/) || [])[0], w = (t.replace(/20\d\d/, '').match(/(\d{1,2})/) || [])[1];
+    return w ? 'Sem ' + w + (a && Number(a) !== new Date().getFullYear() ? ' · ' + a : '') : String(s || '—');
+  }
   function lista() { return D.repartidores ? Array.from(D.repartidores.values()).filter(function (r) { return !r.prueba; }) : []; }
 
   /* Facturas vigentes de un repartidor por semana (la más reciente manda) */
