@@ -52,7 +52,7 @@ Google Sheets ──cada 15 min──▶ Portal (portal-nummeros) ◀───�
 En `config.js`, `reglaPago: 'todo'` (se retiene todo si falta una factura) o `'semana'` (se paga cada semana con su factura aprobada).
 
 ## Dominio propio (opcional)
-1. En **Squarespace → Dominios → contaxbolivia.com → DNS → Registros personalizados** agrega: Host `controlnummeros`, Tipo `CNAME`, Datos `jmenachocntx.github.io`.
+1. En **Squarespace → Dominios → contaxbolivia.com → DNS → Registros personalizados** agrega: Host `nummeroscontrol`, Tipo `CNAME`, Datos `jmenachocntx.github.io`.
 2. En GitHub → este repositorio → **Settings → Pages → Custom domain**: `nummeroscontrol.contaxbolivia.com` → Save → luego **Enforce HTTPS**.
 
 El dominio ya está autorizado en Firebase (en los dos proyectos).
