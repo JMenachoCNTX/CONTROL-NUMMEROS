@@ -257,7 +257,7 @@
   });
 
   /* ══════════ PAGOS ══════════ */
-  var P = { filtro: 'todos', semana: '', ciudad: '', cliente: '', buscar: '', pag: 0 };
+  var P = { filtro: 'todos', semana: '', ciudad: '', cliente: '', buscar: '', pag: 0, planilla: '' };
   /* Pestaña «Enviado a pagar»: selección y fecha de cada planilla (se lee una vez) */
   var EP = { sel: {}, fechas: null, cargando: false, lista: [] };
   function fechasPlanillas() {
@@ -267,9 +267,12 @@
       EP.cargando = false; if (P.filtro === 'enviado') X.refrescar();
     }, function (e) { console.warn(e); EP.fechas = {}; EP.cargando = false; });
   }
+  /* Pagos de una planilla que siguen «Enviado a pagar» (sin confirmar) */
+  function enviadosDe(id) { return (D.semanas || []).filter(function (s) { return s.estado === 'en_planilla' && s.planilla === id; }); }
   function filtrarEnviados(envL) {
     var b = X.normal(P.buscar || '');
     return envL.filter(function (s) {
+      if (P.planilla && s.planilla !== P.planilla) return false;   // abierta desde «Planillas generadas» → «Ver pagos»
       if (P.semana && s.semana !== P.semana) return false;
       if (P.ciudad && (s.ciudad || 'sin') !== P.ciudad) return false;
       if (P.cliente) { var r = D.repartidores && D.repartidores.get(s.uid || X.idSeguro(s.id)); if (!!(r && X.clienteDe(r)) !== (P.cliente === 'si')) return false; }
@@ -290,6 +293,9 @@
         'Lo normal es confirmarlos con «Conciliar extracto» (en «Planillas generadas»). Aquí puedes elegir algunos y ' +
         'volverlos a «Pendiente de pago» (por ejemplo, si rebotaron o no salieron: entran en la próxima planilla) o marcarlos como pagados si ya se pagaron.' +
         (puede ? '' : ' Solo un administrador puede cambiarlos.') + '</div></div>' +
+      (P.planilla ? '<div class="aviso-caja mb">' + ic('filtro') + '<div><b>Solo los pagos de la planilla «' + esc((EP.fechas && EP.fechas[P.planilla] && EP.fechas[P.planilla].archivo) || 'elegida') + '»</b>' +
+        'Elige los que ya se pagaron y márcalos como pagados con la fecha del pago, o vuelve a pendiente los que no salieron.' +
+        ' <button class="btn sec chico" id="epVerTodas" style="margin-top:6px">Ver los de todas las planillas</button></div></div>' : '') +
       (puede && l.length ? '<div class="herr" style="flex-wrap:wrap;gap:8px;align-items:center"><span id="epResumen" class="muted"></span>' +
         '<span class="fila-acc" style="flex-wrap:wrap"><button class="btn sec chico" id="epTodos">Seleccionar todos (' + entero(l.length) + ')</button>' +
         '<button class="btn sec chico" id="epNinguno">Quitar selección</button>' +
@@ -321,6 +327,7 @@
     var bt = el.querySelector('#epTodos'); if (bt) bt.addEventListener('click', function () { marcarTodos(true); });
     var bn = el.querySelector('#epNinguno'); if (bn) bn.addEventListener('click', function () { marcarTodos(false); });
     var limpiar = function () { EP.sel = {}; };
+    var vt = el.querySelector('#epVerTodas'); if (vt) vt.addEventListener('click', function () { P.planilla = ''; P.pag = 0; EP.sel = {}; X.refrescar(); });
     var bp = el.querySelector('#epPend'); if (bp) bp.addEventListener('click', function () { var d = resumen(); if (d.length) SM.enviadosAPendiente(d, limpiar); });
     var bg = el.querySelector('#epPag'); if (bg) bg.addEventListener('click', function () { var d = resumen(); if (d.length) SM.enviadosPagados(d, limpiar); });
     el.querySelectorAll('[data-epuno]').forEach(function (b) { b.addEventListener('click', function (ev) {
@@ -402,7 +409,7 @@
     },
     despues: function (el) {
       var ev = D.repartidores ? lista().map(evaluar).filter(function (e) { return e.semanas.length; }) : [];
-      el.querySelectorAll('[data-filtro]').forEach(function (b) { b.addEventListener('click', function () { P.filtro = b.getAttribute('data-filtro'); P.pag = 0; X.refrescar(); if (b.classList.contains('kpi')) X.verTabla(); }); });
+      el.querySelectorAll('[data-filtro]').forEach(function (b) { b.addEventListener('click', function () { P.filtro = b.getAttribute('data-filtro'); P.pag = 0; P.planilla = ''; X.refrescar(); if (b.classList.contains('kpi')) X.verTabla(); }); });
       var bq = el.querySelector('#bPagos'); if (bq) bq.addEventListener('input', debounce(function () { P.buscar = bq.value; P.pag = 0; X.refrescar(); setFoco('#bPagos'); }, 300));
       var ss = el.querySelector('#sSemana'); if (ss) ss.addEventListener('change', function () { P.semana = ss.value; P.pag = 0; X.refrescar(); });
       var sl = el.querySelector('#sCliente'); if (sl) sl.addEventListener('change', function () { P.cliente = sl.value; P.pag = 0; X.refrescar(); });
@@ -512,6 +519,7 @@
         { t: 'Total', clase: 'monto', html: function (x) { return '<b>' + bs(x.total) + '</b>'; } },
         { t: 'Estado', html: function (x) {
           return (x.estado === 'pagada' ? X.chip('ok', 'Pagada ' + X.fecha(x.fechaPago)) : x.estado === 'enviada' ? X.chip('pend', x.conciliacion ? 'Conciliada en parte' : 'Por confirmar') : x.estado === 'anulada' ? X.chip('neutro', 'Anulada') : X.chip('neutro', 'Registro')) +
+            (x.estado === 'enviada' && D.semanas ? ' ' + (enviadosDe(x._id).length ? X.chip('pend', entero(enviadosDe(x._id).length) + ' sin confirmar') : X.chip('ok', 'Todos resueltos')) : '') +
             ((x.rebotados || []).length ? ' ' + X.chip('mal', entero(x.rebotados.length) + ' rebotados') : '') + ((x.sinCuenta || []).length ? ' ' + X.chip('pend', entero(x.sinCuenta.length) + ' sin cuenta') : '');
         } },
         { t: '', html: function (x) {
@@ -519,6 +527,7 @@
           return '<div class="fila-acc"><button class="btn sec chico" data-bajar="' + esc(x._id) + '">' + ic('descargar') + (x.lineas ? 'Banco' : 'Excel') + '</button>' +
             (x.lineas ? '<button class="btn sec chico" data-detalle="' + esc(x._id) + '">' + ic('descargar') + 'Detalle</button>' : '') +
             (x.lineas ? '<button class="btn sec chico" data-pdf="' + esc(x._id) + '">' + ic('grafico') + 'PDF</button>' : X.semanas ? '<button class="btn sec chico" data-reporte="' + esc(x._id) + '">' + ic('grafico') + 'Gráficos</button>' : '') +
+            (X.semanas && x.estado === 'enviada' && enviadosDe(x._id).length ? '<button class="btn chico" data-verpagos="' + esc(x._id) + '">' + ic('pagos') + 'Ver pagos (' + entero(enviadosDe(x._id).length) + ')</button>' : '') +
             (conf && x.lineas ? '<button class="btn chico" data-conciliar="' + esc(x._id) + '">' + ic('cruzar') + 'Conciliar extracto</button>' : '') +
             (conf ? '<button class="btn sec chico" data-confirmar="' + esc(x._id) + '">' + ic('check') + 'Pago confirmado</button><button class="btn sec chico" data-anular="' + esc(x._id) + '">Anular</button>' : '') + '</div>';
         } }
@@ -528,6 +537,10 @@
       c.cuerpo.querySelectorAll('[data-pdf]').forEach(function (b) { b.addEventListener('click', function () { X.reportePdf(buscarP(b, 'data-pdf')).catch(function (e) { console.error(e); X.aviso(e.message || 'No se pudo generar el PDF.'); }); }); });
       c.cuerpo.querySelectorAll('[data-detalle]').forEach(function (b) { b.addEventListener('click', function () { X.banco.detalleExcel(buscarP(b, 'data-detalle')); }); });
       c.cuerpo.querySelectorAll('[data-conciliar]').forEach(function (b) { b.addEventListener('click', function () { X.banco.conciliar(buscarP(b, 'data-conciliar'), c.cerrar); }); });
+      c.cuerpo.querySelectorAll('[data-verpagos]').forEach(function (b) { b.addEventListener('click', function () {
+        P.planilla = b.getAttribute('data-verpagos'); P.filtro = 'enviado'; P.pag = 0; EP.sel = {}; c.cerrar();
+        if (S.pagina === 'pagos') X.refrescar(); else X.ir('pagos');
+      }); });
       c.cuerpo.querySelectorAll('[data-confirmar]').forEach(function (b) { b.addEventListener('click', function () { X.semanas.confirmarPago(buscarP(b, 'data-confirmar'), c.cerrar); }); });
       c.cuerpo.querySelectorAll('[data-anular]').forEach(function (b) { b.addEventListener('click', function () { X.semanas.anularPlanilla(buscarP(b, 'data-anular'), c.cerrar); }); });
       c.cuerpo.querySelectorAll('[data-bajar]').forEach(function (b) {

@@ -965,7 +965,9 @@
     var docs = docsDe(p);
     X.ventana('Pago confirmado por Miltagor', entero(p.cantidad) + ' repartidores · ' + bs(p.total),
       '<div class="fm"><div class="fila"><label for="cpFecha">Fecha del pago</label><input id="cpFecha" type="date" value="' + X.hoyISO() + '"></div></div>' +
-      '<div class="aviso-caja">' + ic('ayuda') + '<div><b>Qué pasa al confirmar</b>Las ' + entero(docs.length) + ' semanas de esta planilla pasan a «pagado», salen de pendientes, entran al historial y el repartidor recibe el aviso «Recibiste tu pago».</div></div>',
+      '<div class="aviso-caja">' + ic('ayuda') + '<div><b>Qué pasa al confirmar</b>Úsalo cuando Miltagor confirma que pagó <b>toda</b> la planilla y no tienes el extracto en Excel. ' +
+        'Los <b>' + entero(enviados().filter(function (s) { return s.planilla === p._id; }).length) + ' pagos</b> de esta planilla que siguen «Enviado a pagar» pasan a «pagado» con esta fecha, entran al historial y el repartidor recibe el aviso «Recibiste tu pago». ' +
+        'Los que rebotaron o ya volvieron a pendiente no se tocan. Si solo se pagaron algunos, usa «Ver pagos» y elige cuáles.</div></div>',
       '<button class="btn sec" data-cerrar>Cancelar</button><button class="btn" data-ok>' + ic('check') + 'Confirmar pago</button>',
       function (v, cerrar) {
         var ok = v.querySelector('[data-ok]');
