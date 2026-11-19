@@ -167,11 +167,19 @@
     if (fe !== dia) return fe < dia;
     return !/^\d{2}:\d{2}$/.test(f.horaEmision || '') || f.horaEmision <= String(C.corte.hora).padStart(2, '0') + ':00';
   }
-  /* Factura del repartidor que llegó después del corte (va a la próxima planilla). todas: también las de cortes anteriores (marca de la subida) */
+  /* ¿Ya se generó la planilla del corte c antes del momento ms? Si se generó, lo que se sube después ya es para el PRÓXIMO corte
+     (a tiempo). Sin la lista de planillas (todavía cargando) se usa la regla anterior: todo lo subido después del corte es tardío. */
+  function planillaHecha(c, ms) {
+    return (D.planillasCreadas || []).some(function (t) { return t > c && t <= ms; });
+  }
+  /* Factura del repartidor que llegó después del corte (va a la próxima planilla): se subió después de un jueves 18:00 y ANTES de
+     generar la planilla de ese corte, o sea que esa planilla salió sin ella. Lo subido después de generar la planilla es para el
+     próximo corte. todas: también las de cortes anteriores (marca de la subida) */
   function facturaTarde(f, todas) {
     if (!f || f.origen === 'contax' || f.origen === 'impuestos' || f.origen === 'migracion' || !f.subidoF) return false;
-    var tarde = todas ? (!!f.fueraDeCorte || f.subidoF.getTime() > ultimoCorte()) : f.subidoF.getTime() > ultimoCorte();
-    return tarde && !emitidaATiempo(f);
+    var ms = f.subidoF.getTime(), c = corteAntesDe(ms);
+    var tarde = !planillaHecha(c, ms) && (todas || c >= ultimoCorte());
+    return (tarde || (todas && !!f.fueraDeCorte)) && !emitidaATiempo(f);
   }
   function tramiteAbierto(t) {
     var e = X.normal(t.estado + ' ' + t.resolucion);
@@ -487,6 +495,7 @@
             };
             if (!guardar) return informes();
             return X.dbC.collection('pagos').add(datos).then(function (ref) {
+              if (D.planillasCreadas) D.planillasCreadas.unshift(Date.now());
               return mc ? X.semanas.marcarEnPlanilla(ref.id, docs).then(function () { return X.semanas.marcarFuera(ref.id, a.sinCuenta); }) : null;
             }).then(informes).then(function () { if (mc) X.recargarTodo(); });
           }).then(function () { cerrar(); X.aviso('Planilla del banco descargada'); }, function (e) { console.error(e); btn.disabled = false; btn.textContent = 'Descargar planilla del banco'; X.aviso(e.message || 'No se pudo generar el Excel.'); });

@@ -866,6 +866,8 @@
     return Promise.all([
       dbC.collection('clientes').get().then(function (q) { D.clientes = []; q.forEach(function (d) { var x = d.data(); x._id = d.id; D.clientes.push(x); }); }, function (e) { console.warn(e); D.clientes = []; }),
       dbC.collection('excepciones').get().then(function (q) { D.excepciones = []; q.forEach(function (d) { var x = d.data(); x._id = d.id; D.excepciones.push(x); }); }, function (e) { console.warn(e); D.excepciones = []; }),
+      // Cuándo se generó cada planilla del banco: decide si una factura llegó «después del corte» (operacion.js → facturaTarde)
+      dbC.collection('pagos').orderBy('creado', 'desc').limit(80).get().then(function (q) { D.planillasCreadas = []; q.forEach(function (d) { var x = d.data(), t = aFecha(x.creado); if (x.estado !== 'anulada' && t) D.planillasCreadas.push(t.getTime()); }); }, function (e) { console.warn(e); D.planillasCreadas = null; }),
       dbC.collection('notas').get().then(function (q) { D.notas = {}; q.forEach(function (d) { D.notas[d.id] = d.data(); }); }, function () { D.notas = {}; }),
       // Cuentas bancarias de los repartidores (js/banco.js); BDYango llega aparte, en vivo
       CTRL.banco ? CTRL.banco.cargar().then(function () { CTRL.banco.cargarBDYango(); }) : null
