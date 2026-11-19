@@ -181,13 +181,13 @@
   function subir() {
     if (!listo()) return;
     X.ventana('Subir RCV del mes', 'El Registro de Compras completo que descargas de Impuestos Nacionales (Excel). Si ese mes ya estaba, se reemplaza y se conservan tus correcciones a mano.',
-      '<div class="fm"><div class="fila"><label for="rvArch">Archivo</label><input id="rvArch" type="file" accept=".xlsx,.xls,.csv"></div><div id="rvInfo"></div></div>',
+      '<div class="fm"><div class="fila"><label for="rvArch">Archivo</label><input id="rvArch" type="file" accept=".xlsx,.xls,.csv,.zip"></div><div id="rvInfo"></div></div>',
       '<button class="btn sec" data-cerrar>Cancelar</button><button class="btn" data-ok disabled>' + ic('subir') + 'Clasificar y guardar</button>', function (v, cerrar) {
         var ok = v.querySelector('[data-ok]'), info = v.querySelector('#rvInfo'), dato = null;
         v.querySelector('#rvArch').addEventListener('change', function (e) {
           var a = e.target.files[0]; if (!a) return;
-          ok.disabled = true; dato = null; info.innerHTML = X.anillo('Leyendo el archivo…');
-          X.cargarXLSX().then(function (XL) {
+          ok.disabled = true; dato = null; info.innerHTML = X.anillo(/\.zip$/i.test(a.name) ? 'Descomprimiendo el ZIP…' : 'Leyendo el archivo…');
+          X.desempacar(a).then(function (x) { a = x; return X.cargarXLSX(); }).then(function (XL) {
             return a.arrayBuffer().then(function (buf) {
               var lb = /\.csv$/i.test(a.name) ? XL.read(new TextDecoder('utf-8').decode(buf), { type: 'string', raw: true }) : XL.read(buf, { type: 'array' });
               var todas = XL.utils.sheet_to_json(lb.Sheets[lb.SheetNames[0]], { header: 1, raw: true, defval: '' }), i0 = 0;

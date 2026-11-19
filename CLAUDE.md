@@ -48,7 +48,7 @@ El permiso se elige en **Panel → Usuarios → columna CONTROL**. Las reglas de
 - GitHub Pages desde la rama `main` (raíz), dominio **https://nummeroscontrol.contaxbolivia.com** (archivo `CNAME`, desde el 19/11/2026). La dirección vieja https://jmenachocntx.github.io/CONTROL-NUMMEROS/ redirige al dominio.
 - `firestore.rules` **no se publica solo**: hay que copiarlo y pegarlo en la consola de Firebase del proyecto `control--nummeros` → Firestore → Reglas → Publicar.
 - Aviso de nueva versión: `version-aviso.js` (copia del de `NUMMEROS_CRM`) muestra «Hay una nueva versión · Actualizar ahora» al publicar; no hay que tocar nada.
-- Versiones: `version` en `config.js` (hoy 2.4.64), el `?v=` de los scripts en `index.html` y el mensaje del commit dice la versión (ej. "... (v1.4)").
+- Versiones: `version` en `config.js` (hoy 2.4.65), el `?v=` de los scripts en `index.html` y el mensaje del commit dice la versión (ej. "... (v1.4)").
 
 ## Cuidados importantes
 - **El repositorio es PÚBLICO.** Nunca subir contraseñas, archivos `.json` de cuentas de servicio ni datos de clientes.
@@ -107,3 +107,4 @@ El permiso se elige en **Panel → Usuarios → columna CONTROL**. Las reglas de
 - **2.4.62 · Pagados sin factura:** en `cargarHistorial` cada pago con N.º de factura vacío o «Pago Retenido» queda `h.sinFactura = true` y se muestra «Falta factura» (solo en pantalla: `historialPagos` y `historialRider` no cambian; el Portal sigue usando «Pago Retenido»). La lista de facturación (tipo `retenido`, ahora «Pagado sin factura») incluye todos los `sinFactura`, no solo los «Pago Retenido». `ponerFactura` y `completarFacturasHist` completan también esas filas cuando su factura queda verificada. Historial → subpestaña «Pagos sin factura» con el cruce contra la lista de facturación (falta, ya llegó, no está en la lista) y Excel.
 - **2.4.63 · Gestión en la semana:** `X.semanaCorta` muestra «Sem 13 · 2025» cuando la gestión no es la actual (antes se perdía el año). Las semanas «de la hoja CONTROL» (51 de 2025 cuyo pago se hizo en 2025 y no se cargó, + 4 de 2026) se llaman «Gestión 2025 · pago no cargado en CONTROL» o «Sistema anterior · sin pago registrado».
 - **2.4.64 · Lista de facturación incluye «Enviado a pagar»:** las semanas `en_planilla` (tipo `enviado`) también necesitan factura (ej. habilitadas por excepción). Antes desaparecían de la lista entre la planilla y la conciliación. Una factura CONTAX marcada en el Panel sin N.º se muestra «Sin N.º».
+- **2.4.65 · RCV en ZIP:** «Cruzar con Impuestos», «Subir RCV del mes» y la importación de NIT aceptan `.zip`. `X.desempacar` (base.js, JSZip 3.10.1 de cdnjs, se carga solo si hace falta) abre el ZIP y usa el Excel o CSV de adentro (prefiere .xlsx, ignora `__MACOSX`).

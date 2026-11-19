@@ -401,15 +401,15 @@
 
   /* ── Cruce con Impuestos: aquí solo se lee el archivo; lo demás está en js/conciliacion.js ── */
   function cruceImpuestos() {
-    X.ventana('Cruzar con Impuestos Nacionales', 'Sube el Registro de Compras de MILTHAGOR que descargas de Impuestos (mejor en Excel .xlsx). Cada fila se busca entre los pagos que deben factura: alcanza con el nombre y el importe, y si tenemos el NIT también se compara.',
-      '<div class="fm"><div class="fila"><label for="czArch">Archivo</label><input id="czArch" type="file" accept=".xlsx,.xls,.csv"></div><div id="czMapa"></div></div>',
+    X.ventana('Cruzar con Impuestos Nacionales', 'Sube el Registro de Compras de MILTHAGOR que descargas de Impuestos (Excel, CSV o el ZIP tal como lo descargas: se descomprime solo). Cada fila se busca entre los pagos que deben factura: alcanza con el nombre y el importe, y si tenemos el NIT también se compara.',
+      '<div class="fm"><div class="fila"><label for="czArch">Archivo</label><input id="czArch" type="file" accept=".xlsx,.xls,.csv,.zip"></div><div id="czMapa"></div></div>',
       '<button class="btn sec" data-cerrar>Cancelar</button><button class="btn" data-ok disabled>' + ic('cruzar') + 'Cruzar</button>', function (v, cerrar) {
         var filas = null, enc = null, ok = v.querySelector('[data-ok]'), mapa = v.querySelector('#czMapa'), nombreArchivo = '';
         v.querySelector('#czArch').addEventListener('change', function (e) {
           var a = e.target.files[0]; if (!a) return;
           nombreArchivo = a.name;
-          mapa.innerHTML = X.anillo('Leyendo el archivo…');
-          X.cargarXLSX().then(function (XL) {
+          mapa.innerHTML = X.anillo(/\.zip$/i.test(a.name) ? 'Descomprimiendo el ZIP…' : 'Leyendo el archivo…');
+          X.desempacar(a).then(function (x) { a = x; nombreArchivo = a.name; return X.cargarXLSX(); }).then(function (XL) {
             return a.arrayBuffer().then(function (buf) {
               // El CSV de Impuestos viene en UTF-8 sin marca: se decodifica a mano para no romper las Ñ y tildes
               var lb = /\.csv$/i.test(a.name) ? XL.read(new TextDecoder('utf-8').decode(buf), { type: 'string', raw: true }) : XL.read(buf, { type: 'array' });

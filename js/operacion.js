@@ -536,7 +536,7 @@
      NIT de cada repartidor que todavía no lo registró. La razón social sale del Registro de Compras de
      Impuestos (opcional) o del nombre. A ellos el portal ya no les pide el NIT. No se pisa ninguno existente. */
   function leerHojas(a) {
-    return X.cargarXLSX().then(function (XL) {
+    return X.desempacar(a).then(function (x) { a = x; return X.cargarXLSX(); }).then(function (XL) {
       return a.arrayBuffer().then(function (buf) {
         var lb = /\.csv$/i.test(a.name) ? XL.read(new TextDecoder('utf-8').decode(buf), { type: 'string', raw: true }) : XL.read(buf, { type: 'array' });
         return lb.SheetNames.map(function (n) { return XL.utils.sheet_to_json(lb.Sheets[n], { header: 1, raw: true, defval: '' }); });
@@ -547,7 +547,7 @@
   function importarNits() {
     X.ventana('Importar NIT de repartidores', 'Sube el Excel de facturas ya aprobadas (con «ID del mensajero» y «NIT Factura»). Solo se cargan los que todavía no tienen NIT.',
       '<div class="fm"><div class="fila"><label for="inArch">Facturas aprobadas</label><input id="inArch" type="file" accept=".xlsx,.xls,.csv"></div>' +
-      '<div class="fila"><label for="inRcv">Registro de Compras de Impuestos (opcional, para la razón social)</label><input id="inRcv" type="file" accept=".xlsx,.xls,.csv"></div><div id="inRes"></div></div>',
+      '<div class="fila"><label for="inRcv">Registro de Compras de Impuestos (opcional, para la razón social)</label><input id="inRcv" type="file" accept=".xlsx,.xls,.csv,.zip"></div><div id="inRes"></div></div>',
       '<button class="btn sec" data-cerrar>Cancelar</button><button class="btn" data-ok disabled>' + ic('check') + 'Guardar</button>', function (v, cerrar) {
         var ok = v.querySelector('[data-ok]'), caja = v.querySelector('#inRes'), nuevos = [];
         var revisar = function () {

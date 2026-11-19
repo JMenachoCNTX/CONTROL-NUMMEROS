@@ -343,6 +343,28 @@
     bajarArchivo('﻿' + txt, nombre + '.csv', 'text/csv;charset=utf-8');
   }
   var xlsxListo = null;
+  /* ZIP (como lo descarga Impuestos): se abre en el navegador y se usa el Excel o CSV de adentro */
+  var zipListo = null;
+  function cargarZip() {
+    if (window.JSZip) return Promise.resolve(window.JSZip);
+    if (!zipListo) zipListo = new Promise(function (ok, mal) {
+      var s = document.createElement('script');
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+      s.onload = function () { ok(window.JSZip); }; s.onerror = function () { zipListo = null; mal(new Error('No se pudo cargar el lector de ZIP. Revisa tu conexión.')); };
+      document.head.appendChild(s);
+    });
+    return zipListo;
+  }
+  function desempacar(a) {
+    if (!a || !/\.zip$/i.test(a.name)) return Promise.resolve(a);
+    return cargarZip().then(function (JZ) { return JZ.loadAsync(a); }).then(function (z) {
+      var pref = function (n) { return /\.xlsx$/i.test(n) ? 0 : /\.xls$/i.test(n) ? 1 : 2; };
+      var l = Object.keys(z.files).filter(function (n) { return !z.files[n].dir && !/(^|\/)(__MACOSX|\.)/.test(n) && /\.(xlsx|xls|csv)$/i.test(n); })
+        .sort(function (p, q) { return pref(p) - pref(q); });
+      if (!l.length) throw new Error('El ZIP no trae ningún archivo Excel o CSV.');
+      return z.files[l[0]].async('blob').then(function (b) { return new File([b], l[0].split('/').pop()); });
+    }).catch(function (e) { if (/lector de ZIP|no trae/.test(e && e.message)) throw e; console.error(e); throw new Error('No se pudo abrir el ZIP. ¿Está dañado?'); });
+  }
   function cargarXLSX() {
     if (window.XLSX) return Promise.resolve(window.XLSX);
     if (!xlsxListo) xlsxListo = new Promise(function (ok, mal) {
@@ -927,7 +949,7 @@
     servidor: servidor, puedeEditar: puedeEditar, esAdmin: esAdmin, esDueno: esDueno, ic: ic,
     cargaN: cargaN, cargaCifras: cargaCifras, cargaBarra: cargaBarra, anillo: anillo, anilloBoton: anilloBoton, esqueleto: esqueleto, clasicos: clasicos, textoClasicos: textoClasicos,
     verTabla: verTabla, cajon: cajon, ventana: ventana, confirmar: confirmar, formulario: formulario, activarComunes: activarComunes,
-    csv: csv, excel: excel, cargarXLSX: cargarXLSX, bajarArchivo: bajarArchivo, bitacora: bitacora, puente: puente,
+    csv: csv, excel: excel, cargarXLSX: cargarXLSX, desempacar: desempacar, bajarArchivo: bajarArchivo, bitacora: bitacora, puente: puente,
     titulo: titulo, vacio: vacio, chip: chip, tabla: tabla, grafico: grafico, barraSvg: barraSvg, colores: colores, clienteDe: clienteDe
   };
 })();
