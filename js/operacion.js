@@ -515,15 +515,18 @@
       var l = []; q.forEach(function (d) { var x = d.data(); x._id = d.id; l.push(x); });
       c.cuerpo.innerHTML = l.length ? X.tabla([
         { t: 'Planilla', html: function (x) { return '<b>' + esc(x.archivo || ('Planilla ' + X.fecha(x.fecha))) + '</b><span class="sub">' + X.fechaHora(x.creado) + ' · ' + esc(x.quien) + '</span>'; } },
-        { t: 'Repartidores', clase: 'monto', html: function (x) { return entero(x.cantidad) + (x.lineas ? '<span class="sub">' + entero(x.lineas.length) + ' filas</span>' : ''); } },
+        { t: 'Repartidores', clase: 'monto', html: function (x) { return entero(x.cantidad) + (x.lineas ? '<span class="sub">' + entero(x.lineas.length) + (x.lineas.length === 1 ? ' semana' : ' semanas') + '</span>' : ''); } },
         { t: 'Total', clase: 'monto', html: function (x) { return '<b>' + bs(x.total) + '</b>'; } },
         { t: 'Estado', html: function (x) {
           return (x.estado === 'pagada' ? X.chip('ok', 'Pagada ' + X.fecha(x.fechaPago)) : x.estado === 'enviada' ? (D.semanas && !enviadosDe(x._id).length ? X.chip('ok', 'Todos pagados') : X.chip('pend', x.conciliacion ? 'Conciliada en parte' : 'Por confirmar')) : x.estado === 'anulada' ? X.chip('neutro', 'Anulada') : X.chip('neutro', 'Registro')) +
             (x.estado === 'enviada' && D.semanas && enviadosDe(x._id).length ? ' ' + X.chip('pend', entero(enviadosDe(x._id).length) + ' sin confirmar') : '') +
-            ((x.rebotados || []).length ? ' ' + X.chip('mal', entero(x.rebotados.length) + ' rebotados') : '') + ((x.sinCuenta || []).length ? ' ' + X.chip('pend', entero(x.sinCuenta.length) + ' sin cuenta') : '');
+            // Notas en texto (no etiquetas): no son pagos que falten de esta planilla, explican quién quedó fuera
+            ((x.sinCuenta || []).length ? '<span class="sub">' + entero(x.sinCuenta.length) + (x.sinCuenta.length === 1 ? ' repartidor no entró' : ' repartidores no entraron') + ' a la planilla: sin cuenta bancaria (no está en el total)</span>' : '') +
+            ((x.rebotados || []).length ? '<span class="sub">' + entero(x.rebotados.length) + (x.rebotados.length === 1 ? ' pago rebotó' : ' pagos rebotaron') + ' en el banco y volvió a pendiente</span>' : '');
         } },
         { t: '', html: function (x) {
-          var conf = X.semanas && x.estado === 'enviada' && X.puedeEditar();
+          // Si ya no queda ningún pago «Enviado a pagar», no hay nada que conciliar, confirmar ni anular
+          var conf = X.semanas && x.estado === 'enviada' && X.puedeEditar() && !(D.semanas && !enviadosDe(x._id).length);
           return '<div class="fila-acc"><button class="btn sec chico" data-bajar="' + esc(x._id) + '">' + ic('descargar') + (x.lineas ? 'Banco' : 'Excel') + '</button>' +
             (x.lineas ? '<button class="btn sec chico" data-detalle="' + esc(x._id) + '">' + ic('descargar') + 'Detalle</button>' : '') +
             (x.lineas ? '<button class="btn sec chico" data-pdf="' + esc(x._id) + '">' + ic('grafico') + 'PDF</button>' : X.semanas ? '<button class="btn sec chico" data-reporte="' + esc(x._id) + '">' + ic('grafico') + 'Gráficos</button>' : '') +

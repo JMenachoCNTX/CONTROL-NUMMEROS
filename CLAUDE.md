@@ -48,7 +48,7 @@ El permiso se elige en **Panel → Usuarios → columna CONTROL**. Las reglas de
 - GitHub Pages desde la rama `main` (raíz), dominio **https://nummeroscontrol.contaxbolivia.com** (archivo `CNAME`, desde el 19/11/2026). La dirección vieja https://jmenachocntx.github.io/CONTROL-NUMMEROS/ redirige al dominio.
 - `firestore.rules` **no se publica solo**: hay que copiarlo y pegarlo en la consola de Firebase del proyecto `control--nummeros` → Firestore → Reglas → Publicar.
 - Aviso de nueva versión: `version-aviso.js` (copia del de `NUMMEROS_CRM`) muestra «Hay una nueva versión · Actualizar ahora» al publicar; no hay que tocar nada.
-- Versiones: `version` en `config.js` (hoy 2.4.69), el `?v=` de los scripts en `index.html` y el mensaje del commit dice la versión (ej. "... (v1.4)").
+- Versiones: `version` en `config.js` (hoy 2.4.70), el `?v=` de los scripts en `index.html` y el mensaje del commit dice la versión (ej. "... (v1.4)").
 
 ## Cuidados importantes
 - **El repositorio es PÚBLICO.** Nunca subir contraseñas, archivos `.json` de cuentas de servicio ni datos de clientes.
@@ -112,3 +112,4 @@ El permiso se elige en **Panel → Usuarios → columna CONTROL**. Las reglas de
 - **2.4.67 · Excepciones: quién y cuándo:** columna «Hecha por» con usuario, fecha y hora (`creadoPor`/`creado`, nuevos desde esta versión; las anteriores muestran `quien`/`actualizado`, la última modificación). Si se editó después, sale «Editada: usuario · fecha hora».
 - **2.4.68 · Planillas generadas → «Ver pagos (N)»:** abre Pagos pendientes → «Enviado a pagar» filtrado por esa planilla (`P.planilla`, se quita con «Ver los de todas las planillas» o al cambiar de pestaña), para marcar algunos como pagados con fecha o volverlos a pendiente. Cada planilla enviada muestra «N sin confirmar» o «Todos resueltos» (`enviadosDe`). «Pago confirmado» = toda la planilla pagada sin extracto: solo pasa a pagado los que siguen «Enviado a pagar».
 - **2.4.69:** una planilla «enviada» sin pagos «Enviado a pagar» (ya se pagaron todos, por conciliación o «Marcar como pagados») muestra «Todos pagados» en vez de «Por confirmar»/«Conciliada en parte», y no tiene «Ver pagos».
+- **2.4.70 · Planillas generadas más claras:** con «Todos pagados» se ocultan «Conciliar extracto», «Pago confirmado» y «Anular». «Sin cuenta» y «rebotados» ya no son etiquetas: son notas en texto («N repartidores no entraron a la planilla: sin cuenta bancaria (no está en el total)», «N pagos rebotaron en el banco y volvieron a pendiente»). «filas» → «semanas».
