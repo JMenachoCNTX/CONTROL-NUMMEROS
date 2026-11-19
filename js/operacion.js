@@ -518,8 +518,8 @@
         { t: 'Repartidores', clase: 'monto', html: function (x) { return entero(x.cantidad) + (x.lineas ? '<span class="sub">' + entero(x.lineas.length) + ' filas</span>' : ''); } },
         { t: 'Total', clase: 'monto', html: function (x) { return '<b>' + bs(x.total) + '</b>'; } },
         { t: 'Estado', html: function (x) {
-          return (x.estado === 'pagada' ? X.chip('ok', 'Pagada ' + X.fecha(x.fechaPago)) : x.estado === 'enviada' ? X.chip('pend', x.conciliacion ? 'Conciliada en parte' : 'Por confirmar') : x.estado === 'anulada' ? X.chip('neutro', 'Anulada') : X.chip('neutro', 'Registro')) +
-            (x.estado === 'enviada' && D.semanas ? ' ' + (enviadosDe(x._id).length ? X.chip('pend', entero(enviadosDe(x._id).length) + ' sin confirmar') : X.chip('ok', 'Todos resueltos')) : '') +
+          return (x.estado === 'pagada' ? X.chip('ok', 'Pagada ' + X.fecha(x.fechaPago)) : x.estado === 'enviada' ? (D.semanas && !enviadosDe(x._id).length ? X.chip('ok', 'Todos pagados') : X.chip('pend', x.conciliacion ? 'Conciliada en parte' : 'Por confirmar')) : x.estado === 'anulada' ? X.chip('neutro', 'Anulada') : X.chip('neutro', 'Registro')) +
+            (x.estado === 'enviada' && D.semanas && enviadosDe(x._id).length ? ' ' + X.chip('pend', entero(enviadosDe(x._id).length) + ' sin confirmar') : '') +
             ((x.rebotados || []).length ? ' ' + X.chip('mal', entero(x.rebotados.length) + ' rebotados') : '') + ((x.sinCuenta || []).length ? ' ' + X.chip('pend', entero(x.sinCuenta.length) + ' sin cuenta') : '');
         } },
         { t: '', html: function (x) {
