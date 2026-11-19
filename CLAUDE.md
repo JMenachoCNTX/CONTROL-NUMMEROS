@@ -48,7 +48,7 @@ El permiso se elige en **Panel → Usuarios → columna CONTROL**. Las reglas de
 - GitHub Pages desde la rama `main` (raíz), dominio **https://nummeroscontrol.contaxbolivia.com** (archivo `CNAME`, desde el 19/11/2026). La dirección vieja https://jmenachocntx.github.io/CONTROL-NUMMEROS/ redirige al dominio.
 - `firestore.rules` **no se publica solo**: hay que copiarlo y pegarlo en la consola de Firebase del proyecto `control--nummeros` → Firestore → Reglas → Publicar.
 - Aviso de nueva versión: `version-aviso.js` (copia del de `NUMMEROS_CRM`) muestra «Hay una nueva versión · Actualizar ahora» al publicar; no hay que tocar nada.
-- Versiones: `version` en `config.js` (hoy 2.4.66), el `?v=` de los scripts en `index.html` y el mensaje del commit dice la versión (ej. "... (v1.4)").
+- Versiones: `version` en `config.js` (hoy 2.4.67), el `?v=` de los scripts en `index.html` y el mensaje del commit dice la versión (ej. "... (v1.4)").
 
 ## Cuidados importantes
 - **El repositorio es PÚBLICO.** Nunca subir contraseñas, archivos `.json` de cuentas de servicio ni datos de clientes.
@@ -109,3 +109,4 @@ El permiso se elige en **Panel → Usuarios → columna CONTROL**. Las reglas de
 - **2.4.64 · Lista de facturación incluye «Enviado a pagar»:** las semanas `en_planilla` (tipo `enviado`) también necesitan factura (ej. habilitadas por excepción). Antes desaparecían de la lista entre la planilla y la conciliación. Una factura CONTAX marcada en el Panel sin N.º se muestra «Sin N.º».
 - **2.4.65 · RCV en ZIP:** «Cruzar con Impuestos», «Subir RCV del mes» y la importación de NIT aceptan `.zip`. `X.desempacar` (base.js, JSZip 3.10.1 de cdnjs, se carga solo si hace falta) abre el ZIP y usa el Excel o CSV de adentro (prefiere .xlsx, ignora `__MACOSX`).
 - **2.4.66 · Corte según la planilla generada:** «Después del corte» = subida después de un jueves 18:00 y **antes** de generar la planilla de ese corte (`D.planillasCreadas`, de `pagos.creado`, sin anuladas). Lo subido después de generar la planilla es para el próximo corte y no se marca. Antes, toda factura subida entre el viernes y el jueves antes de las 18:00 salía como tardía.
+- **2.4.67 · Excepciones: quién y cuándo:** columna «Hecha por» con usuario, fecha y hora (`creadoPor`/`creado`, nuevos desde esta versión; las anteriores muestran `quien`/`actualizado`, la última modificación). Si se editó después, sale «Editada: usuario · fecha hora».
