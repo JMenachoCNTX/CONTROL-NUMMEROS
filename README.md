@@ -3,7 +3,7 @@
 Panel del equipo para manejar todo lo del **Portal de repartidores** (Portal CONTAX).
 El portal es para los repartidores (como un "portal de clientes"); **CONTROL es el sistema interno**: ellos nunca lo ven.
 
-- **Página:** https://jmenachocntx.github.io/CONTROL-NUMMEROS/ (y, cuando se configure el DNS, https://controlnummeros.contaxbolivia.com)
+- **Página:** https://nummeroscontrol.contaxbolivia.com (la dirección vieja https://jmenachocntx.github.io/CONTROL-NUMMEROS/ redirige aquí)
 - **Acceso:** con el **mismo correo y contraseña del Panel NUMMEROS** (los mismos del CRM). El Panel es la fuente de usuarios de todos los sistemas internos: en **Panel → Usuarios**, la columna **CONTROL** define si cada persona entra como Administrador, Operador, Solo lectura o sin acceso («Automático» lo deduce de su rol: Admin y Supervisor → Administrador, Editor → Operador, Cajero y Lector → Solo lectura, Agente → sin acceso).
 - **Datos:** dos proyectos de Firebase
   - `control--nummeros` → lo interno: equipo, clientes CONTAX (con sus accesos), excepciones, notas, planillas generadas, cruces con Impuestos y bitácora.
@@ -53,7 +53,7 @@ En `config.js`, `reglaPago: 'todo'` (se retiene todo si falta una factura) o `'s
 
 ## Dominio propio (opcional)
 1. En **Squarespace → Dominios → contaxbolivia.com → DNS → Registros personalizados** agrega: Host `controlnummeros`, Tipo `CNAME`, Datos `jmenachocntx.github.io`.
-2. En GitHub → este repositorio → **Settings → Pages → Custom domain**: `controlnummeros.contaxbolivia.com` → Save → luego **Enforce HTTPS**.
+2. En GitHub → este repositorio → **Settings → Pages → Custom domain**: `nummeroscontrol.contaxbolivia.com` → Save → luego **Enforce HTTPS**.
 
 El dominio ya está autorizado en Firebase (en los dos proyectos).
 
