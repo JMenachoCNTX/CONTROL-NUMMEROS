@@ -454,6 +454,7 @@
     if (PAG[p].despues) PAG[p].despues(el);
     pintarMenu(); pintarCabecera();
     document.title = PAG[p].t.replace(/<[^>]+>/g, '') + ' · CONTROL NUMMEROS v' + C.version;
+    if (CTRL.presencia) { CTRL.presencia.iniciar(); CTRL.presencia.cambioPagina(); }
     if (!sinHistorial) history.pushState(null, '', '#/' + p);
     else history.replaceState(null, '', '#/' + p);
     document.querySelector('.app').classList.remove('menu-abierto');
@@ -679,6 +680,7 @@
     });
   }
   function salir() {
+    if (CTRL.presencia) CTRL.presencia.salir();
     if (D.escuchaFacturas) { D.escuchaFacturas(); D.escuchaFacturas = null; }
     Promise.all([authC.signOut(), authP.signOut(), authPn.signOut()]).then(function () { location.hash = ''; location.reload(); });
   }
@@ -700,6 +702,8 @@
         '<header class="cab"><button class="icono-btn hamb" data-accion="menu" aria-label="Abrir menú">' + ic('menu') + '</button>' +
           '<div class="cab-estado" id="cabEstado"></div>' +
           '<div class="cab-r">' +
+            '<div class="presencia" id="presencia"></div>' +
+            '<button class="icono-btn pr-campana" id="prCampana" data-accion="actividad" title="Equipo en vivo: quién está conectado y lo que se hizo hoy" aria-label="Equipo en vivo">' + ic('campana') + '</button>' +
             '<button class="icono-btn" data-accion="recargar" title="Traer datos nuevos del portal" aria-label="Actualizar datos">' + ic('recargar') + '</button>' +
             '<button class="icono-btn" data-accion="tema" title="Modo claro u oscuro" aria-label="Cambiar modo claro u oscuro">' + ic(S.oscuro ? 'sol' : 'luna') + '</button>' +
             '<div class="usuario">' + (foto ? '<img src="' + esc(foto) + '" alt="" referrerpolicy="no-referrer">' : '<span class="ini">' + esc((S.nombre || '?').charAt(0).toUpperCase()) + '</span>') +

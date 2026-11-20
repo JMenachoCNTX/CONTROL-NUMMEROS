@@ -1,0 +1,50 @@
+rules_version = '2';
+// Reglas de seguridad de CONTROL · NUMMEROS (proyecto control--nummeros).
+// - Solo entra el equipo, con su usuario del Panel NUMMEROS (el mismo del CRM).
+// - El rol en CONTROL se elige en Panel → Usuarios → columna CONTROL.
+//   Roles: admin (todo), operador (trabaja el día a día), lectura (solo mira).
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // El permiso lo pone el Panel NUMMEROS (fuente de usuarios) en la cuenta de cada persona:
+    // nm = es del equipo, rol = admin | operador | lectura. Nadie lo puede poner desde el navegador.
+    function equipo() { return request.auth != null && request.auth.token.get('nm', false) == true; }
+    function rol() { return request.auth.token.get('rol', ''); }
+    function correo() { return request.auth.token.email.lower(); }
+    function esEquipo() { return equipo() && rol() in ['admin', 'operador', 'lectura']; }
+    function puedeEditar() { return equipo() && rol() in ['admin', 'operador']; }
+    function esAdmin() { return equipo() && rol() == 'admin'; }
+
+    // Clientes CONTAX (repartidores que facturan con CONTAX), con sus accesos
+    match /clientes/{id} {
+      allow read: if esEquipo();
+      allow write: if puedeEditar();
+    }
+
+    // Excepciones de pago, notas por repartidor, cruces con Impuestos, cierres de pago
+    match /excepciones/{id} { allow read: if esEquipo(); allow write: if puedeEditar(); }
+    match /notas/{id} { allow read: if esEquipo(); allow write: if puedeEditar(); }
+    match /cruces/{id} { allow read: if esEquipo(); allow write: if puedeEditar(); }
+    match /pagos/{id} { allow read: if esEquipo(); allow write: if puedeEditar(); }
+    // Planillas semanales de Yango/MTG importadas (las semanas viven en «semanas» del Portal)
+    match /importaciones/{id} { allow read: if esEquipo(); allow write: if puedeEditar(); }
+    // Cuentas bancarias de los repartidores (para la planilla del Banco Ganadero). Datos sensibles: solo quien puede editar.
+    match /cuentas/{id} { allow read, write: if puedeEditar(); }
+    // Base propia de repartidores (no se borra a nadie; incluye NIT, CI y cuentas): solo quien puede editar
+    match /padron/{id} { allow read, write: if puedeEditar(); }
+
+    // Ajustes generales del panel
+    match /config/{doc} { allow read: if esEquipo(); allow write: if esAdmin(); }
+
+    // Bitácora: cualquiera del equipo agrega, nadie la edita ni la borra
+    match /bitacora/{id} {
+      allow read: if esEquipo();
+      allow create: if esEquipo() && request.resource.data.quien == correo();
+      allow update, delete: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

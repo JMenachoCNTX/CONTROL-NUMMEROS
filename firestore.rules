@@ -43,6 +43,12 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // Quién está conectado (burbujas arriba, 2.4.72): cada persona escribe solo su propio documento
+    match /presencia/{uid} {
+      allow read: if esEquipo();
+      allow write: if esEquipo() && request.auth.uid == uid;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

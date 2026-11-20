@@ -185,6 +185,19 @@ img{max-width:100%}
 .cab-estado{font-size:13px;color:var(--suave);display:flex;align-items:center;gap:8px;min-width:0}
 .cab-estado b{font:600 13px var(--display);color:var(--texto)}
 .cab-r{margin-left:auto;display:flex;align-items:center;gap:8px}
+.presencia{display:flex;align-items:center}
+.pr-lista{display:flex;align-items:center}
+.pr-bur{width:30px;height:30px;border-radius:50%;display:inline-grid;place-items:center;color:#fff;font:700 12px var(--display);border:2px solid var(--fondo,#fff);margin-left:-6px;flex:none;cursor:default}
+.pr-lista .pr-bur:first-child{margin-left:0}
+.pr-aqui{box-shadow:0 0 0 2px var(--verde-500,#8EB69B)}
+.pr-mas{background:var(--borde);color:var(--texto)}
+.pr-campana{position:relative}
+.pr-num{position:absolute;top:-3px;right:-3px;min-width:17px;height:17px;padding:0 4px;border-radius:999px;background:#C0392B;color:#fff;font:700 10px/17px var(--display);text-align:center}
+.pr-fila{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--borde)}
+.pr-fila:last-child{border-bottom:0}
+.pr-fila .pr-bur{margin-left:0}
+.pr-toast{bottom:calc(64px + env(safe-area-inset-bottom,0px));max-width:min(560px,calc(100vw - 32px))}
+@media (max-width:640px){.presencia{display:none}}
 .usuario{display:flex;align-items:center;gap:8px;border:1px solid var(--borde);background:var(--superficie);border-radius:999px;padding:3px 12px 3px 3px;font-size:13px;max-width:280px}
 .usuario img,.usuario .ini{width:28px;height:28px;border-radius:50%;flex:none;object-fit:cover}
 .usuario .ini{background:var(--verde-700);color:#fff;display:grid;place-items:center;font:700 13px var(--display)}
@@ -441,24 +454,25 @@ table.cn{min-width:2360px;font-size:13px}
   </div>
 </div>
 
-<script src="config.js?v=2.4.71"></script>
+<script src="config.js?v=2.4.72"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" defer></script>
-<script src="js/base.js?v=2.4.71"></script>
-<script src="js/operacion.js?v=2.4.71"></script>
-<script src="js/facturas.js?v=2.4.71"></script>
-<script src="js/conciliacion.js?v=2.4.71"></script>
-<script src="js/rcv.js?v=2.4.71"></script>
-<script src="js/portal.js?v=2.4.71"></script>
-<script src="js/gestion.js?v=2.4.71"></script>
-<script src="js/semanas.js?v=2.4.71"></script>
-<script src="js/banco.js?v=2.4.71"></script>
-<script src="js/reporte-pdf.js?v=2.4.71"></script>
-<script src="js/documentos.js?v=2.4.71"></script>
-<script src="js/informe.js?v=2.4.71"></script>
-<script src="js/padron.js?v=2.4.71"></script>
+<script src="js/base.js?v=2.4.72"></script>
+<script src="js/operacion.js?v=2.4.72"></script>
+<script src="js/facturas.js?v=2.4.72"></script>
+<script src="js/conciliacion.js?v=2.4.72"></script>
+<script src="js/rcv.js?v=2.4.72"></script>
+<script src="js/portal.js?v=2.4.72"></script>
+<script src="js/gestion.js?v=2.4.72"></script>
+<script src="js/semanas.js?v=2.4.72"></script>
+<script src="js/banco.js?v=2.4.72"></script>
+<script src="js/reporte-pdf.js?v=2.4.72"></script>
+<script src="js/documentos.js?v=2.4.72"></script>
+<script src="js/informe.js?v=2.4.72"></script>
+<script src="js/padron.js?v=2.4.72"></script>
+<script src="js/presencia.js?v=2.4.72"></script>
 <script>CTRL.iniciar();</script>
 <script src="version-aviso.js" defer></script>
 </body>
