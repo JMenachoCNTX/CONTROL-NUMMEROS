@@ -93,9 +93,50 @@
       vale: function (x) { return ABIERTOS.indexOf(x.estado) >= 0; } }).then(function (res) {
       D.semanas = Object.keys(res.docs).map(function (k) { var x = res.docs[k]; x._id = k; if (x.nombre) x.nombre = X.limpiarTexto(x.nombre); return x; });
       aplicar();
+      escucharSemanas();
     }, function (e) {
       console.error('Semanas:', e); D.semanas = [];
       X.aviso(/permission|insufficient/i.test(e && e.message) ? 'Sin permiso para leer «semanas»: falta publicar las reglas del Portal.' : 'No se pudieron traer las semanas de pago.');
+    });
+  }
+  /* EN VIVO (2.4.71): lo que otra persona cambia en «semanas» (planilla enviada, pagado, vuelto a pendiente…) llega solo,
+     sin recargar. Escucha solo lo actualizado desde que se abrió CONTROL (2 min de margen), así no vuelve a leer todo. */
+  var ES = { quitar: null, t: null };
+  function escucharSemanas() {
+    if (ES.quitar || !modoControl() || !S.portalUsuario) return;
+    var desde = firebase.firestore.Timestamp.fromMillis(Date.now() - 120000), primera = true;
+    ES.quitar = col().where('actualizado', '>', desde).onSnapshot(function (q) {
+      if (!D.semanas) return;
+      var cambios = q.docChanges().filter(function (c) { return !c.doc.metadata.hasPendingWrites; });
+      if (!cambios.length) { primera = false; return; }
+      var idx = {}; D.semanas.forEach(function (s, i) { idx[s._id] = i; });
+      var n = 0, quitar = {};
+      cambios.forEach(function (c) {
+        if (c.type === 'removed') return;   // salió del filtro de fecha, no del sistema
+        var x = c.doc.data(); x._id = c.doc.id; if (x.nombre) x.nombre = X.limpiarTexto(x.nombre);
+        var i = idx[x._id], vale = ABIERTOS.indexOf(x.estado) >= 0;
+        if (i == null) { if (vale) { D.semanas.push(x); n++; } }
+        else if (!vale) { quitar[x._id] = 1; n++; }
+        else if (x.estado !== D.semanas[i].estado || x.planilla !== D.semanas[i].planilla || x.importe !== D.semanas[i].importe || primera) { D.semanas[i] = x; n++; }
+      });
+      if (Object.keys(quitar).length) D.semanas = D.semanas.filter(function (s) { return !quitar[s._id]; });
+      primera = false;
+      if (!n) return;
+      // Se juntan los cambios de un lote grande (por ejemplo una planilla de 600 pagos) y se pinta una sola vez
+      clearTimeout(ES.t);
+      ES.t = setTimeout(function () {
+        aplicar();
+        if (!document.querySelector('.velo') && !/INPUT|SELECT|TEXTAREA/.test((document.activeElement || {}).tagName)) X.refrescar();
+      }, 1500);
+    }, function (e) { console.warn('Semanas en vivo:', e); ES.quitar = null; });
+  }
+  /* Antes de guardar una planilla: ¿siguen pendientes? Evita pagar dos veces si otra persona ya las envió a pagar */
+  function verificarPendientes(docs) {
+    if (!modoControl() || !docs.length) return Promise.resolve();
+    return Promise.all(docs.map(function (k) { return col().doc(k).get(); })).then(function (snaps) {
+      var malas = snaps.filter(function (d) { return !d.exists || d.data().estado !== 'pendiente'; });
+      if (malas.length) throw new Error(entero(malas.length) + (malas.length === 1 ? ' pago ya no está pendiente' : ' pagos ya no están pendientes') +
+        ': otra persona los envió a pagar o los cambió. Cierra esta ventana, espera unos segundos a que se actualice la lista y vuelve a generar la planilla.');
     });
   }
   /* Nombre del repartidor según BDYango (para las planillas que vienen solo con el ID) */
@@ -1466,7 +1507,7 @@
     nombresFaltantes: nombresFaltantes,
     modoControl: modoControl, cargar: cargar, aplicar: aplicar, cargarHistorial: cargarHistorial, aplicarHistorial: aplicarHistorial, agregarAlHistorial: agregarAlHistorial, importar: importar, verImportaciones: verImportaciones, verPorSemana: verPorSemana, verReporteSemanas: verReporteSemanas, migrar: migrar,
     marcarEnPlanilla: marcarEnPlanilla, cambiarFecha: cambiarFecha, puedeCorregir: puedeCorregir, cambiarFactura: cambiarFactura, accionesPago: accionesPago, botonPagado: botonPagado, marcarFuera: marcarFuera, confirmarPago: confirmarPago, anularPlanilla: anularPlanilla, porConfirmar: porConfirmar, reporte: reporte,
-    enviados: enviados, enviadosAPendiente: enviadosAPendiente, enviadosPagados: enviadosPagados,
+    enviados: enviados, enviadosAPendiente: enviadosAPendiente, enviadosPagados: enviadosPagados, verificarPendientes: verificarPendientes,
     // piezas que usa js/banco.js
     leerLibro: leerLibro, escribir: escribir, encolarNotif: encolarNotif, CIUDADES: CIUDADES, fechaISO: fechaISO,
     // lógica pura (para pruebas)

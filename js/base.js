@@ -862,10 +862,26 @@
       if (CTRL.alCambiarFacturas) CTRL.alCambiarFacturas();
     }, function (e) { console.error('Facturas:', e); D.facturas = D.facturas || []; });
   }
+  /* Colección chica de CONTROL en vivo: la promesa se cumple con la primera lectura; los cambios siguientes repintan la página */
+  var VIVO = {};
+  function escucharControl(nombre, poner, alFallar) {
+    if (VIVO[nombre]) { VIVO[nombre](); VIVO[nombre] = null; }
+    return new Promise(function (ok) {
+      var primera = true;
+      VIVO[nombre] = dbC.collection(nombre).onSnapshot(function (q) {
+        var l = []; q.forEach(function (d) { var x = d.data(); x._id = d.id; l.push(x); });
+        poner(l);
+        if (primera) { primera = false; ok(); return; }
+        if (q.metadata.hasPendingWrites) return;
+        if (!document.querySelector('.velo') && !/INPUT|SELECT|TEXTAREA/.test((document.activeElement || {}).tagName)) refrescar();
+      }, function (e) { console.warn(nombre, e); alFallar(); if (primera) { primera = false; ok(); } });
+    });
+  }
   function cargarControl() {
     return Promise.all([
-      dbC.collection('clientes').get().then(function (q) { D.clientes = []; q.forEach(function (d) { var x = d.data(); x._id = d.id; D.clientes.push(x); }); }, function (e) { console.warn(e); D.clientes = []; }),
-      dbC.collection('excepciones').get().then(function (q) { D.excepciones = []; q.forEach(function (d) { var x = d.data(); x._id = d.id; D.excepciones.push(x); }); }, function (e) { console.warn(e); D.excepciones = []; }),
+      // En vivo (2.4.71): una excepción que crea o edita otra persona se aplica al instante (antes solo al abrir CONTROL)
+      escucharControl('excepciones', function (l) { D.excepciones = l; }, function () { D.excepciones = D.excepciones || []; }),
+      escucharControl('clientes', function (l) { D.clientes = l; }, function () { D.clientes = D.clientes || []; }),
       // Cuándo se generó cada planilla del banco: decide si una factura llegó «después del corte» (operacion.js → facturaTarde)
       dbC.collection('pagos').orderBy('creado', 'desc').limit(80).get().then(function (q) { D.planillasCreadas = []; q.forEach(function (d) { var x = d.data(), t = aFecha(x.creado); if (x.estado !== 'anulada' && t) D.planillasCreadas.push(t.getTime()); }); }, function (e) { console.warn(e); D.planillasCreadas = null; }),
       dbC.collection('notas').get().then(function (q) { D.notas = {}; q.forEach(function (d) { D.notas[d.id] = d.data(); }); }, function () { D.notas = {}; }),

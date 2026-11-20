@@ -476,7 +476,9 @@
           var btn = v.querySelector('[data-ok]'), fecha = v.querySelector('#plFecha').value, nombre = v.querySelector('#plNombre').value.trim() || 'Planilla Banco';
           if (!fecha) { X.aviso('Elige la fecha de pago.'); return; }
           btn.disabled = true; btn.innerHTML = X.anilloBoton() + 'Preparando';
-          B.descargarBanco(a.lineas, fecha, nombre).then(function () {
+          (mc ? X.semanas.verificarPendientes(a.lineas.map(function (l) { return l.doc; }).filter(Boolean)) : Promise.resolve()).then(function () {
+            return B.descargarBanco(a.lineas, fecha, nombre);
+          }).then(function () {
             X.bitacora('Descargó planilla del banco', a.pagan.length + ' repartidores · ' + a.lineas.length + ' filas · ' + bs(a.total));
             // Con fuentePagos 'control' la planilla siempre se guarda: sus semanas pasan a «en planilla»
             var guardar = v.querySelector('#chkCierre').checked || mc;
