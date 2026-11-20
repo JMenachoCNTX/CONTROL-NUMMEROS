@@ -420,8 +420,7 @@
 
   function pintarMenu() {
     var m = document.getElementById('menu'); if (!m) return;
-    var html = '<button class="menu-plegar" data-accion="plegar" title="' + (S.menuMini ? 'Dejar el menú abierto' : 'Ocultar el menú (quedan los íconos)') + '" aria-label="Ocultar o mostrar el menú">' + ic('plegar') + '</button>' +
-      '<a class="menu-logo" href="#/tablero" data-ir="tablero"><img src="marca/logos/nummeros-logotipo-horizontal-blanco.svg" alt="NUMMEROS"><img class="menu-iso" src="marca/logos/nummeros-isotipo-blanco.svg" alt="NUMMEROS"><small>CONTROL <span class="ctrl-ver">v' + esc(C.version) + '</span></small></a>';
+    var html = '<a class="menu-logo" href="#/tablero" data-ir="tablero"><img src="marca/logos/nummeros-logotipo-horizontal-blanco.svg" alt="NUMMEROS"><img class="menu-iso" src="marca/logos/nummeros-isotipo-blanco.svg" alt="NUMMEROS"><span class="ver">v' + esc(C.version) + '</span><small>CONTROL</small></a><div class="menu-links">';
     SECCIONES.forEach(function (sec) {
       var items = Object.keys(PAG).filter(function (k) { return PAG[k].sec === sec && !PAG[k].oculta && (!PAG[k].soloAdmin || esAdmin()); });
       items.sort(function (a, b) { return (PAG[a].orden || 50) - (PAG[b].orden || 50); });
@@ -432,7 +431,10 @@
         html += '<button class="menu-link' + (S.pagina === k || (PAG[S.pagina] && PAG[S.pagina].padre === k) ? ' activo' : '') + '" data-ir="' + k + '" aria-label="' + esc(p.t) + '">' + ic(p.i) + '<span>' + p.t + '</span>' + (n ? '<span class="cuenta num">' + n + '</span>' : '') + '</button>';
       });
     });
-    html += '<div class="menu-pie"><img src="marca/logos/nummeros-logotipo-firma-blanco.svg" alt="NUMMEROS by CONTAX">CONTROL · v' + esc(C.version) + '</div>';
+    var u = S.usuario || {}, foto = u.photoURL;
+    html += '</div><div class="menu-pie">' + (foto ? '<img class="ava" src="' + esc(foto) + '" alt="" referrerpolicy="no-referrer">' : '<span class="ava">' + esc((S.nombre || '?').charAt(0).toUpperCase()) + '</span>') +
+      '<span class="who">' + esc(S.nombre || '') + '<em>' + esc({ admin: 'Administrador', operador: 'Operador', lectura: 'Solo lectura' }[S.rol] || '') + '</em></span>' +
+      '<button data-accion="salir" title="Cerrar sesión" aria-label="Cerrar sesión">' + ic('salir') + '</button></div>';
     m.innerHTML = html;
   }
   function pintarCabecera() {
@@ -453,6 +455,8 @@
     activarComunes(el);
     if (PAG[p].despues) PAG[p].despues(el);
     pintarMenu(); pintarCabecera();
+    var ct = document.getElementById('cabTitulo'), h1 = el.querySelector('.pg-tit h1');
+    if (ct) ct.innerHTML = h1 ? h1.innerHTML : PAG[p].t;
     document.title = PAG[p].t.replace(/<[^>]+>/g, '') + ' · CONTROL NUMMEROS v' + C.version;
     if (CTRL.presencia) { CTRL.presencia.iniciar(); CTRL.presencia.cambioPagina(); }
     if (!sinHistorial) history.pushState(null, '', '#/' + p);
@@ -599,39 +603,31 @@
   }
 
   /* ══════════ INICIO DE SESIÓN ══════════ */
-  var FOTOS_LOGIN = [
-    { f: 'reunion-sala', n: 'Los tres clásicos', s: 'y el Contador Virtual de CONTAX', pos: '50% 40%' },
-    { f: 'los-cuatro-oscuro', n: 'Pitágoras, Euclides y Arquímedes', s: 'con el Contador Virtual', pos: '50% 35%' },
-    { f: 'contrato-euclides-oscuro', n: 'Euclides', s: 'cierra el acuerdo con CONTAX', pos: '50% 35%' },
-    { f: 'pitagoras-muestra-sistema', n: 'Pitágoras', s: 'muestra el sistema', pos: '50% 35%' },
-    { f: 'apreton-arquimedes', n: 'Arquímedes', s: 'y el Contador Virtual', pos: '50% 35%' },
-    { f: 'pitagoras-saludo-oscuro', n: 'Pitágoras', s: 'saluda al Contador Virtual', pos: '50% 35%' },
-    { f: 'arquimedes-saludo-claro', n: 'Arquímedes', s: 'saluda al Contador Virtual', pos: '50% 35%' }
-  ];
+  var FOTOS_LOGIN = ['euclides-laptop', 'pitagoras-tablet', 'arquimedes-pensando', 'euclides-lentes', 'pitagoras-inventario', 'los-tres-reunion',
+    'euclides-compas', 'arquimedes-balanza', 'pitagoras-senalando', 'arquimedes-cafeteria', 'arquimedes-eureka', 'euclides-caminando', 'pitagoras-celular'];
   function pintarLogin(error, correo) {
-    var c = FOTOS_LOGIN[Math.floor(Math.random() * FOTOS_LOGIN.length)];
+    var f = FOTOS_LOGIN[Math.floor(Math.random() * FOTOS_LOGIN.length)];
     raiz.innerHTML = '<main class="login">' +
-      '<section class="login-panel"><div class="patron" aria-hidden="true"></div><div class="login-caja">' +
-        '<img class="login-logo" src="marca/logos/nummeros-logotipo-apilado-' + (S.oscuro ? 'claro' : 'principal') + '.svg" alt="NUMMEROS">' +
-        '<span class="etiqueta"><i><img src="marca/logos/nummeros-isotipo-blanco.svg" alt=""></i>Solo para el equipo</span>' +
-        '<h1>CONTROL<em>Portal de repartidores</em></h1>' +
-        '<p class="texto">Entra con <b>el mismo correo y contraseña del Panel NUMMEROS</b> (los mismos del CRM).</p>' +
+      '<section class="login-panel"><div class="login-caja">' +
+        '<img class="login-logo" src="marca/logos/nummeros-logotipo-firma-' + (S.oscuro ? 'claro' : 'principal') + '.svg" alt="NUMMEROS by CONTAX">' +
+        '<h2>¡Te damos la bienvenida!</h2>' +
+        '<p class="texto">Entra a <b>CONTROL</b> con el mismo correo y contraseña del Panel NUMMEROS.</p>' +
         '<form class="fm" id="fmLogin" novalidate>' +
-          '<div class="fila"><label for="lgCorreo">Correo</label><input id="lgCorreo" type="email" autocomplete="username" value="' + esc(correo || leer('ctrl_ultimo_correo') || '') + '" required></div>' +
-          '<div class="fila"><label for="lgClave">Contraseña</label><input id="lgClave" type="password" autocomplete="current-password" required></div>' +
-          '<button class="btn ancho" type="submit" id="btnEntrar" style="min-height:48px;font-size:17px">' + ic('candado') + 'Entrar</button>' +
+          '<div class="fila"><label for="lgCorreo">Correo</label><input id="lgCorreo" type="email" autocomplete="username" placeholder="correo@empresa.com" value="' + esc(correo || leer('ctrl_ultimo_correo') || '') + '" required></div>' +
+          '<div class="fila"><label for="lgClave">Contraseña</label><input id="lgClave" type="password" autocomplete="current-password" placeholder="Tu contraseña" required></div>' +
+          '<button class="btn ancho" type="submit" id="btnEntrar">Entrar</button>' +
         '</form>' +
         '<p class="login-err" id="loginErr" role="alert">' + esc(error || '') + '</p>' +
         '<p class="muted" style="font-size:13px;margin:0">¿Olvidaste tu contraseña? Pide al administrador que la restablezca en <a href="' + esc(C.panelUrl) + '" target="_blank" rel="noopener">Panel → Usuarios</a>.</p>' +
-        '<div class="login-pie"><img src="marca/logos/nummeros-logotipo-firma-' + (S.oscuro ? 'claro' : 'principal') + '.svg" alt="NUMMEROS by CONTAX"><span>Santa Cruz de la Sierra, Bolivia · v' + esc(C.version) + '</span></div>' +
+        '<span class="ver">v' + esc(C.version) + '</span>' +
       '</div></section>' +
-      '<figure class="login-foto"><div class="fondo-foto" style="background-image:url(marca/colaboracion/' + c.f + '.jpg)"></div><img class="foto" src="marca/colaboracion/' + c.f + '.jpg" alt="' + esc(c.n + ' ' + c.s) + '">' +
-        '<figcaption><div class="insignia"><i><img src="marca/logos/nummeros-isotipo-blanco.svg" alt=""></i>' + esc(c.n) + '<span>' + esc(c.s) + '</span></div>' +
-        '<div class="alianza"><img src="marca/logos/nummeros-logotipo-horizontal-principal.svg" alt="NUMMEROS"><b>×</b><img src="marca/logos/contax-logo.png" alt="CONTAX"></div></figcaption>' +
-      '</figure></main>';
+      '<section class="login-foto" style="background-image:linear-gradient(140deg,rgba(11,43,38,.82),rgba(35,83,71,.66)),url(marca/clasicos/' + f + '.jpg)">' +
+        '<div class="marca-n"><img src="marca/logos/nummeros-isotipo-blanco.svg" alt=""></div>' +
+        '<div class="tag">CONTROL · Pagos y facturas de repartidores · by CONTAX</div>' +
+      '</section></main>';
     var fm = document.getElementById('fmLogin');
     fm.addEventListener('submit', function (e) { e.preventDefault(); entrar(); });
-    var f = document.getElementById(document.getElementById('lgCorreo').value ? 'lgClave' : 'lgCorreo'); if (f) f.focus();
+    var fo = document.getElementById(document.getElementById('lgCorreo').value ? 'lgClave' : 'lgCorreo'); if (fo) fo.focus();
   }
   function traducirError(e) {
     var c = (e && e.code) || '', m = (e && e.message) || '';
@@ -695,20 +691,17 @@
   }
   /* ══════════ ARMADO DEL PANEL ══════════ */
   function pintarApp() {
-    var u = S.usuario, foto = u.photoURL;
     raiz.innerHTML = '<div class="app' + (S.menuMini ? ' menu-mini' : '') + '">' +
       '<nav class="menu" id="menu" aria-label="Menú principal"></nav>' +
       '<div class="cuerpo">' +
-        '<header class="cab"><button class="icono-btn hamb" data-accion="menu" aria-label="Abrir menú">' + ic('menu') + '</button>' +
+        '<header class="cab"><button class="icono-btn" data-accion="alternar" title="Ocultar / mostrar menú" aria-label="Ocultar o mostrar el menú">' + ic('menu') + '</button>' +
+          '<h1 class="cab-tit" id="cabTitulo"></h1>' +
           '<div class="cab-estado" id="cabEstado"></div>' +
           '<div class="cab-r">' +
             '<div class="presencia" id="presencia"></div>' +
             '<button class="icono-btn pr-campana" id="prCampana" data-accion="actividad" title="Equipo en vivo: quién está conectado y lo que se hizo hoy" aria-label="Equipo en vivo">' + ic('campana') + '</button>' +
             '<button class="icono-btn" data-accion="recargar" title="Traer datos nuevos del portal" aria-label="Actualizar datos">' + ic('recargar') + '</button>' +
             '<button class="icono-btn" data-accion="tema" title="Modo claro u oscuro" aria-label="Cambiar modo claro u oscuro">' + ic(S.oscuro ? 'sol' : 'luna') + '</button>' +
-            '<div class="usuario">' + (foto ? '<img src="' + esc(foto) + '" alt="" referrerpolicy="no-referrer">' : '<span class="ini">' + esc((S.nombre || '?').charAt(0).toUpperCase()) + '</span>') +
-              '<span>' + esc(S.nombre) + ' <em>' + esc({ admin: 'Administrador', operador: 'Operador', lectura: 'Solo lectura' }[S.rol] || '') + '</em></span></div>' +
-            '<button class="icono-btn" data-accion="salir" title="Salir" aria-label="Salir">' + ic('salir') + '</button>' +
           '</div></header>' +
         '<div id="avisoPortal"></div>' +
         '<main class="contenido" id="pagina"></main>' +
@@ -732,11 +725,15 @@
     if (k === 'salir') salir();
     else if (k === 'menu') document.querySelector('.app').classList.toggle('menu-abierto');
     else if (k === 'plegar') plegarMenu();
+    else if (k === 'alternar') {
+      if (window.innerWidth <= 980) document.querySelector('.app').classList.toggle('menu-abierto');
+      else { var ap = document.querySelector('.app'); S.menuMini = !S.menuMini; guardarLocal('ctrl_menu_mini', S.menuMini ? '1' : '0'); ap.classList.toggle('menu-mini', S.menuMini); ap.classList.remove('menu-ver'); if (tip) tip.classList.remove('ver'); pintarMenu(); }
+    }
     else if (k === 'tema') { S.oscuro = !S.oscuro; guardarLocal('ctrl_oscuro', S.oscuro ? '1' : '0'); aplicarTema(); pintarApp(); avisoPortal(); ir(S.pagina, true); }
     else if (k === 'recargar') { recargarTodo(true); }
   });
   document.addEventListener('click', function (e) {
-    if (e.target.classList && e.target.classList.contains('app') === false && document.querySelector('.app.menu-abierto') && !e.target.closest('.menu') && !e.target.closest('[data-accion="menu"]'))
+    if (e.target.classList && e.target.classList.contains('app') === false && document.querySelector('.app.menu-abierto') && !e.target.closest('.menu') && !e.target.closest('[data-accion="menu"]') && !e.target.closest('[data-accion="alternar"]'))
       document.querySelector('.app').classList.remove('menu-abierto');
     // Menú plegado y abierto un momento: al tocar fuera vuelve a quedar solo con los íconos
     var ap = document.querySelector('.app.menu-mini.menu-ver');
@@ -765,7 +762,7 @@
   }
   function aplicarTema() {
     document.documentElement.setAttribute('data-theme', S.oscuro ? 'oscuro' : 'claro');
-    var m = document.querySelector('meta[name=theme-color]'); if (m) m.content = S.oscuro ? '#051F20' : '#F4FAF5';
+    var m = document.querySelector('meta[name=theme-color]'); if (m) m.content = S.oscuro ? '#07201C' : '#F3F8F4';
   }
 
   /* ══════════ COPIA LOCAL (para no leer todo el portal cada vez) ══════════

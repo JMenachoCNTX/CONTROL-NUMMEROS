@@ -6,7 +6,7 @@
 <title>CONTROL · NUMMEROS</title>
 <meta name="description" content="Panel CONTROL de NUMMEROS by CONTAX: pagos, facturas y trámites de los repartidores del Portal CONTAX.">
 <meta name="robots" content="noindex, nofollow">
-<meta name="theme-color" content="#F4FAF5">
+<meta name="theme-color" content="#F3F8F4">
 <link rel="icon" href="marca/iconos/favicon.ico">
 <link rel="icon" type="image/png" sizes="32x32" href="marca/iconos/icono-app-principal-32.png">
 <link rel="apple-touch-icon" href="marca/iconos/icono-app-principal-180.png">
@@ -86,47 +86,28 @@ img{max-width:100%}
 .chip.contax{background:#E6ECF5;color:var(--azul-contax);border-color:#C6D2E6}
 :root[data-theme="oscuro"] .chip.contax{background:#16233A;color:#B8C7E3;border-color:#2B3D5E}
 
-/* ── Inicio de sesión: colaboración NUMMEROS × CONTAX ── */
-.login{min-height:100vh;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.35fr);background:var(--fondo)}
-.login-panel{position:relative;display:flex;flex-direction:column;justify-content:center;padding:48px clamp(24px,6vw,88px);overflow:hidden}
-.login-panel .patron{position:absolute;inset:0;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='192' height='192' viewBox='0 0 192 192'%3E%3Cg fill='%23E4F2E7'%3E%3Cpath transform='translate(29 19) scale(.0796)' d='M0 427 L0 728 L136 728 L136 634 Z M410 0 L410 85 L546 292 L546 0 Z M0 0 L148 0 L410 458.5 L410 341 L546 548 L546 728 L401.71 728 L136 263 L136 379 L0 172 Z'/%3E%3Cpath transform='translate(125 115) scale(.0796)' d='M0 427 L0 728 L136 728 L136 634 Z M410 0 L410 85 L546 292 L546 0 Z M0 0 L148 0 L410 458.5 L410 341 L546 548 L546 728 L401.71 728 L136 263 L136 379 L0 172 Z'/%3E%3C/g%3E%3Cg fill='%23DAF1DE'%3E%3Cpath transform='translate(125 19) scale(.0796)' d='M0 427 L0 728 L136 728 L136 634 Z M410 0 L410 85 L546 292 L546 0 Z M0 0 L148 0 L410 458.5 L410 341 L546 548 L546 728 L401.71 728 L136 263 L136 379 L0 172 Z'/%3E%3Cpath transform='translate(29 115) scale(.0796)' d='M0 427 L0 728 L136 728 L136 634 Z M410 0 L410 85 L546 292 L546 0 Z M0 0 L148 0 L410 458.5 L410 341 L546 548 L546 728 L401.71 728 L136 263 L136 379 L0 172 Z'/%3E%3C/g%3E%3C/svg%3E");background-size:192px 192px;opacity:.6;-webkit-mask-image:linear-gradient(100deg,transparent 45%,#000 100%);mask-image:linear-gradient(100deg,transparent 45%,#000 100%);pointer-events:none}
-:root[data-theme="oscuro"] .login-panel .patron{opacity:.06}
-.login-caja{position:relative;max-width:440px;width:100%}
-.login-logo{height:82px;width:auto;display:block;margin-bottom:36px}
-.etiqueta{display:inline-flex;align-items:center;gap:8px;background:var(--superficie);border:1px solid var(--borde);border-radius:999px;padding:5px 14px 5px 6px;font:600 13px var(--display);letter-spacing:.12em;text-transform:uppercase;color:var(--acento);margin-bottom:18px}
-.etiqueta i{width:22px;height:22px;border-radius:50%;background:var(--verde-700);display:grid;place-items:center}
-.etiqueta i img{width:8px;height:auto}
-.login h1{font:700 clamp(46px,6vw,76px)/.95 var(--display);letter-spacing:.01em}
-.login h1 em{font-style:normal;color:var(--acento);display:block;font-size:.5em;letter-spacing:.06em;margin-top:6px}
-.login .texto{margin:18px 0 28px;color:var(--suave);font-size:16px;max-width:42ch}
-.btn-google{display:flex;align-items:center;justify-content:center;gap:12px;width:100%;min-height:52px;border-radius:12px;border:1px solid var(--borde-control);background:var(--superficie);color:var(--texto);font:600 17px var(--display);letter-spacing:.03em;cursor:pointer;box-shadow:var(--sombra)}
-.btn-google:hover{background:var(--campo)}
-.btn-google svg{width:22px;height:22px}
-.login-err{min-height:22px;margin-top:12px;color:var(--error);font-size:14px}
-.login-pie{margin-top:44px;display:flex;align-items:center;gap:14px;font-size:13px;color:var(--suave);flex-wrap:wrap}
-.login-pie img{height:26px;width:auto}
-.login-foto{position:relative;margin:0;overflow:hidden;background:var(--colab-oscuro)}
-.login-foto .fondo-foto{position:absolute;inset:-40px;background-size:cover;background-position:center;filter:blur(28px) saturate(.9);opacity:.85}
-.login-foto img.foto{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;object-position:50% 45%;animation:acercar 20s ease-out both}
-@media (max-width:900px){.login-foto img.foto{object-fit:cover}}
-@keyframes acercar{from{transform:scale(1.07)}to{transform:scale(1)}}
-.login-foto:after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(3,24,40,0) 50%,rgba(3,24,40,.72) 100%);pointer-events:none}
-.login-foto figcaption{position:absolute;z-index:1;left:28px;right:28px;bottom:26px;display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:14px}
+/* ── Inicio de sesión: igual al Panel (formulario + foto de los clásicos con degradado verde) ── */
+.login{min-height:100vh;display:flex;background:var(--fondo)}
+.login-panel{flex:0 0 44%;max-width:540px;display:flex;flex-direction:column;justify-content:center;padding:48px clamp(28px,6vw,80px);background:var(--superficie)}
+.login-caja{width:100%}
+.login-logo{width:210px;height:auto;display:block;margin-bottom:26px}
+.login h2{font:700 30px/1.1 var(--display);margin:0 0 6px}
+.login .texto{color:var(--suave);font-size:14px;margin:0 0 24px}
+.login .fm .fila{margin-bottom:16px}
+.login .fm input{padding:13px 14px}
+.login #btnEntrar{min-height:46px}
+.login-err{min-height:20px;margin-top:10px;color:var(--error);font-size:13px}
+.login .ver{display:inline-block;margin-top:18px}
+.login-foto{flex:1;position:relative;overflow:hidden;background-size:cover;background-position:center}
+.login-foto .marca-n{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;opacity:.12}
+.login-foto .marca-n img{width:34%;max-width:300px}
+.login-foto .tag{position:absolute;left:0;right:0;bottom:46px;text-align:center;color:#EAF3EE;font-size:14px;letter-spacing:.06em;text-shadow:0 1px 6px rgba(0,0,0,.4);padding:0 16px}
+@media (max-width:860px){.login-foto{display:none}.login-panel{flex:1;max-width:none;padding:40px 24px}}
+
 .insignia{display:inline-flex;align-items:center;gap:10px;background:rgba(255,255,255,.95);color:var(--verde-800);border-radius:999px;padding:7px 16px 7px 8px;font:700 17px var(--display);letter-spacing:.04em;box-shadow:0 6px 18px rgba(5,31,32,.18)}
 .insignia i{width:26px;height:26px;border-radius:50%;background:var(--verde-700);display:grid;place-items:center}
 .insignia i img{width:10px;height:auto}
 .insignia span{font:400 12px var(--cuerpo);color:#557363;letter-spacing:0}
-.alianza{display:flex;align-items:center;gap:16px;background:rgba(255,255,255,.95);border-radius:14px;padding:10px 16px}
-.alianza img{height:22px;width:auto;display:block}
-.alianza b{font:600 14px var(--display);color:#557363}
-@media (max-width:900px){
-  .login{grid-template-columns:1fr}
-  .login-foto{order:-1;height:270px}
-  .login-foto figcaption{left:14px;right:14px;bottom:14px}
-  .alianza{display:none}
-  .login-panel{padding:28px 20px 40px;justify-content:flex-start}
-  .login-logo{height:62px;margin-bottom:22px}
-}
 
 /* ── Estructura del panel ── */
 .app{display:grid;grid-template-columns:256px minmax(0,1fr);min-height:100vh}
@@ -434,6 +415,111 @@ table.cn{min-width:2360px;font-size:13px}
   .nm-ola,.nm-tira,.nm-barra::before,.nm-anillo svg.nm-giro,.nm-anillo .nm-n-centro path,.nm-linea::after,.nm-retrato::after,.nm-retrato img,.login-foto img.foto,.cajon,.ventana{animation:none!important}
   .nm-linea::after{opacity:0}
 }
+/* ══════════════════════════════════════════════════════════
+   2.4.74 · Misma línea visual que el Panel NUMMEROS
+   Colores, cabecera blanca con el título, menú con usuario abajo, tablas,
+   botones y ventanas como en el Panel. Títulos y cifras siguen en Akshar
+   y el texto en Century Gothic/Questrial (Manual de marca NUMMEROS).
+   ══════════════════════════════════════════════════════════ */
+:root{--fondo:#F3F8F4;--superficie:#FFFFFF;--campo:#EEF4F0;--borde:#E2ECE5;--borde-control:#D3E2D8;--texto:#0E2A24;--suave:#5E7A70;--sombra:0 1px 2px rgba(11,43,38,.03);--r-lg:14px}
+:root[data-theme="oscuro"]{--fondo:#07201C;--superficie:#0E2A24;--campo:#143A32;--borde:#1E4A40;--borde-control:#2A5E50;--texto:#EAF3EE;--suave:#8FB0A6;--acento:#8EB69B;--sobre-acento:#06211D}
+body{font-size:14px}
+/* Botones */
+.btn{font:600 14px var(--cuerpo);letter-spacing:0;padding:10px 16px}
+.btn.sec{background:var(--campo);border-color:var(--borde)}
+.btn.sec:hover{background:var(--campo);border-color:var(--acento);filter:none}
+.btn.chico{font-size:12.5px}
+.icono-btn{width:38px;height:38px;border-radius:var(--r-md);background:var(--campo);border-color:var(--borde)}
+.icono-btn:hover{background:var(--campo);border-color:var(--acento)}
+/* Campos */
+.campo,.fm input,.fm select,.fm textarea,.buscar input,.herr select{background:var(--campo);border:1px solid var(--borde);border-radius:var(--r-md)}
+.campo:focus,.fm input:focus,.fm select:focus,.fm textarea:focus,.buscar input:focus,.herr select:focus{outline:none;border-color:var(--acento)}
+.fm label{font:600 12px var(--cuerpo);letter-spacing:.02em;color:var(--suave)}
+.interruptor{font:600 14px var(--cuerpo)}
+/* Etiquetas de estado */
+.chip{font:700 11.5px var(--cuerpo);letter-spacing:0;padding:3px 10px}
+.chip:before{display:none}
+.chip.ok{background:var(--verde-100);border-color:transparent}
+:root[data-theme="oscuro"] .chip.ok{background:#163832}
+.chip.pend,.chip.mal,.chip.neutro,.chip.contax{border-color:transparent}
+.chip.neutro{background:transparent;border-color:var(--borde)}
+.ver{display:inline-block;font:800 11px var(--cuerpo);letter-spacing:.06em;color:var(--acento);border:1px solid var(--borde);border-radius:20px;padding:2px 9px;background:var(--campo);vertical-align:middle}
+/* Menú lateral: logo con versión y usuario abajo (como el Panel) */
+.menu{padding:0;width:auto}
+.menu-logo{display:flex;align-items:center;flex-wrap:wrap;gap:4px 10px;padding:20px 20px 10px;text-decoration:none}
+.menu-logo img{height:26px}
+.menu-logo .ver{margin-left:auto;color:#8EB69B;background:rgba(142,182,155,.12);border-color:rgba(142,182,155,.35)}
+.menu-logo small{flex-basis:100%;margin-top:2px;font:600 11px var(--cuerpo);letter-spacing:.2em}
+.menu-links{flex:1;overflow-y:auto;padding:4px 12px 10px;scrollbar-width:thin}
+.menu-sec{font:600 10.5px var(--cuerpo);letter-spacing:.12em;margin:15px 10px 6px}
+.menu-link{font-size:13.5px;font-weight:500;padding:9px 11px;border-radius:9px;gap:11px}
+.menu-link .ic{width:19px;height:19px}
+.menu-link .cuenta{font:700 11px var(--cuerpo)}
+.menu-plegar{display:none!important}
+.menu-pie{margin:0;padding:12px;border-top:1px solid rgba(255,255,255,.08);display:flex;align-items:center;gap:10px;font-size:12.5px;color:#CFE3D7}
+.menu-pie .ava{width:36px;height:36px;border-radius:10px;background:#8EB69B;color:#06211D;display:grid;place-items:center;font:800 15px var(--cuerpo);flex:0 0 36px;object-fit:cover;margin:0}
+.menu-pie .who{flex:1;min-width:0;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.menu-pie .who em{display:block;font-style:normal;font-size:11px;color:#8EB69B}
+.menu-pie button{background:rgba(255,255,255,.08);color:#CFE3D7;width:34px;height:34px;border:0;border-radius:10px;display:grid;place-items:center;flex:0 0 34px;cursor:pointer}
+.menu-pie button:hover{background:rgba(255,255,255,.16);color:#fff}
+.menu-pie button .ic{width:18px;height:18px}
+@media (min-width:981px){
+  .app.menu-mini{grid-template-columns:68px minmax(0,1fr)}
+  .app.menu-mini .menu{padding:0}
+  .app.menu-mini .menu-logo{justify-content:center;padding:20px 0 12px}
+  .app.menu-mini .menu-logo .ver,.app.menu-mini .menu-pie .who,.app.menu-mini .menu-pie button{display:none}
+  .app.menu-mini .menu-iso{height:26px}
+  .app.menu-mini .menu-links{padding:4px 10px;overflow-x:visible;display:flex;flex-direction:column;align-items:center}
+  .app.menu-mini .menu-pie{display:flex;justify-content:center;padding:12px 0}
+}
+/* Cabecera blanca con el título de la página */
+.cab{background:var(--superficie);backdrop-filter:none;padding:12px 28px;gap:14px;z-index:20}
+.cab .hamb{display:none!important}
+.cab-tit{font:700 22px/1.1 var(--display);margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.cab-estado{font-size:12px;padding-left:14px;border-left:1px solid var(--borde)}
+.cab-estado b{font:700 12px var(--cuerpo)}
+@media (max-width:1180px){.cab-estado{display:none}}
+@media (max-width:980px){.cab{padding:10px 16px}.cab-tit{font-size:19px}}
+.pr-bur{font:700 12px var(--cuerpo);border-color:var(--superficie)}
+/* Página: el título va arriba, en la cabecera */
+.contenido{padding:24px 28px 48px;max-width:none}
+@media (max-width:980px){.contenido{padding:20px 16px 40px}}
+.pg-tit{margin-bottom:18px;align-items:center}
+.pg-tit h1{display:none}
+.pg-tit p{margin:0;font-size:13px}
+/* Tarjetas y cifras */
+.card{padding:22px}
+.kpi small,.ciu-card small,.dato small{font:600 11px var(--cuerpo);letter-spacing:.08em}
+.h2 small{font-size:12.5px}
+/* Pestañas */
+.pestanas button{font:600 13.5px var(--cuerpo);letter-spacing:0;background:var(--campo);padding:7px 14px}
+.pestanas button:hover{border-color:var(--acento)}
+.subpestanas{gap:6px;border-bottom:1px solid var(--borde)}
+.subpestanas button{font:600 14px var(--cuerpo);letter-spacing:0;padding:9px 16px;border-bottom:2px solid transparent;margin-bottom:-1px}
+.subpestanas button:hover{color:var(--texto)}
+.subpestanas button[aria-selected="true"]{color:var(--acento);border-bottom-color:var(--acento)}
+/* Tablas */
+.tabla{border-radius:var(--r-lg);background:var(--superficie)}
+table{font-size:13px}
+th,td{padding:11px 13px}
+th{font:600 11.5px var(--cuerpo);letter-spacing:.3px;color:var(--suave);background:var(--campo)}
+tbody tr:hover td{background:var(--campo)}
+tfoot td{font:700 14px var(--cuerpo)}
+td .sub{font-size:11.5px}
+/* Ventanas: blancas con título y ✕, como en el Panel */
+.ventana{border:1px solid var(--borde);border-radius:12px}
+.ventana-cab{background:var(--superficie);color:var(--texto);padding:20px 24px 12px;border-bottom:1px solid var(--borde)}
+.ventana-cab:before{display:none}
+.ventana-cab h3{color:var(--texto);font-size:22px}
+.ventana-cab p{color:var(--suave)}
+.ventana-cuerpo{padding:18px 24px}
+.ventana-pie{padding:0 24px 20px}
+.cajon-cab h2{font-size:22px}
+.velo{background:rgba(0,0,0,.55)}
+/* Avisos */
+.toast{font:600 14px var(--cuerpo);letter-spacing:0;background:#163832}
+.aviso-caja b{font:700 14px var(--cuerpo)}
+.menu-tip{font:600 13px var(--cuerpo)}
 @media print{.menu,.cab,.pg-acc,.herr,.pestanas{display:none!important}.app{display:block}}
 </style>
 </head>
@@ -455,25 +541,25 @@ table.cn{min-width:2360px;font-size:13px}
   </div>
 </div>
 
-<script src="config.js?v=2.4.73"></script>
+<script src="config.js?v=2.4.74"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" defer></script>
-<script src="js/base.js?v=2.4.73"></script>
-<script src="js/operacion.js?v=2.4.73"></script>
-<script src="js/facturas.js?v=2.4.73"></script>
-<script src="js/conciliacion.js?v=2.4.73"></script>
-<script src="js/rcv.js?v=2.4.73"></script>
-<script src="js/portal.js?v=2.4.73"></script>
-<script src="js/gestion.js?v=2.4.73"></script>
-<script src="js/semanas.js?v=2.4.73"></script>
-<script src="js/banco.js?v=2.4.73"></script>
-<script src="js/reporte-pdf.js?v=2.4.73"></script>
-<script src="js/documentos.js?v=2.4.73"></script>
-<script src="js/informe.js?v=2.4.73"></script>
-<script src="js/padron.js?v=2.4.73"></script>
-<script src="js/presencia.js?v=2.4.73"></script>
+<script src="js/base.js?v=2.4.74"></script>
+<script src="js/operacion.js?v=2.4.74"></script>
+<script src="js/facturas.js?v=2.4.74"></script>
+<script src="js/conciliacion.js?v=2.4.74"></script>
+<script src="js/rcv.js?v=2.4.74"></script>
+<script src="js/portal.js?v=2.4.74"></script>
+<script src="js/gestion.js?v=2.4.74"></script>
+<script src="js/semanas.js?v=2.4.74"></script>
+<script src="js/banco.js?v=2.4.74"></script>
+<script src="js/reporte-pdf.js?v=2.4.74"></script>
+<script src="js/documentos.js?v=2.4.74"></script>
+<script src="js/informe.js?v=2.4.74"></script>
+<script src="js/padron.js?v=2.4.74"></script>
+<script src="js/presencia.js?v=2.4.74"></script>
 <script>CTRL.iniciar();</script>
 <script src="version-aviso.js" defer></script>
 </body>
