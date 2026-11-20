@@ -421,7 +421,7 @@
   function pintarMenu() {
     var m = document.getElementById('menu'); if (!m) return;
     var html = '<button class="menu-plegar" data-accion="plegar" title="' + (S.menuMini ? 'Dejar el menú abierto' : 'Ocultar el menú (quedan los íconos)') + '" aria-label="Ocultar o mostrar el menú">' + ic('plegar') + '</button>' +
-      '<a class="menu-logo" href="#/tablero" data-ir="tablero"><img src="marca/logos/nummeros-logotipo-horizontal-' + (S.oscuro ? 'claro' : 'principal') + '.svg" alt="NUMMEROS"><img class="menu-iso" src="marca/logos/nummeros-isotipo-' + (S.oscuro ? 'claro' : 'principal') + '.svg" alt="NUMMEROS"><small>CONTROL <span class="ctrl-ver">v' + esc(C.version) + '</span></small></a>';
+      '<a class="menu-logo" href="#/tablero" data-ir="tablero"><img src="marca/logos/nummeros-logotipo-horizontal-blanco.svg" alt="NUMMEROS"><img class="menu-iso" src="marca/logos/nummeros-isotipo-blanco.svg" alt="NUMMEROS"><small>CONTROL <span class="ctrl-ver">v' + esc(C.version) + '</span></small></a>';
     SECCIONES.forEach(function (sec) {
       var items = Object.keys(PAG).filter(function (k) { return PAG[k].sec === sec && !PAG[k].oculta && (!PAG[k].soloAdmin || esAdmin()); });
       items.sort(function (a, b) { return (PAG[a].orden || 50) - (PAG[b].orden || 50); });
@@ -432,7 +432,7 @@
         html += '<button class="menu-link' + (S.pagina === k || (PAG[S.pagina] && PAG[S.pagina].padre === k) ? ' activo' : '') + '" data-ir="' + k + '" aria-label="' + esc(p.t) + '">' + ic(p.i) + '<span>' + p.t + '</span>' + (n ? '<span class="cuenta num">' + n + '</span>' : '') + '</button>';
       });
     });
-    html += '<div class="menu-pie"><img src="marca/logos/nummeros-logotipo-firma-' + (S.oscuro ? 'claro' : 'principal') + '.svg" alt="NUMMEROS by CONTAX">CONTROL · v' + esc(C.version) + '</div>';
+    html += '<div class="menu-pie"><img src="marca/logos/nummeros-logotipo-firma-blanco.svg" alt="NUMMEROS by CONTAX">CONTROL · v' + esc(C.version) + '</div>';
     m.innerHTML = html;
   }
   function pintarCabecera() {

@@ -26,7 +26,7 @@
   --verde-950:#051F20;--verde-900:#0B2B26;--verde-800:#163832;--verde-700:#235347;--verde-300:#8EB69B;--verde-100:#DAF1DE;
   --fondo:#F4FAF5;--superficie:#FFFFFF;--campo:#EEF7F0;--borde:#DAF1DE;--borde-control:#6F9A7D;
   --texto:#163832;--suave:#557363;--acento:#235347;--sobre-acento:#FFFFFF;
-  --menu-fondo:#DAF1DE;--menu-texto:#163832;--menu-activo:#235347;--menu-sobre-activo:#FFFFFF;
+  --menu-fondo:#0B2B26;--menu-texto:#CFE3D7;--menu-activo:#235347;--menu-sobre-activo:#FFFFFF;--menu-sec:#6F9488;
   --ok:#235347;--ok-bg:#DAF1DE;--aviso:#93370D;--aviso-bg:#FFFAEB;--aviso-linea:#F5C26B;--error:#B42318;--error-bg:#FEF3F2;--error-linea:#FDA29B;
   --azul-contax:#1B2A4A;--colab-oscuro:#031828;--colab-claro:#E4EDEA;
   --sombra:0 1px 2px rgba(5,31,32,.08);--sombra-alta:0 18px 48px rgba(5,31,32,.16);
@@ -37,7 +37,7 @@
 :root[data-theme="oscuro"]{
   --fondo:#051F20;--superficie:#0B2B26;--campo:#163832;--borde:#235347;--borde-control:#8EB69B;
   --texto:#DAF1DE;--suave:#8EB69B;--acento:#8EB69B;--sobre-acento:#051F20;
-  --menu-fondo:#0B2B26;--menu-texto:#DAF1DE;--menu-activo:#8EB69B;--menu-sobre-activo:#051F20;
+  --menu-fondo:#0B2B26;--menu-texto:#CFE3D7;--menu-activo:#235347;--menu-sobre-activo:#FFFFFF;--menu-sec:#6F9488;
   --ok:#8EB69B;--ok-bg:#163832;--aviso:#FDB022;--aviso-bg:#2A2410;--aviso-linea:#7A5A12;--error:#F97066;--error-bg:#3A1714;--error-linea:#7A2A22;
   --sombra:none;--sombra-alta:0 18px 48px rgba(0,0,0,.45);
   color-scheme:dark;
@@ -130,19 +130,20 @@ img{max-width:100%}
 
 /* ── Estructura del panel ── */
 .app{display:grid;grid-template-columns:256px minmax(0,1fr);min-height:100vh}
-.menu{background:var(--menu-fondo);color:var(--menu-texto);position:sticky;top:0;height:100vh;overflow-y:auto;display:flex;flex-direction:column;padding:22px 14px 16px;scrollbar-width:thin}
+/* Menú oscuro en claro y oscuro, igual que el Panel NUMMEROS (misma línea visual en todos los sistemas) */
+.menu{background:linear-gradient(180deg,#0B2B26 0%,#051F20 100%);color:var(--menu-texto);position:sticky;top:0;height:100vh;overflow-y:auto;display:flex;flex-direction:column;padding:22px 14px 16px;scrollbar-width:thin}
 .menu-logo{display:block;padding:4px 8px 20px}
 .menu-logo img{height:28px;width:auto;display:block}
-.menu-logo small{display:block;font:600 12px var(--display);letter-spacing:.2em;color:var(--suave);margin-top:6px}
+.menu-logo small{display:block;font:600 12px var(--display);letter-spacing:.2em;color:#8EB69B;margin-top:6px}
 .ctrl-ver{letter-spacing:.04em;font-weight:500;opacity:.85;margin-left:4px}
-.menu-sec{display:block;font:600 11px var(--display);letter-spacing:.16em;text-transform:uppercase;color:var(--suave);margin:16px 10px 6px}
+.menu-sec{display:block;font:600 11px var(--display);letter-spacing:.16em;text-transform:uppercase;color:var(--menu-sec);margin:16px 10px 6px}
 .menu-link{display:flex;align-items:center;gap:10px;width:100%;border:0;background:transparent;color:var(--menu-texto);padding:8px 10px;border-radius:var(--r-md);cursor:pointer;font-size:14.5px;text-align:left}
-.menu-link:hover{background:rgba(35,83,71,.08)}
-:root[data-theme="oscuro"] .menu-link:hover{background:rgba(142,182,155,.1)}
-.menu-link.activo{background:var(--menu-activo);color:var(--menu-sobre-activo)}
-.menu-link .cuenta{margin-left:auto;font:600 12px var(--display);background:var(--superficie);color:var(--texto);border-radius:999px;padding:0 8px;min-width:22px;text-align:center}
+.menu-link{transition:transform .14s cubic-bezier(.34,1.56,.64,1),background .14s ease,box-shadow .14s ease,color .14s ease}
+.menu-link:hover{background:rgba(255,255,255,.10);color:#fff;transform:translateX(4px) translateY(-2px) scale(1.015);box-shadow:0 6px 16px rgba(0,0,0,.33),0 1px 0 rgba(255,255,255,.08) inset}
+.menu-link.activo{background:var(--menu-activo);color:var(--menu-sobre-activo);font-weight:600;box-shadow:inset 3px 0 0 #8EB69B}
+.menu-link .cuenta{margin-left:auto;font:600 12px var(--display);background:rgba(255,255,255,.14);color:#fff;border-radius:999px;padding:0 8px;min-width:22px;text-align:center}
 .menu-link.activo .cuenta{background:rgba(255,255,255,.25);color:inherit}
-.menu-pie{margin-top:auto;padding:16px 8px 0;font-size:12px;color:var(--suave)}
+.menu-pie{margin-top:auto;padding:16px 8px 0;font-size:12px;color:#8EB69B}
 .menu-pie img{height:30px;width:auto;display:block;margin-bottom:6px}
 .inf-ficha{display:flex;gap:18px;align-items:center;flex-wrap:wrap}
 .inf-ini{width:64px;height:64px;border-radius:50%;background:var(--verde-700);color:#fff;display:grid;place-items:center;font:700 24px var(--display);flex:none;box-shadow:0 6px 0 var(--verde-900),0 12px 22px rgba(5,31,32,.25)}
@@ -154,8 +155,8 @@ img{max-width:100%}
 .tabla-ancha{overflow-x:auto}.tabla-ancha table{min-width:1500px}
 /* Menú plegable: solo íconos; al pasar el cursor, el ícono «sobresale» */
 .menu{transition:width .18s}
-.menu-plegar{align-self:flex-end;border:0;background:transparent;color:var(--suave);width:34px;height:34px;border-radius:var(--r-md);display:grid;place-items:center;cursor:pointer;margin:-10px -4px 0 0}
-.menu-plegar:hover{background:rgba(35,83,71,.1);color:var(--menu-texto)}
+.menu-plegar{align-self:flex-end;border:0;background:transparent;color:#8EB69B;width:34px;height:34px;border-radius:var(--r-md);display:grid;place-items:center;cursor:pointer;margin:-10px -4px 0 0}
+.menu-plegar:hover{background:rgba(255,255,255,.10);color:#fff}
 .menu-iso{display:none!important}
 @media (min-width:981px){
 .app.menu-mini{grid-template-columns:76px minmax(0,1fr)}
@@ -166,7 +167,7 @@ img{max-width:100%}
 .app.menu-mini .menu-logo img:first-child,.app.menu-mini .menu-logo small,.app.menu-mini .menu-sec,.app.menu-mini .menu-pie,.app.menu-mini .menu-link span{display:none}
 .app.menu-mini .menu-iso{display:block!important;height:30px;width:auto}
 .app.menu-mini .menu-sec+.menu-link,.app.menu-mini .menu-link{width:48px;height:44px;justify-content:center;padding:0;position:relative;transition:transform .15s,box-shadow .15s,background .15s;margin:2px 0}
-.app.menu-mini .menu-link:hover{transform:scale(1.18) translateX(3px);background:var(--superficie);box-shadow:var(--sombra-alta);z-index:2}
+.app.menu-mini .menu-link:hover{transform:scale(1.18) translateX(3px);background:#163832;box-shadow:0 6px 16px rgba(0,0,0,.4);z-index:2}
 .app.menu-mini .menu-link .ic{width:22px;height:22px}
 .app.menu-mini .menu-link .cuenta{display:block;position:absolute;top:2px;right:0;min-width:16px;font-size:10px;padding:0 4px}
 .app.menu-mini.menu-ver{grid-template-columns:256px minmax(0,1fr)}
@@ -177,7 +178,7 @@ img{max-width:100%}
 .app.menu-mini.menu-ver .menu-link span.cuenta{display:block}
 .app.menu-mini.menu-ver .menu-iso{display:none!important}
 .app.menu-mini.menu-ver .menu-link{width:100%;height:auto;justify-content:flex-start;padding:8px 10px}
-.app.menu-mini.menu-ver .menu-link:hover{transform:none;box-shadow:none;background:rgba(35,83,71,.08)}
+.app.menu-mini.menu-ver .menu-link:hover{transform:none;box-shadow:none;background:rgba(255,255,255,.10)}
 .app.menu-mini.menu-ver .menu-link .cuenta{position:static;margin-left:auto}
 }
 .cab{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:12px;padding:12px clamp(16px,3vw,32px);background:color-mix(in srgb,var(--fondo) 92%,transparent);backdrop-filter:blur(10px);border-bottom:1px solid var(--borde)}
@@ -454,25 +455,25 @@ table.cn{min-width:2360px;font-size:13px}
   </div>
 </div>
 
-<script src="config.js?v=2.4.72"></script>
+<script src="config.js?v=2.4.73"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" defer></script>
-<script src="js/base.js?v=2.4.72"></script>
-<script src="js/operacion.js?v=2.4.72"></script>
-<script src="js/facturas.js?v=2.4.72"></script>
-<script src="js/conciliacion.js?v=2.4.72"></script>
-<script src="js/rcv.js?v=2.4.72"></script>
-<script src="js/portal.js?v=2.4.72"></script>
-<script src="js/gestion.js?v=2.4.72"></script>
-<script src="js/semanas.js?v=2.4.72"></script>
-<script src="js/banco.js?v=2.4.72"></script>
-<script src="js/reporte-pdf.js?v=2.4.72"></script>
-<script src="js/documentos.js?v=2.4.72"></script>
-<script src="js/informe.js?v=2.4.72"></script>
-<script src="js/padron.js?v=2.4.72"></script>
-<script src="js/presencia.js?v=2.4.72"></script>
+<script src="js/base.js?v=2.4.73"></script>
+<script src="js/operacion.js?v=2.4.73"></script>
+<script src="js/facturas.js?v=2.4.73"></script>
+<script src="js/conciliacion.js?v=2.4.73"></script>
+<script src="js/rcv.js?v=2.4.73"></script>
+<script src="js/portal.js?v=2.4.73"></script>
+<script src="js/gestion.js?v=2.4.73"></script>
+<script src="js/semanas.js?v=2.4.73"></script>
+<script src="js/banco.js?v=2.4.73"></script>
+<script src="js/reporte-pdf.js?v=2.4.73"></script>
+<script src="js/documentos.js?v=2.4.73"></script>
+<script src="js/informe.js?v=2.4.73"></script>
+<script src="js/padron.js?v=2.4.73"></script>
+<script src="js/presencia.js?v=2.4.73"></script>
 <script>CTRL.iniciar();</script>
 <script src="version-aviso.js" defer></script>
 </body>
