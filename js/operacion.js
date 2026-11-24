@@ -191,6 +191,43 @@
   function cargando() { return D.repartidores ? '' : X.esqueleto(6); }
 
   /* ══════════ TABLERO ══════════ */
+  /* ══════════ TABLERO · Resumen semanal (mismos datos que Pagos → «Reporte por semana») ══════════ */
+  var TB = { sem: '' };
+  function resumenSemanalHtml() {
+    var SMx = X.semanas; if (!SMx || !SMx.datosReporte) return '';
+    var todas = SMx.datosReporte(); if (!todas.length) return '';
+    var gest = String(Math.floor(todas[0].orden / 100));
+    var nt = function () { return { n: 0, t: 0 }; };
+    // Opción «toda la gestión»: suma de todas sus semanas
+    var acum = function (g) {
+      var t = { orden: 0, total: 0, nohab: 0, porVer: 0, contax: 0, ciu: { SCZ: nt(), CBBA: nt(), LPZ: nt(), '': nt() } };
+      ['hab', 'pag', 'env', 'pen', 'emit', 'falta', 'pagConF', 'pagSinF'].forEach(function (k) { t[k] = nt(); });
+      todas.filter(function (x) { return String(Math.floor(x.orden / 100)) === g; }).forEach(function (x) {
+        t.total += x.total; t.nohab += x.nohab; t.porVer += x.porVer; t.contax += x.contax;
+        ['hab', 'pag', 'env', 'pen', 'emit', 'falta', 'pagConF', 'pagSinF'].forEach(function (k) { t[k].n += x[k].n; t[k].t += x[k].t; });
+        ['SCZ', 'CBBA', 'LPZ', ''].forEach(function (k) { t.ciu[k].n += x.ciu[k].n; t.ciu[k].t += x.ciu[k].t; });
+      });
+      return t;
+    };
+    if (!TB.sem || (TB.sem !== 'g' && !todas.some(function (x) { return String(x.orden) === TB.sem; }))) TB.sem = String(todas[0].orden);
+    var x = TB.sem === 'g' ? acum(gest) : todas.filter(function (y) { return String(y.orden) === TB.sem; })[0];
+    var pct = function (a, b) { return b ? Math.round(a * 100 / b) + '%' : '—'; };
+    var fila = function (txt, y, extra, cl) { return '<li' + (cl ? ' class="' + cl + '"' : '') + '><span>' + txt + '</span><b class="num">' + bs(X.redondear(y.t)) + '</b><em class="num">' + entero(y.n) + ' pagos' + (extra ? ' · ' + extra : '') + '</em></li>'; };
+    var cant = function (txt, n, extra, cl) { return '<li' + (cl ? ' class="' + cl + '"' : '') + '><span>' + txt + '</span><b class="num">' + entero(n) + '</b><em>' + (extra || '') + '</em></li>'; };
+    var blo = function (t, cuerpo) { return '<div class="tb-blo"><h3>' + t + '</h3><ul>' + cuerpo + '</ul></div>'; };
+    var opciones = todas.slice(0, 26).map(function (y) { return '<option value="' + y.orden + '"' + (String(y.orden) === TB.sem ? ' selected' : '') + '>Semana ' + (y.orden % 100) + ' · ' + Math.floor(y.orden / 100) + '</option>'; }).join('') +
+      '<option value="g"' + (TB.sem === 'g' ? ' selected' : '') + '>Toda la gestión ' + gest + '</option>';
+    return '<div class="card mb tb-semanal"><div class="h2">Resumen semanal <small>mismos datos del «Reporte por semana»</small>' +
+        '<span class="tb-acc"><select id="tbSem" aria-label="Semana del resumen">' + opciones + '</select><button class="btn sec chico" id="tbReporte" type="button">' + ic('descargar') + 'Reporte completo</button></span></div>' +
+      '<div class="tb-bloques">' +
+        blo('Planilla', fila('Planilla total', x.hab, '', 'total') + fila('Total pagado', x.pag, pct(x.pag.t, x.hab.t), 'ok') + fila('Enviado a pagar', x.env) + fila('Pendiente · retenido', x.pen, '', x.pen.n ? 'mal' : '')) +
+        blo('Repartidores', cant('Habilitados', x.hab.n, 'con importe') + cant('No habilitados', x.nohab, 'Bs 0 · no cumplieron las horas')) +
+        blo('Por ciudad', fila('Santa Cruz', x.ciu.SCZ) + fila('Cochabamba', x.ciu.CBBA) + fila('La Paz', x.ciu.LPZ) + (x.ciu[''].n ? fila('Sin clasificación', x.ciu['']) : '')) +
+        blo('Facturas', fila('Emitieron su factura', x.emit, pct(x.emit.n, x.hab.n), 'ok') + fila('Falta emitir su factura', x.falta, x.contax ? entero(x.contax) + ' CONTAX debe emitir' : '', x.falta.n ? 'mal' : '') +
+          (x.porVer ? cant('Por verificar u observadas', x.porVer, 'ya emitidas, falta el RCV') : '')) +
+        blo('Pagos', fila('Pagados con factura', x.pagConF, '', 'ok') + fila('Pagados sin factura · excepciones', x.pagSinF, '', x.pagSinF.n ? 'mal' : '')) +
+      '</div></div>';
+  }
   X.pagina('tablero', {
     t: 'Tablero', i: 'tablero', orden: 1, sec: 'Operación',
     render: function () {
@@ -217,7 +254,7 @@
           '<button class="kpi" data-ir="pagos" data-pf="todos"><small>Por pagar</small><b class="num">' + bs(totPend) + '</b><em>' + entero(conPend.length) + ' repartidores con pendientes</em></button>' +
           '<button class="kpi" data-ir="pagos" data-pf="listos"><small>Listos para pagar</small><b class="num">' + bs(totListos) + '</b><em>' + entero(listos.length) + ' con todas sus facturas bien</em></button>' +
           '<button class="kpi' + (porRevisar ? ' alerta' : '') + '" data-ir="facturas" data-ft="recibida"><small>Facturas por revisar</small><b class="num">' + entero(porRevisar) + '</b><em>' + entero(observadas) + ' observadas esperando corrección</em></button>' +
-        '</div>' +
+        '</div>' + resumenSemanalHtml() +
         '<div class="rejilla r2 mb">' +
           '<div class="card"><div class="h2">Próximo corte <small>jueves 18:00</small></div><div class="corte">' +
             '<img class="relieve" src="marca/graficos/rel-vencimientos-' + (S.oscuro ? 'oscuro' : 'claro') + '.png" alt="">' +
@@ -237,6 +274,8 @@
       // Desde el Tablero se llega a la lista ya filtrada
       el.querySelectorAll('[data-pf]').forEach(function (b) { b.addEventListener('click', function () { P.filtro = b.getAttribute('data-pf'); P.pag = 0; }); });
       el.querySelectorAll('[data-ft]').forEach(function (b) { b.addEventListener('click', function () { X.tabFacturas(b.getAttribute('data-ft')); }); });
+      var ts = el.querySelector('#tbSem'); if (ts) ts.addEventListener('change', function () { TB.sem = ts.value; X.refrescar(); });
+      var tr = el.querySelector('#tbReporte'); if (tr) tr.addEventListener('click', function () { X.semanas.verReporteSemanas(); });
       var t = setInterval(function () { var r = document.getElementById('relojCorte'); if (!r) return clearInterval(t); r.textContent = corte().texto; }, 30000);
       if (!D.repartidores || !S.portalUsuario) return;
       var l = lista(), pag = {}, pen = {};

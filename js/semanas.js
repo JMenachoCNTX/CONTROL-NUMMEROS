@@ -1551,7 +1551,7 @@
     completarFacturasHist: completarFacturasHist, ponerFactura: ponerFactura, facturaDelPago: facturaDelPago, nroHist: nroHist,
     completarNombres: completarNombres,
     nombresFaltantes: nombresFaltantes,
-    modoControl: modoControl, cargar: cargar, aplicar: aplicar, cargarHistorial: cargarHistorial, aplicarHistorial: aplicarHistorial, agregarAlHistorial: agregarAlHistorial, importar: importar, verImportaciones: verImportaciones, verPorSemana: verPorSemana, verReporteSemanas: verReporteSemanas, migrar: migrar,
+    modoControl: modoControl, cargar: cargar, aplicar: aplicar, cargarHistorial: cargarHistorial, aplicarHistorial: aplicarHistorial, agregarAlHistorial: agregarAlHistorial, importar: importar, verImportaciones: verImportaciones, verPorSemana: verPorSemana, verReporteSemanas: verReporteSemanas, datosReporte: datosReporteSemanas, migrar: migrar,
     marcarEnPlanilla: marcarEnPlanilla, cambiarFecha: cambiarFecha, puedeCorregir: puedeCorregir, cambiarFactura: cambiarFactura, accionesPago: accionesPago, botonPagado: botonPagado, marcarFuera: marcarFuera, confirmarPago: confirmarPago, anularPlanilla: anularPlanilla, porConfirmar: porConfirmar, reporte: reporte,
     enviados: enviados, enviadosAPendiente: enviadosAPendiente, enviadosPagados: enviadosPagados, verificarPendientes: verificarPendientes,
     // piezas que usa js/banco.js
