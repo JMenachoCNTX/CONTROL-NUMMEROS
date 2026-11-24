@@ -514,13 +514,13 @@
   }
   function cruzar(lineas, ext) {
     var porClave = {}; ext.filas.forEach(function (f) { porClave[X.idSeguro(f.id) + '|' + f.sem] = f; });
-    var res = { pagados: [], rebotados: [], faltan: [], sobran: [], montoDistinto: 0, fecha: '', fechas: {} };
+    var res = { pagados: [], rebotados: [], faltan: [], sobran: [], montoDistinto: [], fecha: '', fechas: {} };
     var usados = {};
     lineas.forEach(function (l) {
       var k = X.idSeguro(l.id) + '|' + l.sem, f = porClave[k];
       if (!f || !f.estado) { res.faltan.push(l); return; }
       usados[k] = 1;
-      if (f.monto !== null && Math.abs(f.monto - l.importe) > 0.005) res.montoDistinto++;
+      if (f.monto !== null && Math.abs(f.monto - l.importe) > 0.005) res.montoDistinto.push({ l: l, f: f });
       if (OK_BANCO.test(f.estado)) { res.pagados.push({ l: l, f: f }); if (f.fecha) res.fechas[f.fecha] = (res.fechas[f.fecha] || 0) + 1; }
       else res.rebotados.push({ l: l, f: f });
     });
@@ -570,7 +570,14 @@
                 ], cr.sobran) + '</div>' : '') +
               (Object.keys(cr.fechas).length ? '<div class="card mb"><div class="h2">Fechas de pago del extracto</div><p class="muted">Cada pago se guarda con la fecha de su fila (columna «Fecha de Pago»).</p>' +
                 Object.keys(cr.fechas).sort().map(function (k) { return '<div class="dato"><small>' + esc(X.fecha(k)) + '</small><b class="num">' + entero(cr.fechas[k]) + ' pagos</b></div>'; }).join('') + '</div>' : '') +
-              (cr.montoDistinto ? '<div class="aviso-caja mb">' + ic('excepcion') + '<div><b>' + entero(cr.montoDistinto) + ' pagos con importe distinto al de la planilla</b>Revísalos en el banco.</div></div>' : '') +
+              (cr.montoDistinto.length ? '<div class="aviso-caja mb">' + ic('excepcion') + '<div><b>' + entero(cr.montoDistinto.length) + (cr.montoDistinto.length === 1 ? ' pago con importe distinto' : ' pagos con importe distinto') + ' al de la planilla</b>Revísalos en el banco: abajo está cuál es.</div></div>' +
+                '<div class="card mb"><div class="h2">Importe distinto al de la planilla</div>' + X.tabla([
+                  { t: 'Repartidor', html: function (x) { return '<b>' + esc(x.l.nombre || x.f.nombre || 'Sin nombre') + '</b><span class="sub num">ID ' + esc(x.l.id) + ' · ' + esc(x.l.sem) + '</span>'; } },
+                  { t: 'Banco', html: function (x) { return esc(x.f.banco || '—') + '<span class="sub">' + esc(x.f.estado) + (x.f.fecha ? ' · ' + esc(X.fecha(x.f.fecha)) : '') + '</span>'; } },
+                  { t: 'En la planilla', clase: 'monto', html: function (x) { return bs(x.l.importe); } },
+                  { t: 'En el extracto', clase: 'monto', html: function (x) { return bs(x.f.monto); } },
+                  { t: 'Diferencia', clase: 'monto', html: function (x) { return '<b>' + bs(X.redondear(x.f.monto - x.l.importe)) + '</b>'; } }
+                ], cr.montoDistinto) + '</div>' : '') +
               '<div class="fila"><label for="exFecha">' + (cr.pagados.some(function (x) { return !x.f.fecha; }) ? 'Fecha para los pagos sin fecha en el extracto' : 'Fecha de la planilla (cada pago usa la de su fila)') + '</label><input id="exFecha" type="date" value="' + esc(cr.fecha || p.fechaProgramada || X.hoyISO()) + '"></div>';
             ok.disabled = !(cr.pagados.length || cr.rebotados.length);
           }).catch(function (ex) { console.error(ex); caja.innerHTML = '<p class="login-err">' + esc(ex.message || 'No se pudo leer el archivo.') + '</p>'; });
