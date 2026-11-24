@@ -196,28 +196,21 @@
   function resumenSemanalHtml() {
     var SMx = X.semanas; if (!SMx || !SMx.datosReporte) return '';
     var todas = SMx.datosReporte(); if (!todas.length) return '';
-    var gest = String(Math.floor(todas[0].orden / 100));
-    var nt = function () { return { n: 0, t: 0 }; };
-    // Opción «toda la gestión»: suma de todas sus semanas
-    var acum = function (g) {
-      var t = { orden: 0, total: 0, nohab: 0, porVer: 0, contax: 0, ciu: { SCZ: nt(), CBBA: nt(), LPZ: nt(), '': nt() } };
-      ['hab', 'pag', 'env', 'pen', 'emit', 'falta', 'pagConF', 'pagSinF'].forEach(function (k) { t[k] = nt(); });
-      todas.filter(function (x) { return String(Math.floor(x.orden / 100)) === g; }).forEach(function (x) {
-        t.total += x.total; t.nohab += x.nohab; t.porVer += x.porVer; t.contax += x.contax;
-        ['hab', 'pag', 'env', 'pen', 'emit', 'falta', 'pagConF', 'pagSinF'].forEach(function (k) { t[k].n += x[k].n; t[k].t += x[k].t; });
-        ['SCZ', 'CBBA', 'LPZ', ''].forEach(function (k) { t.ciu[k].n += x.ciu[k].n; t.ciu[k].t += x.ciu[k].t; });
-      });
-      return t;
-    };
-    if (!TB.sem || (TB.sem !== 'g' && !todas.some(function (x) { return String(x.orden) === TB.sem; }))) TB.sem = String(todas[0].orden);
-    var x = TB.sem === 'g' ? acum(gest) : todas.filter(function (y) { return String(y.orden) === TB.sem; })[0];
+    // Gestiones con datos (la más reciente primero)
+    var gests = Object.keys(todas.reduce(function (o, y) { o[Math.floor(y.orden / 100)] = 1; return o; }, {})).sort().reverse();
+    var deG = function (g) { return todas.filter(function (y) { return String(Math.floor(y.orden / 100)) === g; }); };
+    // Valores del selector: orden de semana, «g2026» = toda esa gestión, «todo» = resumen general
+    var valido = TB.sem === 'todo' || (TB.sem.charAt(0) === 'g' && gests.indexOf(TB.sem.slice(1)) >= 0) || todas.some(function (y) { return String(y.orden) === TB.sem; });
+    if (!TB.sem || !valido) TB.sem = String(todas[0].orden);
+    var x = TB.sem === 'todo' ? SMx.sumarReporte(todas) : TB.sem.charAt(0) === 'g' ? SMx.sumarReporte(deG(TB.sem.slice(1))) : todas.filter(function (y) { return String(y.orden) === TB.sem; })[0];
     var pct = function (a, b) { return b ? Math.round(a * 100 / b) + '%' : '—'; };
     var fila = function (txt, y, extra, cl) { return '<li' + (cl ? ' class="' + cl + '"' : '') + '><span>' + txt + '</span><b class="num">' + bs(X.redondear(y.t)) + '</b><em class="num">' + entero(y.n) + ' pagos' + (extra ? ' · ' + extra : '') + '</em></li>'; };
     var cant = function (txt, n, extra, cl) { return '<li' + (cl ? ' class="' + cl + '"' : '') + '><span>' + txt + '</span><b class="num">' + entero(n) + '</b><em>' + (extra || '') + '</em></li>'; };
     var blo = function (t, cuerpo) { return '<div class="tb-blo"><h3>' + t + '</h3><ul>' + cuerpo + '</ul></div>'; };
-    var opciones = todas.slice(0, 26).map(function (y) { return '<option value="' + y.orden + '"' + (String(y.orden) === TB.sem ? ' selected' : '') + '>Semana ' + (y.orden % 100) + ' · ' + Math.floor(y.orden / 100) + '</option>'; }).join('') +
-      '<option value="g"' + (TB.sem === 'g' ? ' selected' : '') + '>Toda la gestión ' + gest + '</option>';
-    return '<div class="card mb tb-semanal"><div class="h2">Resumen semanal <small>mismos datos del «Reporte por semana»</small>' +
+    var opciones = '<optgroup label="Por semana">' + todas.slice(0, 26).map(function (y) { return '<option value="' + y.orden + '"' + (String(y.orden) === TB.sem ? ' selected' : '') + '>Semana ' + (y.orden % 100) + ' · ' + Math.floor(y.orden / 100) + '</option>'; }).join('') +
+      '</optgroup><optgroup label="Por gestión">' + gests.map(function (g) { return '<option value="g' + g + '"' + (TB.sem === 'g' + g ? ' selected' : '') + '>Toda la gestión ' + g + '</option>'; }).join('') +
+      '</optgroup><optgroup label="General"><option value="todo"' + (TB.sem === 'todo' ? ' selected' : '') + '>Resumen general · todas las gestiones</option></optgroup>';
+    return '<div class="card mb tb-semanal"><div class="h2">' + (TB.sem === 'todo' ? 'Resumen general' : TB.sem.charAt(0) === 'g' ? 'Resumen de la gestión ' + TB.sem.slice(1) : 'Resumen semanal') + ' <small>' + (x.semanas ? entero(x.semanas) + ' semanas · ' : '') + 'mismos datos del «Reporte por semana»</small>' +
         '<span class="tb-acc"><select id="tbSem" aria-label="Semana del resumen">' + opciones + '</select><button class="btn sec chico" id="tbReporte" type="button">' + ic('descargar') + 'Reporte completo</button></span></div>' +
       '<div class="tb-bloques">' +
         blo('Planilla', fila('Planilla total', x.hab, '', 'total') + fila('Total pagado', x.pag, pct(x.pag.t, x.hab.t), 'ok') + fila('Enviado a pagar', x.env) + fila('Pendiente · retenido', x.pen, '', x.pen.n ? 'mal' : '')) +
@@ -275,7 +268,7 @@
       el.querySelectorAll('[data-pf]').forEach(function (b) { b.addEventListener('click', function () { P.filtro = b.getAttribute('data-pf'); P.pag = 0; }); });
       el.querySelectorAll('[data-ft]').forEach(function (b) { b.addEventListener('click', function () { X.tabFacturas(b.getAttribute('data-ft')); }); });
       var ts = el.querySelector('#tbSem'); if (ts) ts.addEventListener('change', function () { TB.sem = ts.value; X.refrescar(); });
-      var tr = el.querySelector('#tbReporte'); if (tr) tr.addEventListener('click', function () { X.semanas.verReporteSemanas(); });
+      var tr = el.querySelector('#tbReporte'); if (tr) tr.addEventListener('click', function () { X.semanas.verReporteSemanas(TB.sem === 'todo' ? 'todas' : TB.sem.charAt(0) === 'g' ? TB.sem.slice(1) : ''); });
       var t = setInterval(function () { var r = document.getElementById('relojCorte'); if (!r) return clearInterval(t); r.textContent = corte().texto; }, 30000);
       if (!D.repartidores || !S.portalUsuario) return;
       var l = lista(), pag = {}, pen = {};

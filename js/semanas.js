@@ -745,6 +745,18 @@
      Pagos de Sheets sin ciudad: se usa la ciudad de BDYango del repartidor. */
   var RS = { gestion: '' };
   var nt = function () { return { n: 0, t: 0 }; };
+  /* Suma varias semanas del reporte en una sola fila (para gestiones y totales) */
+  var R_NT = ['hab', 'pag', 'env', 'pen', 'emit', 'falta', 'pagConF', 'pagSinF'], R_NUM = ['nohab', 'verif', 'porVer', 'contax', 'excep'], R_CIU = ['SCZ', 'CBBA', 'LPZ', ''];
+  function sumarReporte(l, base) {
+    var t = base || {}; t.orden = t.orden || 0; t.total = 0; t.ciu = {}; t.semanas = l.length;
+    R_NT.forEach(function (k) { t[k] = nt(); }); R_NUM.forEach(function (k) { t[k] = 0; }); R_CIU.forEach(function (k) { t.ciu[k] = nt(); });
+    l.forEach(function (x) {
+      t.total += x.total; R_NT.forEach(function (k) { t[k].n += x[k].n; t[k].t += x[k].t; }); R_NUM.forEach(function (k) { t[k] += x[k] || 0; });
+      R_CIU.forEach(function (k) { t.ciu[k].n += x.ciu[k].n; t.ciu[k].t += x.ciu[k].t; });
+    });
+    t.total = X.redondear(t.total); R_NT.forEach(function (k) { t[k].t = X.redondear(t[k].t); }); R_CIU.forEach(function (k) { t.ciu[k].t = X.redondear(t.ciu[k].t); });
+    return t;
+  }
   function datosReporteSemanas() {
     var m = {}, evs = {}, cBDY = {};
     ((D.bdyango && D.bdyango.lista) || []).forEach(function (b) { if (b.ciudad) cBDY[b.id] = b.ciudad; });
@@ -824,29 +836,27 @@
     ws['!rows'] = [{ hpt: 22 }, { hpt: 48 }];
     ws['!autofilter'] = { ref: XL.utils.encode_range({ s: { r: 1, c: 0 }, e: { r: ultima, c: n - 1 } }) };
   }
-  function verReporteSemanas() {
+  function verReporteSemanas(g) {
+    if (typeof g === 'string' && g) RS.gestion = g;
     var c = X.cajon('Reporte por semana', 'Semana por semana, en bloques: planilla, repartidores, ciudades, facturas y pagos. Cantidad e importe. Sale de los datos ya cargados (no gasta lecturas).', X.cargaBarra('Reporte', 'Calculando…'));
     if (c.cuerpo.parentNode) c.cuerpo.parentNode.classList.add('completa');
     setTimeout(function () {
       var todas = datosReporteSemanas();
       var gest = Object.keys(todas.reduce(function (o, x) { o[Math.floor(x.orden / 100)] = 1; return o; }, {})).sort().reverse();
-      if (!RS.gestion || gest.indexOf(RS.gestion) < 0) RS.gestion = gest[0] || '';
-      var NT = ['hab', 'pag', 'env', 'pen', 'emit', 'falta', 'pagConF', 'pagSinF'], NUM = ['nohab', 'verif', 'porVer', 'contax', 'excep'], CIU = ['SCZ', 'CBBA', 'LPZ', ''];
+      if (!RS.gestion || (RS.gestion !== 'todas' && gest.indexOf(RS.gestion) < 0)) RS.gestion = gest[0] || '';
+      var deG = function (g) { return todas.filter(function (x) { return String(Math.floor(x.orden / 100)) === g; }); };
       function armar() {
-        var l = todas.filter(function (x) { return !RS.gestion || String(Math.floor(x.orden / 100)) === RS.gestion; });
+        var porGes = RS.gestion === 'todas';
+        // «Resumen por gestiones»: una fila por año; si no, una fila por semana del año elegido
+        var l = porGes ? gest.map(function (g) { return sumarReporte(deG(g), { gest_: g, orden: Number(g) * 100 }); }) : deG(RS.gestion);
+        var etqTot = porGes ? 'Total general' : 'Total ' + RS.gestion;
         var pct = function (a, b) { return b ? Math.round(a * 100 / b) + '%' : ''; };
         // Importe arriba, cantidad abajo
         var mon = function (y, extra) { return y.n ? '<b class="num">' + bs(y.t) + '</b><span class="sub num">' + entero(y.n) + ' pagos' + (extra ? ' · ' + extra : '') + '</span>' : '<span class="muted">—</span>'; };
         var n = function (v, txt) { return v ? '<b class="num">' + entero(v) + '</b>' + (txt ? '<span class="sub">' + txt + '</span>' : '') : '<span class="muted">0</span>'; };
-        var tot = { orden: 0, total: 0, total_: true, ciu: {} };
-        NT.forEach(function (k) { tot[k] = nt(); }); NUM.forEach(function (k) { tot[k] = 0; }); CIU.forEach(function (k) { tot.ciu[k] = nt(); });
-        l.forEach(function (x) {
-          tot.total += x.total; NT.forEach(function (k) { tot[k].n += x[k].n; tot[k].t += x[k].t; }); NUM.forEach(function (k) { tot[k] += x[k]; });
-          CIU.forEach(function (k) { tot.ciu[k].n += x.ciu[k].n; tot.ciu[k].t += x.ciu[k].t; });
-        });
-        tot.total = X.redondear(tot.total); NT.forEach(function (k) { tot[k].t = X.redondear(tot[k].t); }); CIU.forEach(function (k) { tot.ciu[k].t = X.redondear(tot.ciu[k].t); });
+        var tot = sumarReporte(porGes ? todas : l, { total_: true });
         var cols = [
-          { t: 'Semana', html: function (x) { return x.total_ ? '<b>Total ' + esc(RS.gestion) + '</b>' : '<b>Sem ' + (x.orden % 100) + '</b><span class="sub num">' + Math.floor(x.orden / 100) + '</span>'; } },
+          { t: porGes ? 'Gestión' : 'Semana', html: function (x) { return x.total_ ? '<b>' + esc(etqTot) + '</b>' : x.gest_ ? '<b>Gestión ' + esc(x.gest_) + '</b><span class="sub num">' + entero(x.semanas) + ' semanas</span>' : '<b>Sem ' + (x.orden % 100) + '</b><span class="sub num">' + Math.floor(x.orden / 100) + '</span>'; } },
           // Planilla
           { t: 'Planilla total', clase: 'monto', html: function (x) { return mon(x.hab); } },
           { t: 'Total pagado', clase: 'monto', html: function (x) { return mon(x.pag, pct(x.pag.t, x.total)); } },
@@ -868,7 +878,7 @@
           { t: 'Pagados sin factura · excepciones', clase: 'monto', html: function (x) { return mon(x.pagSinF); } }
         ];
         var grupos = [{ t: '', n: 1 }, { t: 'Planilla', n: 4 }, { t: 'Repartidores', n: 2 }, { t: 'Por ciudad', n: 4 }, { t: 'Facturas', n: 2 }, { t: 'Pagos (pagados + enviados a pagar)', n: 2 }];
-        c.cuerpo.innerHTML = '<div class="herr"><select id="rsGes" aria-label="Gestión">' + gest.map(function (g) { return '<option' + (g === RS.gestion ? ' selected' : '') + '>' + g + '</option>'; }).join('') + '</select>' +
+        c.cuerpo.innerHTML = '<div class="herr"><select id="rsGes" aria-label="Gestión">' + '<option value="todas"' + (RS.gestion === 'todas' ? ' selected' : '') + '>Resumen por gestiones (general)</option>' + gest.map(function (g) { return '<option value="' + g + '"' + (g === RS.gestion ? ' selected' : '') + '>Gestión ' + g + ' · por semana</option>'; }).join('') + '</select>' +
           '<button class="btn sec" id="rsExcel"' + (l.length ? '' : ' disabled') + '>' + ic('descargar') + 'Excel</button></div>' +
           '<p class="muted mb">Cada casilla muestra el importe y, debajo, la cantidad de pagos. Planilla total = Total pagado + Enviado a pagar + Pendiente (solo habilitados con importe). Emitieron + Falta emitir = Planilla total. «Pagados sin factura · excepciones» = pagados o enviados a pagar sin factura (retenidos y excepciones). Los pagos migrados de Sheets toman la ciudad de BDYango.</p>' +
           (l.length ? '<div class="tabla-ancha">' + X.tabla(cols, l.concat([tot]), { tam: 200, grupos: grupos, claseFila: function (x) { return x.total_ ? 'fila-total' : ''; } }) + '</div>' : X.vacio('No hay semanas en esta gestión', ''));
@@ -880,13 +890,14 @@
             'Santa Cruz (Bs)', 'Santa Cruz (cant.)', 'Cochabamba (Bs)', 'Cochabamba (cant.)', 'La Paz (Bs)', 'La Paz (cant.)', 'Sin clasificación (Bs)', 'Sin clasificación (cant.)',
             'Emitieron su factura (Bs)', 'Emitieron su factura (cant.)', 'Por verificar u observadas (cant.)', 'Falta emitir su factura (Bs)', 'Falta emitir su factura (cant.)', 'CONTAX debe emitir (cant.)',
             'Pagados con factura (Bs)', 'Pagados con factura (cant.)', 'Pagados sin factura · excepciones (Bs)', 'Pagados sin factura · excepciones (cant.)'];
-          var row = function (x) { return [x.total_ ? 'TOTAL' : 'SEM ' + (x.orden % 100), x.total_ ? RS.gestion : Math.floor(x.orden / 100),
+          if (porGes) { g1[0] = 'Gestión'; g1[1] = 'Semanas'; cab[0] = 'Gestión'; cab[1] = 'Semanas'; }
+          var row = function (x) { return [x.total_ ? 'TOTAL' : x.gest_ ? 'GESTIÓN ' + x.gest_ : 'SEM ' + (x.orden % 100), x.total_ ? (porGes ? 'General · ' + x.semanas + ' sem.' : RS.gestion) : x.gest_ ? x.semanas : Math.floor(x.orden / 100),
             x.hab.t, x.hab.n, x.pag.t, x.pag.n, x.env.t, x.env.n, x.pen.t, x.pen.n, x.hab.n, x.nohab,
             x.ciu.SCZ.t, x.ciu.SCZ.n, x.ciu.CBBA.t, x.ciu.CBBA.n, x.ciu.LPZ.t, x.ciu.LPZ.n, x.ciu[''].t, x.ciu[''].n,
             x.emit.t, x.emit.n, x.porVer, x.falta.t, x.falta.n, x.contax, x.pagConF.t, x.pagConF.n, x.pagSinF.t, x.pagSinF.n]; };
-          var nom = 'Reporte-por-semana-' + RS.gestion;
+          var nom = porGes ? 'Reporte-por-gestiones' : 'Reporte-por-semana-' + RS.gestion;
           X.excel([{ nombre: 'Por semana', filas: [g1, cab].concat(l.map(row)).concat([row(tot)]) }], nom, estiloReporte);
-          X.bitacora('Descargó reporte por semana', nom);
+          X.bitacora(porGes ? 'Descargó reporte por gestiones' : 'Descargó reporte por semana', nom);
         });
       }
       armar();
@@ -1551,7 +1562,7 @@
     completarFacturasHist: completarFacturasHist, ponerFactura: ponerFactura, facturaDelPago: facturaDelPago, nroHist: nroHist,
     completarNombres: completarNombres,
     nombresFaltantes: nombresFaltantes,
-    modoControl: modoControl, cargar: cargar, aplicar: aplicar, cargarHistorial: cargarHistorial, aplicarHistorial: aplicarHistorial, agregarAlHistorial: agregarAlHistorial, importar: importar, verImportaciones: verImportaciones, verPorSemana: verPorSemana, verReporteSemanas: verReporteSemanas, datosReporte: datosReporteSemanas, migrar: migrar,
+    modoControl: modoControl, cargar: cargar, aplicar: aplicar, cargarHistorial: cargarHistorial, aplicarHistorial: aplicarHistorial, agregarAlHistorial: agregarAlHistorial, importar: importar, verImportaciones: verImportaciones, verPorSemana: verPorSemana, verReporteSemanas: verReporteSemanas, datosReporte: datosReporteSemanas, sumarReporte: sumarReporte, migrar: migrar,
     marcarEnPlanilla: marcarEnPlanilla, cambiarFecha: cambiarFecha, puedeCorregir: puedeCorregir, cambiarFactura: cambiarFactura, accionesPago: accionesPago, botonPagado: botonPagado, marcarFuera: marcarFuera, confirmarPago: confirmarPago, anularPlanilla: anularPlanilla, porConfirmar: porConfirmar, reporte: reporte,
     enviados: enviados, enviadosAPendiente: enviadosAPendiente, enviadosPagados: enviadosPagados, verificarPendientes: verificarPendientes,
     // piezas que usa js/banco.js
