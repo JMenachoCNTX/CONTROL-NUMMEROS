@@ -341,6 +341,31 @@
     var f = s.f, malo = f && (f.estado === 'observada' || f.estado === 'rechazada');
     return !f ? (s.ex ? 'exc' : 'falta') : malo ? 'obs' : f.verificacion ? 'ver' : 'pre';
   }
+  /* Excel de Pagos pendientes: lo que se ve con la pestaña y los filtros elegidos (en «Retenidos», todos los retenidos).
+     Una fila por pago (semana), con el formato del «Detalle Pagos» (X.banco.estiloDetalle). */
+  var PESTANA_TXT = { todos: 'Todos', listos: 'Listos', retenidos: 'Retenidos', revision: 'En revisión', contax: 'Clientes CONTAX', ver: 'Con factura verificada', pre: 'Pre-aprobadas', falta: 'Faltan emitir' };
+  function excelPagos(lista) {
+    var CIU = (X.semanas && X.semanas.CIUDADES) || {}, filas = [], n = 0, total = 0, rep = {};
+    var cab = ['Nro', 'ID del mensajero', 'Nombre completo', 'Celular', 'Ciudad', 'Contador', 'Semana', 'Importe', 'Estado del pago', 'Estado del repartidor', 'Motivo de retención', 'Nro Factura', 'Estado de la factura', 'Nota'];
+    var estFac = { aprobada: 'Aprobada', recibida: 'En revisión', observada: 'Observada', rechazada: 'Rechazada', anulada: 'Anulada' };
+    lista.forEach(function (e) {
+      rep[e.r.id] = 1;
+      e.semanas.forEach(function (sm) {
+        var imp = Number(sm.p.importe) || 0, f = sm.f, id = String(e.r.id); total += imp;
+        filas.push([++n, /^\d{1,15}$/.test(id) ? Number(id) : id, e.r.nombre || '', (X.celularDe && X.celularDe(e.r.id)) || '', CIU[ciudadDe(e.r, sm.p)] || '',
+          e.cliente ? 'CONTAX' : 'Otro', String(sm.p.semana || ''), imp, (ESTADO_SEMANA[sm.estado] || ['', sm.estado])[1],
+          e.listo ? (e.parcial ? 'Pago parcial' : 'Listo para pagar') : 'Retenido', e.listo ? '' : e.motivo,
+          f ? (f.numero || 'Sin N.º') : '', f ? (estFac[f.estado] || f.estado || '') + (f.estado === 'aprobada' ? (f.verificacion ? ' · verificada en Impuestos' : ' · sin verificar') : '') : '',
+          [sm.p.rebote ? 'Rebotó en el banco' : '', e.r.nombreSistema ? 'Nombre colocado por el sistema' : ''].filter(Boolean).join(' · ')]);
+      });
+    });
+    filas.push(new Array(cab.length).fill(''));
+    var tf = new Array(cab.length).fill(''); tf[0] = 'TOTAL'; tf[2] = entero(Object.keys(rep).length) + ' repartidores'; tf[6] = entero(n) + ' pagos'; tf[7] = X.redondear(total); filas.push(tf);
+    var color = function (v) { return /Retenido/.test(v) ? ['FBE5D6', 'B54708'] : /parcial/.test(v) ? ['FFF4CC', '7A5B00'] : ['8EB69B', '051F20']; };
+    var nom = 'Pagos pendientes - ' + (PESTANA_TXT[P.filtro] || 'Todos') + (P.semana ? ' - ' + P.semana : '') + ' - ' + X.hoyISO();
+    X.excel([{ nombre: PESTANA_TXT[P.filtro] || 'Pagos', columnas: cab.length, importe: 7, estado: 9, colorEstado: color, filas: [cab].concat(filas) }], nom, X.banco && X.banco.estiloDetalle)
+      .then(function () { X.bitacora('Descargó pagos pendientes en Excel', nom + ' · ' + n + ' pagos'); });
+  }
   X.pagina('pagos', {
     t: 'Pagos pendientes', i: 'pagos', orden: 3, sec: 'Operación',
     render: function () {
@@ -392,7 +417,8 @@
         '<div class="herr"><div class="buscar">' + ic('buscar') +  '<input type="search" id="bPagos" placeholder="Buscar por nombre, ID, celular, NIT, razón social o autorización" value="' + esc(P.buscar) + '"></div>' +
           '<select id="sSemana" aria-label="Semana"><option value="">Todas las semanas</option>' + semLista.map(function (s) { return '<option' + (s === P.semana ? ' selected' : '') + '>' + esc(s) + '</option>'; }).join('') + '</select>' +
           '<select id="sCiudad" aria-label="Ciudad"><option value="">Todas las ciudades</option>' + ['SCZ', 'CBBA', 'LPZ'].map(function (c) { return '<option value="' + c + '"' + (c === P.ciudad ? ' selected' : '') + '>' + esc(X.semanas.CIUDADES[c]) + '</option>'; }).join('') + '<option value="sin"' + (P.ciudad === 'sin' ? ' selected' : '') + '>Sin ciudad (inactivos)</option></select>' +
-          '<select id="sCliente" aria-label="Clientes"><option value="">Clientes y no clientes</option><option value="si"' + (P.cliente === 'si' ? ' selected' : '') + '>Clientes CONTAX</option><option value="no"' + (P.cliente === 'no' ? ' selected' : '') + '>No clientes</option></select></div>' +
+          '<select id="sCliente" aria-label="Clientes"><option value="">Clientes y no clientes</option><option value="si"' + (P.cliente === 'si' ? ' selected' : '') + '>Clientes CONTAX</option><option value="no"' + (P.cliente === 'no' ? ' selected' : '') + '>No clientes</option></select>' +
+          (P.filtro !== 'enviado' && f.length ? '<button class="btn sec" id="btnPagosExcel" type="button">' + ic('descargar') + 'Excel (' + entero(nSem(f)) + ' pagos)</button>' : '') + '</div>' +
         (P.filtro === 'enviado' ? tablaEnviados(envL) : f.length ? X.tabla([
           { t: 'Repartidor', html: function (e) { return '<b>' + esc(e.r.nombre || 'Sin nombre') + '</b><span class="sub num">ID ' + esc(e.r.id) + (e.cliente ? ' · ' : '') + '</span>' + (e.cliente ? X.chip('contax', 'Cliente CONTAX') : '') + (e.r.nombreSistema ? '<span class="sub">' + X.chip('neutro', 'Nombre colocado por el sistema') + '</span>' : ''); } },
           { t: 'Semanas', html: function (e) { return e.semanas.map(function (s) { return '<div style="margin:2px 0"><span class="num">' + esc(semanaCorta(s.p.semana)) + '</span> ' + chipSemana(s.estado) + (s.p.rebote ? ' ' + X.chip('mal', 'Rebotó en el banco') : '') + '</div>'; }).join(''); } },
@@ -416,6 +442,7 @@
       var sc = el.querySelector('#sCiudad'); if (sc) sc.addEventListener('change', function () { P.ciudad = sc.value; P.pag = 0; X.refrescar(); });
       el.querySelectorAll('[data-pag]').forEach(function (b) { b.addEventListener('click', function () { P.pag = Number(b.getAttribute('data-pag')); X.refrescar(); }); });
       if (P.filtro === 'enviado') activarEnviados(el);
+      var bx = el.querySelector('#btnPagosExcel'); if (bx) bx.addEventListener('click', function () { excelPagos(filtrarPagos(ev)); });
       el.querySelectorAll('tr[data-fila]').forEach(function (tr) {
         tr.addEventListener('click', function () {
           var filtrados = filtrarPagos(ev); var e = filtrados[Number(tr.getAttribute('data-fila'))]; if (e) detalleRepartidor(e.r.uid);
