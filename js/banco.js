@@ -512,24 +512,33 @@
     });
     return r;
   }
+  // ¿Dos nombres son de la misma persona? (al menos 2 palabras en común)
+  function mismoNombreV(a, b) { var pa = X.normal(a || '').split(/\s+/).filter(function (w) { return w.length > 2; }), pb = ' ' + X.normal(b || '') + ' '; return pa.length >= 2 && pa.filter(function (w) { return pb.indexOf(' ' + w + ' ') >= 0; }).length >= 2; }
   function cruzar(lineas, ext) {
-    var porClave = {}; ext.filas.forEach(function (f) { porClave[X.idSeguro(f.id) + '|' + f.sem] = f; });
-    var res = { pagados: [], rebotados: [], faltan: [], sobran: [], montoDistinto: [], fecha: '', fechas: {} };
+    // Una misma glosa puede repetirse en el extracto (error de carga en el banco): se guardan todas las filas
+    var porClave = {}; ext.filas.forEach(function (f, i) { f._i = i; var k = X.idSeguro(f.id) + '|' + f.sem; (porClave[k] = porClave[k] || []).push(f); });
+    var res = { pagados: [], rebotados: [], faltan: [], sobran: [], montoDistinto: [], glosaRepetida: [], fecha: '', fechas: {} };
     var usados = {};
     lineas.forEach(function (l) {
-      var k = X.idSeguro(l.id) + '|' + l.sem, f = porClave[k];
+      var k = X.idSeguro(l.id) + '|' + l.sem, cand = (porClave[k] || []).filter(function (f) { return !usados[f._i]; });
+      if (cand.length > 1) res.glosaRepetida.push(k);
+      // Si la glosa se repite: primero la de igual importe, luego la del mismo nombre, luego la primera
+      var f = cand.filter(function (f) { return f.monto !== null && Math.abs(f.monto - l.importe) <= 0.005; })[0] ||
+        cand.filter(function (f) { return mismoNombreV(l.nombre, f.nombre); })[0] || cand[0];
       if (!f || !f.estado) { res.faltan.push(l); return; }
-      usados[k] = 1;
+      usados[f._i] = 1;
       if (f.monto !== null && Math.abs(f.monto - l.importe) > 0.005) res.montoDistinto.push({ l: l, f: f });
       if (OK_BANCO.test(f.estado)) { res.pagados.push({ l: l, f: f }); if (f.fecha) res.fechas[f.fecha] = (res.fechas[f.fecha] || 0) + 1; }
       else res.rebotados.push({ l: l, f: f });
     });
-    ext.filas.forEach(function (f) { if (!usados[X.idSeguro(f.id) + '|' + f.sem]) res.sobran.push(f); });
+    ext.filas.forEach(function (f) { if (!usados[f._i]) { if ((porClave[X.idSeguro(f.id) + '|' + f.sem] || []).length > 1) f._repetida = true; res.sobran.push(f); } });
     // La fecha más repetida queda como fecha de la planilla; cada pago usa la de su fila
     res.fecha = Object.keys(res.fechas).sort(function (a, b) { return res.fechas[b] - res.fechas[a] || b.localeCompare(a); })[0] || '';
     // Pista para los que faltan: ¿su ID está en el extracto con otra semana?
     var porId = {}; ext.filas.forEach(function (f) { (porId[X.idSeguro(f.id)] = porId[X.idSeguro(f.id)] || []).push(f); });
-    res.faltan.forEach(function (l) { var o = (porId[X.idSeguro(l.id)] || []).filter(function (f) { return f.sem !== l.sem; }); l._pista = o.length ? 'En el extracto figura con ' + o.map(function (f) { return f.sem + ' (' + f.estado + ')'; }).join(', ') : 'Su ID no aparece en el extracto'; });
+    res.faltan.forEach(function (l) { var o = (porId[X.idSeguro(l.id)] || []).filter(function (f) { return f.sem !== l.sem; }); var otro = res.sobran.filter(function (f) { return mismoNombreV(l.nombre, f.nombre); })[0];
+      l._pista = otro ? 'Figura en el extracto con la glosa de otro ID (' + otro.id + ' · ' + otro.sem + ', ' + otro.estado + (otro.monto != null ? ', Bs ' + otro.monto : '') + '): error de la glosa en el banco' :
+        o.length ? 'En el extracto figura con ' + o.map(function (f) { return f.sem + ' (' + f.estado + ')'; }).join(', ') : 'Su ID no aparece en el extracto'; });
     return res;
   }
   function conciliar(p, alTerminar) {
@@ -564,7 +573,7 @@
                 ], cr.faltan) + '</div>' : '') +
               (cr.sobran.length ? '<div class="aviso-caja mb">' + ic('ayuda') + '<div><b>' + entero(cr.sobran.length) + ' líneas del extracto no son de esta planilla</b>Se ignoran. Revisa que sea el extracto correcto.</div></div>' +
                 '<div class="card mb"><div class="h2">Del extracto, sin línea en esta planilla</div>' + X.tabla([
-                  { t: 'En el extracto', html: function (f) { return '<b>' + esc(f.nombre || '—') + '</b><span class="sub num">ID ' + esc(f.id) + ' · ' + esc(f.sem) + '</span>'; } },
+                  { t: 'En el extracto', html: function (f) { return '<b>' + esc(f.nombre || '—') + '</b><span class="sub num">ID ' + esc(f.id) + ' · ' + esc(f.sem) + '</span>' + (f._repetida ? '<span class="sub">Glosa repetida: el banco le puso el ID de otro repartidor</span>' : ''); } },
                   { t: 'Monto', clase: 'monto', html: function (f) { return f.monto == null ? '—' : bs(f.monto); } },
                   { t: 'Estado', html: function (f) { return esc(f.estado) + (f.fecha ? '<span class="sub num">' + esc(X.fecha(f.fecha)) + '</span>' : ''); } }
                 ], cr.sobran) + '</div>' : '') +
@@ -572,7 +581,7 @@
                 Object.keys(cr.fechas).sort().map(function (k) { return '<div class="dato"><small>' + esc(X.fecha(k)) + '</small><b class="num">' + entero(cr.fechas[k]) + ' pagos</b></div>'; }).join('') + '</div>' : '') +
               (cr.montoDistinto.length ? '<div class="aviso-caja mb">' + ic('excepcion') + '<div><b>' + entero(cr.montoDistinto.length) + (cr.montoDistinto.length === 1 ? ' pago con importe distinto' : ' pagos con importe distinto') + ' al de la planilla</b>Revísalos en el banco: abajo está cuál es.</div></div>' +
                 '<div class="card mb"><div class="h2">Importe distinto al de la planilla</div>' + X.tabla([
-                  { t: 'Repartidor', html: function (x) { return '<b>' + esc(x.l.nombre || x.f.nombre || 'Sin nombre') + '</b><span class="sub num">ID ' + esc(x.l.id) + ' · ' + esc(x.l.sem) + '</span>'; } },
+                  { t: 'Repartidor', html: function (x) { return '<b>' + esc(x.l.nombre || x.f.nombre || 'Sin nombre') + '</b><span class="sub num">ID ' + esc(x.l.id) + ' · ' + esc(x.l.sem) + '</span>' + (x.f.nombre && !mismoNombreV(x.l.nombre, x.f.nombre) ? '<span class="sub">En el extracto: ' + esc(x.f.nombre) + '</span>' : ''); } },
                   { t: 'Banco', html: function (x) { return esc(x.f.banco || '—') + '<span class="sub">' + esc(x.f.estado) + (x.f.fecha ? ' · ' + esc(X.fecha(x.f.fecha)) : '') + '</span>'; } },
                   { t: 'En la planilla', clase: 'monto', html: function (x) { return bs(x.l.importe); } },
                   { t: 'En el extracto', clase: 'monto', html: function (x) { return bs(x.f.monto); } },
