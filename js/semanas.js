@@ -792,6 +792,38 @@
       return x;
     }).filter(function (x) { return x.hab.n || x.nohab; }).sort(function (a, b) { return b.orden - a.orden; });
   }
+  /* Formato del Excel del Reporte por semana: mismos colores que el «Detalle Pagos» (js/banco.js estiloDetalle),
+     con dos filas de títulos: bloques (combinados) y columnas. Columnas «(Bs)» con #,##0.00. */
+  function estiloReporte(ws, h, XL) {
+    var borde = { style: 'thin', color: { rgb: 'DAF1DE' } }, bordes = { top: borde, bottom: borde, left: borde, right: borde };
+    var bloqueIni = { style: 'medium', color: { rgb: '235347' } };
+    var tit = function (rgb) { return { fill: { patternType: 'solid', fgColor: { rgb: rgb } }, font: { bold: true, color: { rgb: 'FFFFFF' } }, alignment: { horizontal: 'center', vertical: 'center', wrapText: true }, border: bordes }; };
+    var fondo = function (rgb, letra, gruesa) { return { fill: { patternType: 'solid', fgColor: { rgb: rgb } }, font: { bold: !!gruesa, color: { rgb: letra || '051F20' } }, border: bordes }; };
+    var g1 = h.filas[0], cab = h.filas[1], n = cab.length, ultima = h.filas.length - 1;
+    var inicios = {}, merges = [];
+    // Bloques: cada título de g1 abarca hasta el siguiente título; Semana y Gestión ocupan las 2 filas
+    for (var c = 0; c < n; c++) if (g1[c]) {
+      var fin = c; while (fin + 1 < n && !g1[fin + 1]) fin++;
+      if (c < 2) merges.push({ s: { r: 0, c: c }, e: { r: 1, c: c } }); else { merges.push({ s: { r: 0, c: c }, e: { r: 0, c: fin } }); inicios[c] = 1; }
+    }
+    for (var r = 0; r <= ultima; r++) for (c = 0; c < n; c++) {
+      var k = XL.utils.encode_cell({ r: r, c: c }), x = ws[k]; if (!x) x = ws[k] = { t: 's', v: '' };
+      var st;
+      if (r === 0) st = tit('163832');
+      else if (r === 1) st = c < 2 ? tit('163832') : tit('235347');
+      else if (r === ultima) st = fondo('163832', 'FFFFFF', true);
+      else st = r % 2 ? { border: bordes } : fondo('F3FAF5');
+      st = Object.assign({}, st);
+      if (inicios[c]) st.border = Object.assign({}, st.border || bordes, { left: bloqueIni });
+      if (r > 1 && x.t === 'n') { var bs_ = /\(Bs\)/.test(cab[c]); x.z = bs_ ? '#,##0.00' : '#,##0'; st.numFmt = x.z; }
+      if (r > 1 && c < 2) st.font = Object.assign({}, st.font || {}, { bold: true });
+      x.s = st;
+    }
+    ws['!merges'] = merges;
+    ws['!cols'] = cab.map(function (t, i) { return { wch: i < 2 ? 9 : /\(Bs\)/.test(t) ? 15 : 12 }; });
+    ws['!rows'] = [{ hpt: 22 }, { hpt: 48 }];
+    ws['!autofilter'] = { ref: XL.utils.encode_range({ s: { r: 1, c: 0 }, e: { r: ultima, c: n - 1 } }) };
+  }
   function verReporteSemanas() {
     var c = X.cajon('Reporte por semana', 'Semana por semana, en bloques: planilla, repartidores, ciudades, facturas y pagos. Cantidad e importe. Sale de los datos ya cargados (no gasta lecturas).', X.cargaBarra('Reporte', 'Calculando…'));
     if (c.cuerpo.parentNode) c.cuerpo.parentNode.classList.add('completa');
@@ -842,7 +874,7 @@
           (l.length ? '<div class="tabla-ancha">' + X.tabla(cols, l.concat([tot]), { tam: 200, grupos: grupos, claseFila: function (x) { return x.total_ ? 'fila-total' : ''; } }) + '</div>' : X.vacio('No hay semanas en esta gestión', ''));
         c.cuerpo.querySelector('#rsGes').addEventListener('change', function () { RS.gestion = this.value; armar(); });
         c.cuerpo.querySelector('#rsExcel').addEventListener('click', function () {
-          var g1 = ['', '', 'PLANILLA', '', '', '', '', '', '', '', 'REPARTIDORES', '', 'POR CIUDAD', '', '', '', '', '', '', '', 'FACTURAS', '', '', '', '', '', 'PAGOS (pagados + enviados a pagar)', '', '', ''];
+          var g1 = ['Semana', 'Gestión', 'PLANILLA', '', '', '', '', '', '', '', 'REPARTIDORES', '', 'POR CIUDAD', '', '', '', '', '', '', '', 'FACTURAS', '', '', '', '', '', 'PAGOS (pagados + enviados a pagar)', '', '', ''];
           var cab = ['Semana', 'Gestión', 'Planilla total (Bs)', 'Planilla total (cant.)', 'Total pagado (Bs)', 'Total pagado (cant.)', 'Enviado a pagar (Bs)', 'Enviado a pagar (cant.)', 'Pendiente · retenido (Bs)', 'Pendiente · retenido (cant.)',
             'Habilitados', 'No habilitados (Bs 0)',
             'Santa Cruz (Bs)', 'Santa Cruz (cant.)', 'Cochabamba (Bs)', 'Cochabamba (cant.)', 'La Paz (Bs)', 'La Paz (cant.)', 'Sin clasificación (Bs)', 'Sin clasificación (cant.)',
@@ -853,7 +885,7 @@
             x.ciu.SCZ.t, x.ciu.SCZ.n, x.ciu.CBBA.t, x.ciu.CBBA.n, x.ciu.LPZ.t, x.ciu.LPZ.n, x.ciu[''].t, x.ciu[''].n,
             x.emit.t, x.emit.n, x.porVer, x.falta.t, x.falta.n, x.contax, x.pagConF.t, x.pagConF.n, x.pagSinF.t, x.pagSinF.n]; };
           var nom = 'Reporte-por-semana-' + RS.gestion;
-          X.excel([{ nombre: 'Por semana', filas: [g1, cab].concat(l.map(row)).concat([row(tot)]) }], nom);
+          X.excel([{ nombre: 'Por semana', filas: [g1, cab].concat(l.map(row)).concat([row(tot)]) }], nom, estiloReporte);
           X.bitacora('Descargó reporte por semana', nom);
         });
       }
