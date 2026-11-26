@@ -161,6 +161,21 @@
     return d ? MESES[d.getMonth()] : (h.mes || '');
   }
 
+  /* Datos de la factura de una semana todavía sin pagar (la de la evaluación o, si no, la que la cubre) */
+  function facturaDeSemana(d, p, f) {
+    if (!f) f = (D.facturas || []).filter(function (x) { return x.uid === d.uid && (x.semanas || []).indexOf(p.semana) >= 0 && !/anulada|porAnular|rechazada/.test(x.estado || ''); })
+      .sort(function (a, b) { return (b.subidoF || 0) - (a.subidoF || 0); })[0] || null;
+    if (!f) return { factura: '', fechaFactura: '', nit: '', autorizacion: '', mes: '' };
+    var iso = String(f.fechaEmision || '').slice(0, 10), m = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    return { factura: String(f.numero || ''), fechaFactura: m ? m[3] + '/' + m[2] + '/' + m[1] : String(f.fechaEmision || ''), nit: String(f.nitEmisor || ''),
+      autorizacion: String(f.autorizacion || ''), mes: m ? MESES[Number(m[2]) - 1] : '' };
+  }
+  // Orden (año*100 + semana) de una semana sin pagar: la del documento o la del texto «SEM44G2026»
+  function ordenPend(p) {
+    if (p.orden) return Number(p.orden);
+    var n = nSem(p.semana), a = (String(p.semana || '').match(/G?(20\d\d)/) || [])[1];
+    return n ? (a ? Number(a) : new Date().getFullYear()) * 100 + n : 0;
+  }
   /* ══════════ CIFRAS DEL INFORME (las usan la pantalla y el PDF) ══════════ */
   function cifras(d) {
     var porFecha = {}, porMes = {}, imp = {};
@@ -174,18 +189,19 @@
     var pend = d.r ? (d.ev ? d.ev.semanas : (d.r.pendientes || []).map(function (p) { return { p: p, estado: 'falta' }; })) : [];
     var tot = X.redondear(d.hist.reduce(function (s, h) { return s + h.importe; }, 0));
     var totPend = X.redondear(pend.reduce(function (s, x) { return s + (Number(x.p.importe) || 0); }, 0));
-    // Filas de la tabla: primero los pendientes (pago retenido), luego lo pagado (lo más nuevo arriba)
+    // Filas de la tabla: de la semana más nueva a la más antigua (pendientes, enviadas, Bs 0 y pagadas juntas)
+    var conF = function (o, p, f) { var k = facturaDeSemana(d, p, f); for (var c in k) o[c] = k[c]; o.orden = ordenPend(p); return o; };
     var filas = pend.map(function (x) {
       var p = x.p, t = { lista: 'Listo para pagar', contax: 'Factura CONTAX', excepcion: 'Excepción', revision: 'Factura en revisión', observada: 'Factura observada', tarde: 'Después del corte', porEmitir: 'Por emitir (CONTAX)' }[x.estado] || 'Pago retenido';
-      return { pend: true, ok: !!x.ok, sem: x, estado: t, semana: p.semana, rango: p.rango || '', nombre: d.nombre, importe: Number(p.importe) || 0, fecha: '', factura: '', fechaFactura: '', nit: '', autorizacion: '', mes: '' };
+      return conF({ pend: true, ok: !!x.ok, sem: x, estado: t, semana: p.semana, rango: p.rango || '', nombre: d.nombre, importe: Number(p.importe) || 0, fecha: '' }, p, x.f);
     }).concat(d.r ? (d.r.enPlanilla || []).map(function (p) {
-      return { pend: true, ok: true, estado: 'Enviado a pagar', semana: p.semana, rango: p.rango || '', nombre: d.nombre, importe: Number(p.importe) || 0, fecha: '', factura: '', fechaFactura: '', nit: '', autorizacion: '', mes: '' };
+      return conF({ pend: true, ok: true, estado: 'Enviado a pagar', semana: p.semana, rango: p.rango || '', nombre: d.nombre, importe: Number(p.importe) || 0, fecha: '' }, p);
     }) : []).concat(d.r ? (d.r.noHab || []).map(function (p) {
       // Semanas en Bs 0: no cumplió las horas (no se pagan, pero quedan a la vista por si reclama)
-      return { pend: true, ok: true, nohab: true, estado: 'No habilitado (Bs 0)', semana: p.semana, rango: p.rango || '', nombre: d.nombre, importe: 0, fecha: '', factura: '', fechaFactura: '', nit: '', autorizacion: '', mes: '' };
+      return { pend: true, ok: true, nohab: true, estado: 'No habilitado (Bs 0)', semana: p.semana, rango: p.rango || '', nombre: d.nombre, importe: 0, fecha: '', factura: '', fechaFactura: '', nit: '', autorizacion: '', mes: '', orden: ordenPend(p) };
     }) : []).concat(d.hist.slice().reverse().map(function (h) {
-      return { pend: false, ok: true, id: h.id, estado: 'Pagado', semana: h.semana, rango: h.rango, nombre: h.nombre, importe: h.importe, fecha: h.fecha, factura: h.factura, fechaFactura: h.fechaFactura, nit: h.nit, autorizacion: h.autorizacion, mes: mesFactura(h) };
-    }));
+      return { pend: false, ok: true, id: h.id, estado: 'Pagado', semana: h.semana, rango: h.rango, nombre: h.nombre, importe: h.importe, fecha: h.fecha, factura: h.factura, fechaFactura: h.fechaFactura, nit: h.nit, autorizacion: h.autorizacion, mes: mesFactura(h), orden: ordenHist(h) };
+    })).map(function (f, i) { f._i = i; return f; }).sort(function (a, z) { return (z.orden || 0) - (a.orden || 0) || a._i - z._i; });
     return {
       tot: tot, totPend: totPend, pend: pend, filas: filas, ultimo: d.hist[d.hist.length - 1] || null,
       fechas: { etq: fechas.map(function (f) { return X.fecha(f).slice(0, 5); }), v: fechas.map(function (f) { return X.redondear(porFecha[f]); }) },
