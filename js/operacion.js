@@ -313,7 +313,7 @@
     }).sort(function (a, b2) { return X.normal(a.nombre).localeCompare(X.normal(b2.nombre)) || (b2.orden || 0) - (a.orden || 0); });
   }
   function tablaEnviados(envL) {
-    var SM = X.semanas, puede = SM.puedeCorregir(), l = filtrarEnviados(envL);
+    var SM = X.semanas, puede = SM.puedePagar(), l = filtrarEnviados(envL);
     fechasPlanillas(); EP.lista = l;
     var vivos = {}; envL.forEach(function (s) { vivos[s._id] = 1; }); Object.keys(EP.sel).forEach(function (k) { if (!vivos[k]) delete EP.sel[k]; });
     var tot = X.redondear(l.reduce(function (t, s) { return t + (Number(s.importe) || 0); }, 0));
@@ -324,7 +324,7 @@
     return '<div class="aviso-caja mb">' + ic('ayuda') + '<div><b>Pagos que ya salieron en una planilla del banco y todavía no se confirmaron</b>' +
         'Lo normal es confirmarlos con «Conciliar extracto» (en «Planillas generadas»). Aquí puedes elegir algunos y ' +
         'volverlos a «Pendiente de pago» (por ejemplo, si rebotaron o no salieron: entran en la próxima planilla) o marcarlos como pagados si ya se pagaron.' +
-        (puede ? '' : ' Solo un administrador puede cambiarlos.') + '</div></div>' +
+        (puede ? '' : ' Tu usuario es de solo lectura: no puede cambiarlos.') + '</div></div>' +
       (P.planilla ? '<div class="aviso-caja mb">' + ic('filtro') + '<div><b>Solo los pagos de la planilla «' + esc((EP.fechas && EP.fechas[P.planilla] && EP.fechas[P.planilla].archivo) || 'elegida') + '»</b>' +
         'Elige los que ya se pagaron y márcalos como pagados con la fecha del pago, o vuelve a pendiente los que no salieron.' +
         ' <button class="btn sec chico" id="epVerTodas" style="margin-top:6px">Ver los de todas las planillas</button></div></div>' : '') +
@@ -880,7 +880,7 @@
       .sort(function (a, z) { return X.normal(a.nombre).localeCompare(X.normal(z.nombre)); });
   }
   function tablaHist(filas, pag, pie) {
-    var acc = X.semanas && X.semanas.puedeCorregir() ? [{ t: 'Corregir', html: function (h) { return X.semanas.accionesPago(h); } }] : [];
+    var acc = X.semanas && X.semanas.puedePagar() ? [{ t: 'Corregir', html: function (h) { return X.semanas.accionesPago(h); } }] : [];
     return '<div class="tabla-ancha">' + X.tabla(acc.concat(COLS_HIST.map(function (c) {
       return { t: c[0], clase: c[1] === 'importe' ? 'monto' : '', html: function (h) { var v = valorHist(h, c); return c[1] === 'importe' ? bs(v) : c[1] === 'nombre' ? '<b>' + esc(v) + '</b>' : c[1] === 'rango' ? '<span style="white-space:nowrap">' + esc(v) + '</span>' : c[1] === 'autorizacion' ? '<span class="sub num" style="max-width:180px;display:block;overflow:hidden;text-overflow:ellipsis" title="' + esc(v) + '">' + esc(v) + '</span>' : esc(v); } };
     })), filas, { clic: true, tam: 50, pag: pag || 0, pie: pie && acc.length ? '<td></td>' + pie : pie }) + '</div>';

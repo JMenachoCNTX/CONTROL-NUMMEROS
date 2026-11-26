@@ -1167,6 +1167,8 @@
      Devolver a pendiente (rebotó en el banco) o cambiar la fecha de un solo pago. Primero se lee todo y luego
      se escribe en un solo lote: o queda completo (historial, semana y portal del repartidor) o no cambia nada. */
   function puedeCorregir() { return X.esAdmin() && modoControl(); }
+  // Marcar pagado / volver a pendiente: también los operadores (ej. Sol), no solo el administrador
+  function puedePagar() { return X.puedeEditar() && modoControl(); }
   function mismoPago(f, h) { return String(f.id) === String(h.id) && String(f.semana) === String(h.semana) && Math.abs((Number(f.importe) || 0) - (Number(h.importe) || 0)) < 0.005; }
   function totalFilas(l) { return X.redondear(l.reduce(function (t, f) { return t + (Number(f[4]) || 0); }, 0)); }
   function leerPago(h) {
@@ -1197,7 +1199,7 @@
   function semCorta(t) { return 'Sem ' + numSemana(t); }
 
   function devolverPago(h) {
-    if (!puedeCorregir()) { X.aviso('Solo un administrador puede corregir un pago.'); return; }
+    if (!puedePagar()) { X.aviso('Tu usuario no puede cambiar pagos (es de solo lectura).'); return; }
     X.ventana('Volver a pendiente', resumenPago(h) + ' · pagado el ' + X.fecha(h.fecha),
       '<div class="fm"><div class="fila"><label for="dpMotivo">Motivo (opcional)</label><input id="dpMotivo" maxlength="120" placeholder="Por ejemplo: cuenta cerrada, número de cuenta errado"></div></div>' +
       '<label class="interruptor"><input type="checkbox" id="dpAvisar" checked>Avisar al repartidor que su pago fue devuelto</label>' +
@@ -1261,7 +1263,7 @@
   }
   /* Un pendiente que ya se pagó por fuera de la planilla: pasa a «pagado» y entra al historial, en un solo lote */
   function marcarPagado(doc, f, verificada) {
-    if (!puedeCorregir()) { X.aviso('Solo un administrador puede corregir un pago.'); return; }
+    if (!puedePagar()) { X.aviso('Tu usuario no puede cambiar pagos (es de solo lectura).'); return; }
     var x0 = (D.semanas || []).filter(function (s) { return s._id === doc; })[0];
     if (!x0) { X.aviso('Ese pago ya no está en pendientes. Recarga la página.'); return; }
     X.ventana('Marcar como pagado', resumenPago({ nombre: x0.nombre, id: x0.id, semana: x0.semana, importe: Number(x0.importe) || 0 }),
@@ -1297,7 +1299,7 @@
       });
   }
   function botonPagado(s) {
-    if (!puedeCorregir() || !s.p._doc || s.p.estado !== 'Pendiente') return '';
+    if (!puedePagar() || !s.p._doc || s.p.estado !== 'Pendiente') return '';
     return '<button class="btn sec chico" data-pend-pagado="' + esc(s.p._doc) + '" data-f-doc="' + esc((s.f && s.f._id) || '') + '" data-verif="' + (s.f && s.f.verificacion ? 1 : '') + '">' + ic('check') + 'Marcar pagado</button>';
   }
   document.addEventListener('click', function (ev) {
@@ -1375,11 +1377,12 @@
       });
   }
   function accionesPago(h) {
-    if (!puedeCorregir() || !h.fecha || !D.hist) return '';
+    if (!puedePagar() || !h.fecha || !D.hist) return '';
     var a = ' data-f="' + esc(h.fecha) + '" data-s="' + esc(h.semana) + '" data-i="' + esc(h.id) + '" data-m="' + esc(h.importe) + '"';
+    // «A pendiente» lo usa también el operador; cambiar fecha o factura sigue siendo solo del administrador
     return '<div class="fila-acc" style="flex-wrap:nowrap"><button class="btn sec chico" data-pago-acc="rebote"' + a + '>' + ic('recargar') + 'A pendiente</button>' +
-      '<button class="btn sec chico" data-pago-acc="fecha"' + a + '>' + ic('reloj') + 'Fecha</button>' +
-      '<button class="btn sec chico" data-pago-acc="factura"' + a + '>' + ic('factura') + 'Factura</button></div>';
+      (puedeCorregir() ? '<button class="btn sec chico" data-pago-acc="fecha"' + a + '>' + ic('reloj') + 'Fecha</button>' +
+      '<button class="btn sec chico" data-pago-acc="factura"' + a + '>' + ic('factura') + 'Factura</button>' : '') + '</div>';
   }
   document.addEventListener('click', function (ev) {
     var b = ev.target.closest && ev.target.closest('[data-pago-acc]'); if (!b) return;
@@ -1495,7 +1498,7 @@
     });
   }
   function enviadosAPendiente(docs, alTerminar) {
-    if (!puedeCorregir()) { X.aviso('Solo un administrador puede cambiar estos pagos.'); return; }
+    if (!puedePagar()) { X.aviso('Tu usuario no puede cambiar pagos (es de solo lectura).'); return; }
     var l = enviados().filter(function (s) { return docs.indexOf(s._id) >= 0; });
     if (!l.length) { X.aviso('Esos pagos ya no están «Enviado a pagar». Recarga la página.'); return; }
     var tot = X.redondear(l.reduce(function (t, s) { return t + (Number(s.importe) || 0); }, 0));
@@ -1520,7 +1523,7 @@
       });
   }
   function enviadosPagados(docs, alTerminar) {
-    if (!puedeCorregir()) { X.aviso('Solo un administrador puede cambiar estos pagos.'); return; }
+    if (!puedePagar()) { X.aviso('Tu usuario no puede cambiar pagos (es de solo lectura).'); return; }
     var l = enviados().filter(function (s) { return docs.indexOf(s._id) >= 0; });
     if (!l.length) { X.aviso('Esos pagos ya no están «Enviado a pagar». Recarga la página.'); return; }
     var tot = X.redondear(l.reduce(function (t, s) { return t + (Number(s.importe) || 0); }, 0));
@@ -1563,7 +1566,7 @@
     completarNombres: completarNombres,
     nombresFaltantes: nombresFaltantes,
     modoControl: modoControl, cargar: cargar, aplicar: aplicar, cargarHistorial: cargarHistorial, aplicarHistorial: aplicarHistorial, agregarAlHistorial: agregarAlHistorial, importar: importar, verImportaciones: verImportaciones, verPorSemana: verPorSemana, verReporteSemanas: verReporteSemanas, datosReporte: datosReporteSemanas, sumarReporte: sumarReporte, migrar: migrar,
-    marcarEnPlanilla: marcarEnPlanilla, cambiarFecha: cambiarFecha, puedeCorregir: puedeCorregir, cambiarFactura: cambiarFactura, accionesPago: accionesPago, botonPagado: botonPagado, marcarFuera: marcarFuera, confirmarPago: confirmarPago, anularPlanilla: anularPlanilla, porConfirmar: porConfirmar, reporte: reporte,
+    marcarEnPlanilla: marcarEnPlanilla, cambiarFecha: cambiarFecha, puedeCorregir: puedeCorregir, puedePagar: puedePagar, cambiarFactura: cambiarFactura, accionesPago: accionesPago, botonPagado: botonPagado, marcarFuera: marcarFuera, confirmarPago: confirmarPago, anularPlanilla: anularPlanilla, porConfirmar: porConfirmar, reporte: reporte,
     enviados: enviados, enviadosAPendiente: enviadosAPendiente, enviadosPagados: enviadosPagados, verificarPendientes: verificarPendientes,
     // piezas que usa js/banco.js
     leerLibro: leerLibro, escribir: escribir, encolarNotif: encolarNotif, CIUDADES: CIUDADES, fechaISO: fechaISO,

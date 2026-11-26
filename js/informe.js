@@ -319,7 +319,7 @@
     var ini = String(d.nombre || '?').split(' ').filter(Boolean).slice(0, 2).map(function (p) { return p.charAt(0); }).join('').toUpperCase();
     IN.filas = c.filas;
     // Corregir cada pago aquí mismo: los pagados vuelven a pendiente o cambian de fecha; los pendientes se marcan pagados
-    var corregir = X.semanas && X.semanas.puedeCorregir() ? [{ t: 'Corregir', html: function (f) {
+    var corregir = X.semanas && X.semanas.puedePagar() ? [{ t: 'Corregir', html: function (f) {
       return f.sem ? X.semanas.botonPagado(f.sem) : f.pend ? '' : X.semanas.accionesPago({ fecha: f.fecha, semana: f.semana, id: f.id, importe: f.importe });
     } }] : [];
     var cx = IN.vista === 'contax';
