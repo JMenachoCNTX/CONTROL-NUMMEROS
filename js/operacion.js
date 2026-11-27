@@ -566,7 +566,44 @@
               if (D.planillasCreadas) D.planillasCreadas.unshift(Date.now());
               return mc ? X.semanas.marcarEnPlanilla(ref.id, docs).then(function () { return X.semanas.marcarFuera(ref.id, a.sinCuenta); }) : null;
             }).then(informes).then(function () { if (mc) X.recargarTodo(); });
-          }).then(function () { cerrar(); X.aviso('Planilla del banco descargada'); }, function (e) { console.error(e); btn.disabled = false; btn.textContent = 'Descargar planilla del banco'; X.aviso(e.message || 'No se pudo generar el Excel.'); });
+          }).then(function () { cerrar(); X.aviso('Planilla del banco descargada'); if (mc) mensajeTelegram(); }, function (e) { console.error(e); btn.disabled = false; btn.textContent = 'Descargar planilla del banco'; X.aviso(e.message || 'No se pudo generar el Excel.'); });
+        });
+      });
+  }
+  /* ══════════ MENSAJE PARA TELEGRAM (grupos de Santa Cruz, Cochabamba y La Paz) ══════════
+     Se copia con negritas (HTML): al pegarlo en Telegram quedan en negrita, sin asteriscos. */
+  var MSJ_TELEGRAM = [
+    ['🚀 ', '¡La planilla ya fue enviada!'], '',
+    'Hola, equipo 👋', '',
+    [['', 'CONTAX ya entregó la planilla de pagos a MTG.'], ' Ahora solo falta que MTG la cargue al banco para que se hagan los pagos. 🏦'], '',
+    [['', '¿Cómo sé si estoy incluido?']],
+    [['Revisa el ', 'Portal de repartidores'], ' 👉 portalnummeros.contaxbolivia.com'], '',
+    [['📌 Si tu semana dice ', '"Enviado a pagar"'], ', estás en la planilla y tu pago está en proceso. ¡Tranquilo, ya viene! 💸'],
+    [['📌 Si dice ', '"Pendiente"'], ', falta algo (por ejemplo, tu factura). Ahí mismo verás qué es y cómo resolverlo.'], '',
+    'Así no necesitas escribirnos: todo lo ves en el portal, al momento. ✅', '',
+    '¡Gracias por su trabajo! 🙌',
+    [['', 'CONTAX – Contabilidad e Impuestos']]
+  ];
+  // Cada línea: texto suelto, [antes, negrita] o [[antes, negrita], después]
+  function lineaMsj(l, html) {
+    var b = function (t) { return html ? '<b>' + esc(t) + '</b>' : t; }, t = function (x) { return html ? esc(x) : x; };
+    if (typeof l === 'string') return t(l);
+    if (typeof l[0] === 'string') return t(l[0]) + b(l[1]);
+    return t(l[0][0]) + b(l[0][1]) + (l[1] ? t(l[1]) : '');
+  }
+  function mensajeTelegram() {
+    var html = MSJ_TELEGRAM.map(function (l) { return lineaMsj(l, true); }).join('<br>');
+    var plano = MSJ_TELEGRAM.map(function (l) { return lineaMsj(l, false); }).join('\n');
+    X.ventana('Mensaje para Telegram', 'Para los grupos de Santa Cruz, Cochabamba y La Paz. Cópialo y pégalo en cada grupo: las negritas se pegan solas.',
+      '<div class="msj-tg" style="border:1px solid var(--borde);border-radius:12px;padding:14px 16px;line-height:1.55;font-size:14px;max-height:52vh;overflow:auto">' + html + '</div>',
+      '<button class="btn sec" data-cerrar>Cerrar</button><button class="btn" data-copiar>' + ic('copiar') + 'Copiar mensaje</button>', function (v) {
+        var bt = v.querySelector('[data-copiar]');
+        bt.addEventListener('click', function () {
+          var listo = function () { bt.innerHTML = ic('check') + '¡Copiado!'; X.aviso('Mensaje copiado. Pégalo en el grupo de Telegram.'); X.bitacora('Copió mensaje de Telegram', 'Planilla enviada a MTG'); };
+          var div = '<div>' + html + '</div>';
+          if (navigator.clipboard && window.ClipboardItem) {
+            navigator.clipboard.write([new ClipboardItem({ 'text/html': new Blob([div], { type: 'text/html' }), 'text/plain': new Blob([plano], { type: 'text/plain' }) })]).then(listo, function () { X.copiar(plano); listo(); });
+          } else { X.copiar(plano); listo(); }
         });
       });
   }
@@ -588,7 +625,7 @@
         { t: '', html: function (x) {
           // Si ya no queda ningún pago «Enviado a pagar», no hay nada que conciliar, confirmar ni anular
           var conf = X.semanas && x.estado === 'enviada' && X.puedeEditar() && !(D.semanas && !enviadosDe(x._id).length);
-          return '<div class="fila-acc"><button class="btn sec chico" data-bajar="' + esc(x._id) + '">' + ic('descargar') + (x.lineas ? 'Banco' : 'Excel') + '</button>' +
+          return '<div class="fila-acc">' + (x.estado === 'enviada' ? '<button class="btn sec chico" data-telegram="1">' + ic('megafono') + 'Mensaje Telegram</button>' : '') + '<button class="btn sec chico" data-bajar="' + esc(x._id) + '">' + ic('descargar') + (x.lineas ? 'Banco' : 'Excel') + '</button>' +
             (x.lineas ? '<button class="btn sec chico" data-detalle="' + esc(x._id) + '">' + ic('descargar') + 'Detalle</button>' : '') +
             (x.lineas ? '<button class="btn sec chico" data-pdf="' + esc(x._id) + '">' + ic('grafico') + 'PDF</button>' : X.semanas ? '<button class="btn sec chico" data-reporte="' + esc(x._id) + '">' + ic('grafico') + 'Gráficos</button>' : '') +
             (X.semanas && x.estado === 'enviada' && enviadosDe(x._id).length ? '<button class="btn chico" data-verpagos="' + esc(x._id) + '">' + ic('pagos') + 'Ver pagos (' + entero(enviadosDe(x._id).length) + ')</button>' : '') +
@@ -597,6 +634,7 @@
         } }
       ], l) : X.vacio('Todavía no se guardó ninguna planilla', '', 'marca/graficos/ilu-factura-recibo.png');
       var buscarP = function (b, k) { return l.filter(function (y) { return y._id === b.getAttribute(k); })[0]; };
+      c.cuerpo.querySelectorAll('[data-telegram]').forEach(function (b) { b.addEventListener('click', mensajeTelegram); });
       c.cuerpo.querySelectorAll('[data-reporte]').forEach(function (b) { b.addEventListener('click', function () { X.semanas.reporte(buscarP(b, 'data-reporte')); }); });
       c.cuerpo.querySelectorAll('[data-pdf]').forEach(function (b) { b.addEventListener('click', function () { X.reportePdf(buscarP(b, 'data-pdf')).catch(function (e) { console.error(e); X.aviso(e.message || 'No se pudo generar el PDF.'); }); }); });
       c.cuerpo.querySelectorAll('[data-detalle]').forEach(function (b) { b.addEventListener('click', function () { X.banco.detalleExcel(buscarP(b, 'data-detalle')); }); });

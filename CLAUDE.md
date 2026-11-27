@@ -48,7 +48,7 @@ El permiso se elige en **Panel → Usuarios → columna CONTROL**. Las reglas de
 - GitHub Pages desde la rama `main` (raíz), dominio **https://nummeroscontrol.contaxbolivia.com** (archivo `CNAME`, desde el 19/11/2026). La dirección vieja https://jmenachocntx.github.io/CONTROL-NUMMEROS/ redirige al dominio.
 - `firestore.rules` **no se publica solo**: hay que copiarlo y pegarlo en la consola de Firebase del proyecto `control--nummeros` → Firestore → Reglas → Publicar.
 - Aviso de nueva versión: `version-aviso.js` (copia del de `NUMMEROS_CRM`) muestra «Hay una nueva versión · Actualizar ahora» al publicar; no hay que tocar nada.
-- Versiones: `version` en `config.js` (hoy 2.4.86), el `?v=` de los scripts en `index.html` y el mensaje del commit dice la versión (ej. "... (v1.4)").
+- Versiones: `version` en `config.js` (hoy 2.4.87), el `?v=` de los scripts en `index.html` y el mensaje del commit dice la versión (ej. "... (v1.4)").
 
 ## Cuidados importantes
 - **El repositorio es PÚBLICO.** Nunca subir contraseñas, archivos `.json` de cuentas de servicio ni datos de clientes.
@@ -129,3 +129,4 @@ El permiso se elige en **Panel → Usuarios → columna CONTROL**. Las reglas de
 - **2.4.84 · Excepciones con N.º y totales:** columna «N.º» (1, 2, 3… en el orden de la lista, según la búsqueda) y cuadro «Totales de excepciones» (`totalesExcepciones` en js/gestion.js, CSS `.ex-tot` reusa `.tb-blo`): total, por usuario que la creó (`creadoPor` o `quien`), por grupo (individuales y cada grupo con los pagos que habilita) y por tipo; cada uno con activas e inactivas.
 - **2.4.85 · Excepciones: «Efecto hoy»:** `efectoExcepciones` (js/gestion.js) evalúa a los repartidores de las excepciones (o a todos si hay alguna por grupo) y dice por fila si **libera pagos** (cuántos y Bs), **sin efecto** (sus pagos ya tienen factura o la semana no los cubre), **ya se usó** (enviado a pagar, o pagado desde que se creó), **sin pagos pendientes** (no hacía falta), **el ID no está en CONTROL** o inactiva. Columna «Efecto hoy», bloque en los totales y filtro Todas / Con efecto / Sin efecto (`EX.efecto`).
 - **2.4.86:** «Sin pagos pendientes» dice la fecha del último pago si fue antes de crear la excepción (caso Ruiz Moreno Widen: SEM46 pagada el 24/11, excepción del 26/11).
+- **2.4.87 · Mensaje para Telegram:** al generar la planilla (modo control) se abre «Mensaje para Telegram» (`mensajeTelegram` en js/operacion.js, texto en `MSJ_TELEGRAM`) para los grupos de SCZ, CBBA y LPZ: avisa que CONTAX envió la planilla a MTG y que el estado se ve en el Portal («Enviado a pagar» / «Pendiente»). «Copiar mensaje» copia HTML con negritas (Telegram las pega sin asteriscos) + texto plano. También en Planillas generadas → «Mensaje Telegram» (planillas enviadas).
