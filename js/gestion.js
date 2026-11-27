@@ -380,6 +380,25 @@
     var ed = e.creadoPor && e.actualizado && X.aFecha(e.creado) && Math.abs(X.aFecha(e.actualizado) - X.aFecha(e.creado)) > 60e3 ? '<span class="sub">Editada: ' + u(e.quien) + ' · ' + X.fechaHora(e.actualizado) + '</span>' : '';
     return cre + ed;
   }
+  /* Totales arriba de la lista: cuántas hay, quién las hizo, por grupo y por tipo (de lo que se ve con la búsqueda) */
+  function totalesExcepciones(l, usa) {
+    if (!l.length) return '';
+    var cuenta = function (f) { var o = {}; l.forEach(function (e) { var k = f(e); if (!o[k]) o[k] = { a: 0, i: 0 }; o[k][e.activa ? 'a' : 'i']++; }); return o; };
+    var li = function (txt, v, extra, cl) { return '<li' + (cl ? ' class="' + cl + '"' : '') + '><span>' + esc(txt) + '</span><b class="num">' + entero(v.a + v.i) + '</b><em>' + entero(v.a) + ' activas' + (v.i ? ' · ' + entero(v.i) + ' inactivas' : '') + (extra ? ' · ' + extra : '') + '</em></li>'; };
+    var lista = function (o, nombre, extra) { return Object.keys(o).sort(function (a, b) { return (o[b].a + o[b].i) - (o[a].a + o[a].i) || a.localeCompare(b); }).map(function (k) { return li(nombre ? nombre(k) : k, o[k], extra ? extra(k) : ''); }).join(''); };
+    var blo = function (t, cuerpo) { return '<div class="tb-blo"><h3>' + t + '</h3><ul>' + cuerpo + '</ul></div>'; };
+    var todo = { a: 0, i: 0 }; l.forEach(function (e) { todo[e.activa ? 'a' : 'i']++; });
+    var porUsuario = cuenta(function (e) { return String(e.creadoPor || e.quien || '').split('@')[0] || 'Sin dato'; });
+    var porGrupo = cuenta(function (e) { return e.grupo ? 'g:' + e.grupo : 'ind'; });
+    var pagosGrupo = {}; l.forEach(function (e) { if (e.grupo) pagosGrupo['g:' + e.grupo] = (pagosGrupo['g:' + e.grupo] || 0) + (usa[e._id] || 0); });
+    var porTipo = cuenta(function (e) { return { habilitar: 'Pago sin factura', contax: 'Pendiente de CONTAX', otro: 'Otro' }[e.tipo] || e.tipo || 'Sin tipo'; });
+    return '<div class="card mb tb-semanal ex-tot"><div class="h2">Totales de excepciones <small>' + (EX.buscar ? 'según la búsqueda' : 'todas las registradas') + '</small></div><div class="tb-bloques">' +
+      blo('Total', li('Excepciones', todo, '', 'total')) +
+      blo('Por usuario', lista(porUsuario)) +
+      blo('Por grupo', lista(porGrupo, function (k) { return k === 'ind' ? 'Individuales (un repartidor)' : 'Grupo: ' + (GRUPOS[k.slice(2)] || k.slice(2)); }, function (k) { return k === 'ind' ? '' : 'habilita ' + entero(pagosGrupo[k] || 0) + ' pagos'; })) +
+      blo('Por tipo', lista(porTipo)) +
+      '</div></div>';
+  }
   X.pagina('excepciones', {
     t: 'Excepciones', i: 'excepcion', sec: 'CONTAX',
     render: function () {
@@ -394,7 +413,9 @@
       // Cuántos pagos libera hoy cada grupo: solo los que no estaban habilitados
       var usa = {};
       if (l.some(function (e) { return e.grupo; })) X.lista().forEach(function (r) { X.evaluar(r).semanas.forEach(function (s) { if (s.ex && s.ex.grupo) usa[s.ex._id] = (usa[s.ex._id] || 0) + 1; }); });
-      return cab + '<div class="card"><div class="herr"><div class="buscar">' + ic('buscar') + '<input type="search" id="bEx" placeholder="Buscar por nombre, ID, NIT o celular" value="' + esc(EX.buscar) + '"></div></div>' + (l.length ? X.tabla([
+      l.forEach(function (e, i) { e._n = i + 1; });
+      return cab + totalesExcepciones(l, usa) + '<div class="card"><div class="herr"><div class="buscar">' + ic('buscar') + '<input type="search" id="bEx" placeholder="Buscar por nombre, ID, NIT o celular" value="' + esc(EX.buscar) + '"></div></div>' + (l.length ? X.tabla([
+        { t: 'N.º', clase: 'monto', html: function (e) { return '<span class="num muted">' + e._n + '</span>'; } },
         { t: 'Repartidor', html: function (e) { return '<b>' + esc(e.nombre || '—') + '</b><span class="sub' + (e.grupo ? '">Por grupo · habilita ' + entero(usa[e._id] || 0) + ' pagos' : ' num">ID ' + esc(e.idYango)) + '</span>'; } },
         { t: 'Semana', html: function (e) { return e.grupo || e.yAnteriores ? esc(semanaGrupo(e)) : e.semana === '*' ? 'Todas' : esc(e.semana); } },
         { t: 'Tipo', html: function (e) { return X.chip(e.tipo === 'contax' ? 'contax' : 'neutro', { habilitar: 'Pago sin factura', contax: 'Pendiente de CONTAX', otro: 'Otro' }[e.tipo] || e.tipo); } },
