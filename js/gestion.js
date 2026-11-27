@@ -403,7 +403,7 @@
     else if (x.tipo === 'yaFactura') sub = x.ya ? entero(x.ya) + ' pagos ya tienen su factura' : 'Sus semanas pendientes no entran en la semana de la excepción';
     else if (x.tipo === 'enviado') sub = entero(x.env) + ' pagos en planilla';
     else if (x.tipo === 'usada') sub = 'Último pago: ' + X.fecha(x.ult);
-    else if (x.tipo === 'sinPend') sub = e.grupo ? 'Hoy no libera ningún pago' : 'No tiene ningún pago pendiente: no hacía falta';
+    else if (x.tipo === 'sinPend') sub = e.grupo ? 'Hoy no libera ningún pago' : 'No tiene ningún pago pendiente: no hacía falta' + (x.ult ? '. Su último pago fue el ' + X.fecha(x.ult) + ', antes de crear la excepción' : '');
     return X.chip(t[0], t[1]) + (sub ? '<span class="sub">' + sub + '</span>' : '');
   }
   function excepcionVisible(e, b) {
