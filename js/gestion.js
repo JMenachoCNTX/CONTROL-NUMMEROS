@@ -7,7 +7,7 @@
 (function () {
   'use strict';
   var X = window.CTRL, S = X.S, D = X.D, C = X.C;
-  var esc = X.esc, ic = X.ic, entero = X.entero;
+  var esc = X.esc, ic = X.ic, entero = X.entero, bs = X.bs;
 
   /* ══════════ CLIENTES CONTAX ══════════
      Son los clientes «Activos» de Panel NUMMEROS → Clientes (colección `bdclientes` de crm-contax).
@@ -361,7 +361,51 @@
         q('form').addEventListener('submit', function (ev) { ev.preventDefault(); enviar(); });
       });
   }
-  var EX = { buscar: '' };
+  var EX = { buscar: '', efecto: '' };
+  /* Qué hace hoy cada excepción: cuántos pagos pendientes libera de verdad.
+     usa[id] = pagos que libera; ya[id] = pagos que cubre pero ya tenían su factura (no hacía falta). */
+  function efectoExcepciones(l) {
+    var usa = {}, bs = {}, ya = {};
+    var mirar = function (r) { X.evaluar(r).semanas.forEach(function (s) {
+      if (!s.ex) return; var k = s.ex._id;
+      if (s.estado === 'excepcion') { usa[k] = (usa[k] || 0) + 1; bs[k] = (bs[k] || 0) + (Number(s.p.importe) || 0); } else ya[k] = (ya[k] || 0) + 1;
+    }); };
+    if (l.some(function (e) { return e.grupo; })) X.lista().forEach(mirar);
+    else { var vistos = {}; l.forEach(function (e) { var r = D.repartidores && D.repartidores.get(X.idSeguro(String(e.idYango || '').trim())); if (r && !vistos[r.uid]) { vistos[r.uid] = 1; mirar(r); } }); }
+    l.forEach(function (e) {
+      var x = { n: usa[e._id] || 0, bs: X.redondear(bs[e._id] || 0), ya: ya[e._id] || 0 };
+      if (!e.activa) x.tipo = 'inactiva';
+      else if (x.n) x.tipo = 'libera';
+      else if (e.grupo) x.tipo = 'sinPend';
+      else {
+        var r = D.repartidores && D.repartidores.get(X.idSeguro(String(e.idYango || '').trim()));
+        var pend = r ? (r.pendientes || []).length : 0, env = r ? (r.enPlanilla || []).length : 0;
+        var ult = (D.hist || []).filter(function (h) { return String(h.id) === String(e.idYango).trim(); }).map(function (h) { return String(h.fecha || ''); }).sort().pop() || '';
+        var creada = X.aFecha(e.creado || e.actualizado), fu = X.aFecha(ult);
+        x.ult = ult;
+        if (!r) x.tipo = 'noExiste';
+        else if (x.ya || pend) x.tipo = 'yaFactura';             // tiene pendientes, pero no necesitaban la excepción (o la semana no la cubre)
+        else if (env) { x.tipo = 'enviado'; x.env = env; }
+        else if (fu && creada && fu >= new Date(creada.getFullYear(), creada.getMonth(), creada.getDate())) x.tipo = 'usada';
+        else x.tipo = 'sinPend';
+      }
+      e._ef = x;
+    });
+    return usa;
+  }
+  var EFECTO_TXT = {
+    libera: ['ok', 'Libera pagos'], yaFactura: ['pend', 'Sin efecto: sus pagos no la necesitan'], enviado: ['ok', 'Ya se usó: enviado a pagar'],
+    usada: ['ok', 'Ya se usó: pagado'], sinPend: ['mal', 'Sin pagos pendientes'], noExiste: ['mal', 'El ID no está en CONTROL'], inactiva: ['neutro', 'Inactiva']
+  };
+  function efectoHtml(e) {
+    var x = e._ef || {}, t = EFECTO_TXT[x.tipo] || ['neutro', '—'], sub = '';
+    if (x.tipo === 'libera') sub = entero(x.n) + ' pagos · ' + bs(x.bs);
+    else if (x.tipo === 'yaFactura') sub = x.ya ? entero(x.ya) + ' pagos ya tienen su factura' : 'Sus semanas pendientes no entran en la semana de la excepción';
+    else if (x.tipo === 'enviado') sub = entero(x.env) + ' pagos en planilla';
+    else if (x.tipo === 'usada') sub = 'Último pago: ' + X.fecha(x.ult);
+    else if (x.tipo === 'sinPend') sub = e.grupo ? 'Hoy no libera ningún pago' : 'No tiene ningún pago pendiente: no hacía falta';
+    return X.chip(t[0], t[1]) + (sub ? '<span class="sub">' + sub + '</span>' : '');
+  }
   function excepcionVisible(e, b) {
     if (!b) return true;
     return X.normal([e.nombre, e.idYango, e.motivo].join(' ')).indexOf(b) >= 0 || (!e.grupo && X.buscaRepartidor(e.idYango, b));
@@ -397,6 +441,7 @@
       blo('Por usuario', lista(porUsuario)) +
       blo('Por grupo', lista(porGrupo, function (k) { return k === 'ind' ? 'Individuales (un repartidor)' : 'Grupo: ' + (GRUPOS[k.slice(2)] || k.slice(2)); }, function (k) { return k === 'ind' ? '' : 'habilita ' + entero(pagosGrupo[k] || 0) + ' pagos'; })) +
       blo('Por tipo', lista(porTipo)) +
+      blo('Efecto hoy', lista(cuenta(function (e) { return (EFECTO_TXT[(e._ef || {}).tipo] || ['', 'Sin dato'])[1]; }))) +
       '</div></div>';
   }
   X.pagina('excepciones', {
@@ -411,22 +456,27 @@
       var bq = X.normal(EX.buscar);
       var l = D.excepciones.filter(function (e) { return excepcionVisible(e, bq); }).sort(function (a, b) { return (b.activa - a.activa) || String(a.nombre).localeCompare(String(b.nombre)); });
       // Cuántos pagos libera hoy cada grupo: solo los que no estaban habilitados
-      var usa = {};
-      if (l.some(function (e) { return e.grupo; })) X.lista().forEach(function (r) { X.evaluar(r).semanas.forEach(function (s) { if (s.ex && s.ex.grupo) usa[s.ex._id] = (usa[s.ex._id] || 0) + 1; }); });
+      var usa = efectoExcepciones(l), lTot = l;
+      var SIN = { yaFactura: 1, sinPend: 1, noExiste: 1 };
+      if (EX.efecto === 'sin') l = l.filter(function (e) { return SIN[e._ef.tipo]; });
+      else if (EX.efecto === 'con') l = l.filter(function (e) { return !SIN[e._ef.tipo] && e._ef.tipo !== 'inactiva'; });
       l.forEach(function (e, i) { e._n = i + 1; });
-      return cab + totalesExcepciones(l, usa) + '<div class="card"><div class="herr"><div class="buscar">' + ic('buscar') + '<input type="search" id="bEx" placeholder="Buscar por nombre, ID, NIT o celular" value="' + esc(EX.buscar) + '"></div></div>' + (l.length ? X.tabla([
+      return cab + totalesExcepciones(lTot, usa) + '<div class="card"><div class="herr"><div class="buscar">' + ic('buscar') + '<input type="search" id="bEx" placeholder="Buscar por nombre, ID, NIT o celular" value="' + esc(EX.buscar) + '"></div>' +
+        '<select id="efEx" aria-label="Efecto"><option value="">Todas</option><option value="con"' + (EX.efecto === 'con' ? ' selected' : '') + '>Con efecto (liberan o ya se usaron)</option><option value="sin"' + (EX.efecto === 'sin' ? ' selected' : '') + '>Sin efecto (no hacían falta)</option></select></div>' + (l.length ? X.tabla([
         { t: 'N.º', clase: 'monto', html: function (e) { return '<span class="num muted">' + e._n + '</span>'; } },
         { t: 'Repartidor', html: function (e) { return '<b>' + esc(e.nombre || '—') + '</b><span class="sub' + (e.grupo ? '">Por grupo · habilita ' + entero(usa[e._id] || 0) + ' pagos' : ' num">ID ' + esc(e.idYango)) + '</span>'; } },
         { t: 'Semana', html: function (e) { return e.grupo || e.yAnteriores ? esc(semanaGrupo(e)) : e.semana === '*' ? 'Todas' : esc(e.semana); } },
         { t: 'Tipo', html: function (e) { return X.chip(e.tipo === 'contax' ? 'contax' : 'neutro', { habilitar: 'Pago sin factura', contax: 'Pendiente de CONTAX', otro: 'Otro' }[e.tipo] || e.tipo); } },
         { t: 'Motivo', html: function (e) { return esc(e.motivo) + (e.hasta ? '<span class="sub">Vence ' + X.fecha(e.hasta) + '</span>' : ''); } },
         { t: 'Hecha por', html: exQuien },
+        { t: 'Efecto hoy', html: efectoHtml },
         { t: 'Estado', html: function (e) { return e.activa ? X.chip('ok', 'Activa') : X.chip('neutro', 'Inactiva'); } },
         { t: '', html: function (e) { return X.puedeEditar() ? '<span class="fila-acc"><button class="icono-btn" data-ed="' + esc(e._id) + '" aria-label="Editar">' + ic('editar') + '</button><button class="icono-btn" data-bo="' + esc(e._id) + '" aria-label="Borrar">' + ic('borrar') + '</button></span>' : ''; } }
       ], l, { tam: 200 }) : X.vacio(EX.buscar ? 'Nada con esa búsqueda' : 'No hay excepciones', EX.buscar ? 'Prueba con otro dato.' : 'Cuando un pago se deba liberar sin factura, regístralo aquí.', 'marca/graficos/rel-vencimientos-' + (S.oscuro ? 'oscuro' : 'claro') + '.png')) + '</div>';
     },
     despues: function (el) {
       var n = el.querySelector('#nuevaEx'); if (n) n.addEventListener('click', function () { nuevaExcepcion(); });
+      var fe = el.querySelector('#efEx'); if (fe) fe.addEventListener('change', function () { EX.efecto = fe.value; X.refrescar(); });
       var be = el.querySelector('#bEx'); if (be) be.addEventListener('input', X.debounce(function () { EX.buscar = be.value; X.refrescar(); X.setFoco('#bEx'); }, 300));
       var ng = el.querySelector('#nuevaGr'); if (ng) ng.addEventListener('click', function () { excepcionGrupo(); });
       // Eliminar todas de una vez (lotes de 400 para Firestore)
